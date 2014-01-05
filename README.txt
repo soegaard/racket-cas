@@ -33,7 +33,7 @@ an infinite loop.
 We can substitute 2.1 for x first and the evaluate numerically:
     > (subst (expand (N (taylor '(sin x) x 2 3))) x 2.1)
     0.8632056138429305
-For a comparision:
+For comparision:
     > (sin 2.1)
     0.8632093666488738
 
