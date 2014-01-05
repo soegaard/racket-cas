@@ -8,7 +8,7 @@ Here is a short example. Open racket-cas.rkt in DrRacket and run it.
 
 To begin write:
     > (require (submod "." start))
-This changes the meaning of quote such that quoted expression are
+This changes the meaning of quote such that quoted expressions are
 normalized automatically.
     > '(+ x 2 a 3 (* 4 x))
     '(+ 5 a (* 5 x))
