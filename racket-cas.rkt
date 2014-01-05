@@ -309,7 +309,7 @@
     [r r]
     [x x]
     [(⊕ u v)    (⊕ (n u) (n v))]
-    [(⊗ u v)    (⊗ (n u) (n v))]
+    [(⊗ u v)    (⊗ (n u) (n v))]    
     [(Expt u v) (Expt (n u) (n v))]
     [(Ln u)     (Ln (n u))]
     [(Sin u)    (Sin (n u))]
@@ -320,6 +320,7 @@
                    [(list '- u v)  (⊖ (n u) (n v))]
                    [(list 'sqr u)  (Sqr (n u))]
                    [(list 'sqrt u) (Sqrt (n u))]
+                   [(list 'exp u)  (Exp (n u))]
                    [_ (let ([nus (map n us)])
                         (if (equal? us nus)
                             u
