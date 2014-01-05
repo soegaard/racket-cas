@@ -425,7 +425,7 @@
     [(1 v)          1]
     [(u 0)          1]
     [(u 1)          u]
-    [(r s)          (expt r s)]
+    [(m n)          (expt m n)]
     [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; only true for real u and v
     [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
     [(Exp (Ln v))   v]    
@@ -436,7 +436,8 @@
   (λ (stx) (syntax-parse stx [(_ u v) #'(Expt: u v)] [_ (identifier? stx) #'Expt:])))
 
 (module+ test
-  (check-equal? (Expt 2 3) 8))
+  (check-equal? (Expt 2 3) 8)
+  (check-equal? (bf-N '(expt (expt 5 1/2) 2)) (bf 5)))
 
 (define (Sqr: u)
   (Expt u 2))
