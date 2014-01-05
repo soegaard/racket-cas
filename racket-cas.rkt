@@ -13,7 +13,7 @@
 
 ;;; SYMBOLIC CONSTANTS
 (define @e  '@e)  ; Euler's constant
-(define @pi '@pi) ; Euler's constant
+(define @pi '@pi) ; pi
 
 ;;; PATTERN MATCHERS
 ; In order to eventually define the patterns ⊕, ⊗ and k⊗ we need a few helpers.
