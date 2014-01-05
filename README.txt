@@ -13,7 +13,7 @@ normalized automatically.
     > '(+ x 2 a 3 (* 4 x))
     '(+ 5 a (* 5 x))
 
-Let jump to something useful. The Taylor series of sin(x) around x=2
+Let's jump to something useful. The Taylor series of sin(x) around x=2
 of degree 3:
     > (taylor '(sin x) x 2 3)
     '(+ (* -1/2 (expt (+ -2 x) 2) (sin 2)) (* -1/6 (expt (+ -2 x) 3)
