@@ -5,8 +5,9 @@
 
 (module+ test (require rackunit))
 
-(module predicates racket (provide natural? @e? @pi?)
+(module predicates racket (provide natural? @e? @pi? inexact-number?)
   (define (natural? x) (and (integer? x) (>= x 0)))
+  (define (inexact-number? x) (and (number? x) (inexact? x)))
   (define (@e? u)  (eq? u '@e))   ; Euler's constant
   (define (@pi? u) (eq? u '@pi))) ; pi
 
@@ -29,7 +30,7 @@
     (λ (t) (equal? s t)))
   
   (define conventions
-    (list (convention (make-ends-with-pred ".0") #'inexact?)
+    (list (convention (make-ends-with-pred ".0")  #'inexact-number?)
           (convention (make-begins-with-pred "x") #'symbol?)
           (convention (make-begins-with-pred "y") #'symbol?)
           (convention (make-begins-with-pred "z") #'symbol?)
