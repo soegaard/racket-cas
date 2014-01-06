@@ -132,15 +132,12 @@
        ; ... at least one symbol
        [(x x) #f]
        [(x y) (symbol<? x y)]
+       [(u x) (not (<< x u))]
        ; ... at most one symbol
        [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)
-       [((Expt x v) x) (<< v 1)]
        [(x (Expt u v)) (<< x u)]
-       [((Expt u v) x) (<< u x)]
        [(x (⊗ r x))    (<< 1 r)]  ; (Note: x ~ (* 1 x) )
-       [((⊗ r x) x)    (<< r 1)]  
-       [(x _) #t]
-       [(_ x) #f]
+       [(x _) #t]       
        ; ... two non-symbols
        [((Expt u a) (Expt u b)) (<< a b)]
        [((Expt u a) (Expt v b)) (<< u v)]
@@ -191,8 +188,6 @@
                      '(+ (*   h (expt x 2)) (* 2 (expt h 2) x))) #f)
   (check-equal? (<<= '(+ (*   h (expt x 2)) (* 2 (expt h 2) x))
                      '(+ (* 2 h (expt x 2)) (*   (expt h 2) x))) #t))
-
-(define (symbol<=? x y) (or (eq? x y) (symbol<? x y)))
 
 ;; (⊕ u ...) in an expression context expands to (plus u ...)
 ;; That is: Elsewhere use ⊕ in order to add expressions.
@@ -447,6 +442,8 @@
     [(u 0)          1]
     [(u 1)          u]
     [(m n)          (expt m n)]
+    [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
+    [(r s.0)        (expt r s.0)]
     [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; only true for real u and v
     [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
     [(Exp (Ln v))   v]    
@@ -489,6 +486,7 @@
   (math-match u
     [0 1]
     ; [r (cos r)] ; nope - automatic evaluation is for exact results only
+    [r.0 (cos r.0)]
     [@pi -1]
     [(⊗ 2 @pi) 1]
     [_ `(cos ,u)]))
@@ -500,12 +498,14 @@
 (module+ test
   (check-equal? (Cos 0) 1)
   (check-equal? (Cos @pi) -1)
-  (check-equal? (Cos (⊗ 2 @pi)) 1))
+  (check-equal? (Cos (⊗ 2 @pi)) 1)
+  (check-equal? (Cos 0.5) 0.8775825618903728))
 
 (define (Sin: u)
   (math-match u
     [0 0]
-    ; [r (cos r)] ; nope - automatic evaluation is for exact results only
+    ; [r (sin r)] ; nope - automatic evaluation is for exact results only
+    [r.0 (sin r.0)]
     [@pi 0]
     [(⊗ 2 @pi) 0]
     [_ `(sin ,u)]))
