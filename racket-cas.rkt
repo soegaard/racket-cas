@@ -109,40 +109,63 @@
 ;; Note: If you find yourself in an infinite loop, check whether
 ;;       (<<= u v) and (<<= v u) gives the same or diffent results.
 ;;       If they give the same result, the bug is most likely in <<=.
-(define (<<= s1 s2)
+
+(define (<<= u v)
+  (or (equal? u v)
+      (<< u v)))
+
+(define (<< s1 s2)
   ; (displayln (list '<<= s1 s2)) ; uncomment in case of infinite loop
   (math-match* (s1 s2)
-    [(r s) (<= r s)]   
+    ; Case: at least one number
+    [(r s) (< r s)]
     [(r _) #t]
     [(u r) #f]
-    [(x y) (or (eq? x y) (symbol<? x y))] 
-    [(x (⊗ r x)) (<= 1 r)]
-    [((⊗ r x) x) (<= r 1)]
-    [((k⊗ r u) (k⊗ s u)) (<= r s)]
-    [((k⊗ r u) (k⊗ s v))  
+    ; Case: At least one symbol
+    [(x y) (symbol<? x y)] 
+    [(x (⊗ r x)) (< 1 r)]  ; x ~ (* 1 x) 
+    [((⊗ r x) x) (< r 1)]
+    ; Case: At least one product of ...
+    [((k⊗ r u) (k⊗ s u)) (< r s)]
+    [((k⊗ r u) (k⊗ s v)) ; (Note: neither u nor v are numbers)
      (math-match* (u v)
-       [(x (Expt x v)) #t]
-       [((Expt x v) x) #f]
-       [(x (Expt u v)) (<<= x u)]
-       [((Expt u v) x) (<<= u x)]
-       [((Expt u a) (Expt u b)) (<<= a b)]
-       [((Expt u a) (Expt v b)) (<<= u v)]
-       [((Expt _ _) (app: _ _)) #t]
+       ; ... at least one symbol
+       [(x x) #f]
+       [(x y) (symbol<? x y)]
+       ; ... at most one symbol
+       [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)
+       [((Expt x v) x) (<< v 1)]
+       [(x (Expt u v)) (<< x u)]
+       [((Expt u v) x) (<< u x)]
+       [(x (⊗ r x))    (<< 1 r)]  ; (Note: x ~ (* 1 x) )
+       [((⊗ r x) x)    (<< r 1)]  
+       [(x _) #t]
+       [(_ x) #f]
+       ; ... two non-symbols
+       [((Expt u a) (Expt u b)) (<< a b)]
+       [((Expt u a) (Expt v b)) (<< u v)]
+       [((Expt _ _) (app: _ _)) #t] ; (Note: Place powers before applications)
        [((app: _ _) (Expt _ _)) #f]
-       [((⊗ u a) (⊗ u b)) (<<= a b)]
-       [((⊗ u a) (⊗ v b)) (<<= u v)]
-       [((⊕ u a) (⊕ u b)) (<<= a b)]
-       [((⊕ u a) (⊕ v b)) (<<= u v)]
-       [(x (app: _ _)) #t]
-       [((app: _ _) x) #f]
+       ; ... two non-powers and non-symbols  (i.e. two products, sums or applications)
+       [((⊗ u a) (⊗ u b)) (<< a b)]
+       [((⊗ u a) (⊗ v b)) (<< u v)]  ; (Note: the least factor is first, so u<<a and v<<b)
+       [((⊗ _ _) _) #t]
+       [(_ (⊗ _ _)) #f]
+       ; ... two non-symbol/power/products  (i.e. sums or applications)
+       [((⊕ u a) (⊕ u b)) (<< a b)]
+       [((⊕ u a) (⊕ v b)) (<< u v)]
+       ; ... two non-symbol/power/products/sums  (i.e. applications)
        [((app: f us) (app: g vs))
         (or (symbol<? f g)
             (and (eq? f g)
-                 (for/and ([u us] [v vs])
-                   (<<= u v))))]
-       [(_ _) (<<= u v)])]
-    ; TODO : Is this order complete ?
-    [(_ _) (displayln (list s1 s2)) (error '<<= "internal error: missing a case")]))
+                 (let ([l (length us)] [m (length vs)])
+                 (or (< l m)
+                     (and (= l m)
+                          (for/and ([u us] [v vs])
+                            (<< u v)))))))]
+       ; no other possibilities left
+       [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")])]
+    [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")]))
 
 (module+ test
   (check-equal? (<<= 1 2) #t)
@@ -412,8 +435,6 @@
 ;;  (Exp u) matches (expt @e a) and binds u->a
 ;; The symbol @e is symbolic representation of Euler's constant.
 ;; In an expression context (Exp u) is `(expt @e ,u))
-;; TODO: Fix lone Exp evaluating to a functions.
-
 (define (Exp: u) (Expt @e u))
 
 (define-match-expander Exp
@@ -670,7 +691,10 @@
   (terms u 0))
 
 (module+ test
-  (check-equal? (taylor '(sin x) x 0 5) '(+ x (* -1/6(expt x 3)) (* 1/120 (expt x 5)))))
+  (check-equal? (taylor '(sin x) x 0 5) '(+ x (* -1/6(expt x 3)) (* 1/120 (expt x 5))))
+  (check-equal? (N (expand (taylor '(sin x) x 2 3)))
+                '(+ -0.6318662024609201 (* 2.2347416901985055 x) 
+                    (* -0.8707955499599833 (expt x 2)) (* 0.0693578060911904 (expt x 3)))))
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
 ; > (bf-N (taylor '(sin x) x 2 11) 100 x (bf 2.1))

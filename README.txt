@@ -21,7 +21,7 @@ of degree 3:
 
 Since (sin 2) can not be represented exactly it is not evaluated
 numerically. We can use N:
-    > (expand (N (taylor '(sin x) x 2 3)))
+    > (N (expand (taylor '(sin x) x 2 3)))
     '(+  -0.6318662024609201
        (* 2.2347416901985055         x)
       (* -0.8707955499599832 (expt x 2))
