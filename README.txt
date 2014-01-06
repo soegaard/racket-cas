@@ -38,6 +38,18 @@ We can also evaluate using bigfloats:
     > (bf-N (taylor '(sin x) x 2 3) 100 x (bf 2.1))
     (bf #e0.86320561384293019376447471077597)
 
+Let's draw some graphs illustrating approximation by Taylor polynomials.
+    > (require plot)
+    > (plot (list (function (compile (taylor '(sin x) x 0 5)) #:color "green")
+              (function sin #:color "red" -3.14 3.14)))
+    <nice graphs appear in DrRacket>
+
+Let's compare Taylor polynomials of various orders.
+    > (plot (append (for/list ([n 6]) (function (compile (taylor '(cos x) x pi n)) #:color (+ n 1)))
+                    (list (function cos #:color "red")))
+            #:x-min (- pi) #:x-max (* 3 pi) #:y-min -2 #:y-max 2)
+     <graphs appear>
+
 We can also compute (some) limits:
     > (limit '(/ (sin x) x) x 0)
    1

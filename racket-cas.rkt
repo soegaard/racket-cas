@@ -1,4 +1,14 @@
 #lang racket
+; TODO: (taylor (Sin (Sqrt x)) x 1. 5) gives:
+'(+
+  0.8414709848078965
+  (* -0.17272166133450453 (expt (+ -1.0 x) 2))
+  (* 0.07510453262833268 (expt (+ -1.0 x) 3))
+  (* -0.04334196494823909 (expt (+ -1.0 x) 4))
+  (* 0.029400568805913196 (expt (+ -1.0 x) 5))
+  (* 0.2701511529340699 (+ -1.0 x)))
+; is this the correct order of terms ? 
+
 (require "math-match.rkt")
 (require (for-syntax syntax/parse))
 (module+ test (require rackunit)
@@ -123,8 +133,9 @@
     [(u r) #f]
     ; Case: At least one symbol
     [(x y) (symbol<? x y)] 
-    [(x (⊗ r x)) (< 1 r)]  ; x ~ (* 1 x) 
-    [((⊗ r x) x) (< r 1)]
+    [(u x) (not (<< x u))]
+    [(x (⊗ r x)) (< 1 r)]  ; x ~ (* 1 x)
+    [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)    
     ; Case: At least one product of ...
     [((k⊗ r u) (k⊗ s u)) (< r s)]
     [((k⊗ r u) (k⊗ s v)) ; (Note: neither u nor v are numbers)
@@ -336,6 +347,7 @@
                    [(list '/ u v)  (⊘ (n u) (n v))]
                    [(list '- u)    (⊖ (n u))]
                    [(list '- u v)  (⊖ (n u) (n v))]
+                   [(list 'tan u)  (Tan (n u))]
                    [(list 'sqr u)  (Sqr (n u))]
                    [(list 'sqrt u) (Sqrt (n u))]
                    [(list 'exp u)  (Exp (n u))]
@@ -344,6 +356,9 @@
                             u
                             (n `(,f ,@nus))))])]))
 
+(define (compile u [x 'x])
+  ; todo: check that x is the only free variable in u
+  (eval `(λ(,x) ,u)))
 
 ; distribute applies the distributive law recursively
 (define (distribute s)
@@ -439,8 +454,10 @@
 (define (Expt: u v)
   (math-match* (u v)
     [(1 v)          1]
-    [(u 0)          1]
     [(u 1)          u]
+    [(0 0)          +nan.0] ; TODO: is this the best we can do?
+    [(u 0)          1]
+    ; [(0 v)          0]
     [(m n)          (expt m n)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
