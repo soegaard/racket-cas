@@ -22,17 +22,21 @@
   (define (make-begins-with-pred s)
     (λ (t) (regexp-match (~a "^" s) t)))
   
+  (define (make-ends-with-pred s)
+    (λ (t) (regexp-match (~a s "$") t)))
+  
   (define (make-is-pred s)
     (λ (t) (equal? s t)))
   
   (define conventions
-    (list (convention (make-begins-with-pred "x") #'symbol?)
+    (list (convention (make-ends-with-pred ".0") #'inexact?)
+          (convention (make-begins-with-pred "x") #'symbol?)
           (convention (make-begins-with-pred "y") #'symbol?)
           (convention (make-begins-with-pred "z") #'symbol?)
           (convention (make-begins-with-pred "r") #'number?)
           (convention (make-begins-with-pred "s") #'number?)
           (convention (make-begins-with-pred "m") #'natural?)
-          (convention (make-begins-with-pred "n") #'natural?)
+          (convention (make-begins-with-pred "n") #'natural?)                    
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)))
   
@@ -98,6 +102,8 @@
   (check-equal? (math-match '(1 a) [(list r x) (list r x)]) '(1 a))
   (check-equal? (math-match '(1 2) [(list r s) (list r s)]) '(1 2))
   (check-equal? (math-match 1   [@e 2] [_ 3]) 3)
-  (check-equal? (math-match '@e [@e 2] [_ 3]) 2))
+  (check-equal? (math-match '@e [@e 2] [_ 3]) 2)
+  (check-equal? (math-match 2 [n.0 3] [_ 4]) 4)
+  (check-equal? (math-match 2.0 [n.0 3] [_ 4]) 3))
 
 (require (submod "." math-match))
