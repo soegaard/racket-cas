@@ -27,9 +27,6 @@ numerically. We can use N:
       (* -0.8707955499599832 (expt x 2))
       (* 0.0693578060911904  (expt x 3)))
 
-Switching expand and N ought to have worked, but it currently provokes
-an infinite loop.
-
 We can substitute 2.1 for x first and the evaluate numerically:
     > (subst (expand (N (taylor '(sin x) x 2 3))) x 2.1)
     0.8632056138429305
