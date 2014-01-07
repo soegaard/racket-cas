@@ -356,9 +356,13 @@
                             u
                             (n `(,f ,@nus))))])]))
 
+; Compile turns an expression into a Racket function.
 (define (compile u [x 'x])
   ; todo: check that x is the only free variable in u
-  (eval `(λ(,x) ,u)))
+  (eval `(λ (,x) ,u) (make-base-namespace)))
+
+(module+ test (check-equal? ((compile '(sin (sqrt x))) 0) 0))
+
 
 ; distribute applies the distributive law recursively
 (define (distribute s)
