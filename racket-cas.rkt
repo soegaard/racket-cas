@@ -161,10 +161,10 @@
         (or (symbol<? f g)
             (and (eq? f g)
                  (let ([l (length us)] [m (length vs)])
-                 (or (< l m)
-                     (and (= l m)
-                          (for/and ([u us] [v vs])
-                            (<< u v)))))))]
+                   (or (< l m)
+                       (and (= l m)
+                            (for/and ([u us] [v vs])
+                              (<< u v)))))))]
        ; no other possibilities left
        [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")])]
     [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")]))
@@ -211,12 +211,13 @@
   (math-match* (s1 s2)  
     [(0 u) u]
     [(u 0) u]
-    [(r s) (+ r s)]
+    [(r s)    (+ r s)]
+    ; [(r.bf s.bf) (bf+ r.bf s.bf)] ; xxx
+    ; [(r s.bf)    (bf+ (bf r) s.bf)]  ; xxx
+    ; [(r.bf s)    (bf+ r.bf (bf s))]  ; xxx
     [(u s) (plus2 s u)]  ; ok since u can not be a number, we have that s <<= u
     [(u u) (times2 2 u)] 
     [((k⊗ r u) (k⊗ s u)) (times2 (+ r s) u)]
-    [((k⊗ s (⊕ u v)) (k⊗ r u)) (plus2 (times2 (+ r s) u) (times2 s v))] ; xxx
-    [((k⊗ r u) (k⊗ s (⊕ u v))) (plus2 (times2 (+ r s) u) (times2 s v))] ; xxx    
     [((k⊗ r u) (k⊗ s v)) #:when (<<= v u) (plus2 s2 s1)]
     [((⊕ u v) (⊕ _ _)) (plus2 u (plus2 v s2))]
     [((⊕ u v) _) (plus2 u (plus2 v s2))]
@@ -277,6 +278,9 @@
     [(0 u) 0] [(u 0) 0]
     [(1 u) u] [(u 1) u]
     [(r s) (* r s)]
+    ; [(r.bf s.bf) (bf* r.bf s.bf)]    ; xxx
+    ; [(r s.bf)    (bf* (bf r) s.bf)]  ; xxx
+    ; [(r.bf s)    (bf* r.bf (bf s))]  ; xxx
     [(u s) #:when (math-match u
                     [(Expt v w) (<<= s v)]
                     [_          (<<= s u)])
@@ -346,7 +350,8 @@
                    [(list 'tan u)  (Tan (n u))]
                    [(list 'sqr u)  (Sqr (n u))]
                    [(list 'sqrt u) (Sqrt (n u))]
-                   [(list 'exp u)  (Exp (n u))]
+                   [(list 'exp u)  (Exp (n u))]  
+                   [(list 'bf u) (number? u) (bf u)]
                    [_ (let ([nus (map n us)])
                         (if (equal? us nus)
                             u
@@ -414,7 +419,7 @@
   (check-equal? (expand '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2))))
-                
+
 
 ; divide u by v
 (define (Quotient: u v)
@@ -543,13 +548,13 @@
     [r 0]
     [y #:when (eq? x y) 1]
     [y 0]
-    [(⊕ v w) (⊕ (d v) (d w))]
-    [(⊗ v w) (⊕ (⊗ (d v) w) (⊗ v (d w)))]
-    [(Expt u r) (⊗ r (Expt u (- r 1)) (d u))]
-    [(Exp u) (⊗ (Exp u) (d u))]
-    [(Ln u)  (⊗ (⊘ 1 u) (d u))]
-    [(Cos u) (⊗ (⊖ 0 (Sin u)) (d u))]
-    [(Sin u) (⊗ (Cos u) (d u))]    
+    [(⊕ v w)   (⊕ (d v) (d w))]
+    [(⊗ v w)   (⊕ (⊗ (d v) w) (⊗ v (d w)))]
+    [(Expt u r)(⊗ r (Expt u (- r 1)) (d u))]
+    [(Exp u)   (⊗ (Exp u) (d u))]
+    [(Ln u)    (⊗ (⊘ 1 u) (d u))]
+    [(Cos u)   (⊗ (⊖ 0 (Sin u)) (d u))]
+    [(Sin u)   (⊗ (Cos u) (d u))]    
     [_ (error 'diff (~a "got: " u " wrt " x))]))
 
 (module+ test
@@ -712,6 +717,25 @@
   (check-equal? (N (expand (taylor '(sin x) x 2 3)))
                 '(+ -0.6318662024609201 (* 2.2347416901985055 x) 
                     (* -0.8707955499599833 (expt x 2)) (* 0.0693578060911904 (expt x 3)))))
+
+(define (free-of u v)
+  ; return true if is not a complete subexpression of u, false otherwise
+  (define (f u)
+    (and (not (equal? u v))
+         (math-match u
+           [r #t]
+           [r.bf #t]
+           [x #t]
+           [(app: _ us) (andmap f us)])))
+  (f u))
+
+(module+ test
+  (let () (define u (Expt (⊕ x 1) 2))
+    (check-equal? (free-of u x) #f)
+    (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
+    (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
+
+
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
 ; > (bf-N (taylor '(sin x) x 2 11) 100 x (bf 2.1))
