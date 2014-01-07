@@ -20,12 +20,15 @@ of degree 3:
 (cos 2)) (* (+ -2 x) (cos 2)) (sin 2))
 
 Since (sin 2) can not be represented exactly it is not evaluated
-numerically. We can use N:
+numerically. We can use N that forces numeric computation:
     > (N (expand (taylor '(sin x) x 2 3)))
     '(+  -0.6318662024609201
        (* 2.2347416901985055         x)
       (* -0.8707955499599832 (expt x 2))
       (* 0.0693578060911904  (expt x 3)))
+Or simpler use 2.0 instead of 2, since inexact numbers are contagious: 
+   > (expand (taylor '(sin x) x 2.0 3))
+   <same result>
 
 We can substitute 2.1 for x first and the evaluate numerically:
     > (subst (expand (N (taylor '(sin x) x 2 3))) x 2.1)
