@@ -1,14 +1,4 @@
 #lang racket
-; TODO: (taylor (Sin (Sqrt x)) x 1. 5) gives:
-'(+
-  0.8414709848078965
-  (* -0.17272166133450453 (expt (+ -1.0 x) 2))
-  (* 0.07510453262833268 (expt (+ -1.0 x) 3))
-  (* -0.04334196494823909 (expt (+ -1.0 x) 4))
-  (* 0.029400568805913196 (expt (+ -1.0 x) 5))
-  (* 0.2701511529340699 (+ -1.0 x)))
-; is this the correct order of terms ? 
-
 (require "math-match.rkt")
 (require (for-syntax syntax/parse))
 (module+ test (require rackunit)
@@ -135,6 +125,8 @@
     [(x y) (symbol<? x y)] 
     [(u x) (not (<< x u))]
     [(x (⊗ r x)) (< 1 r)]  ; x ~ (* 1 x)
+    [(x (⊗ r u)) (<< x u)]
+    [(x (⊗ u _)) (<< x u)]
     [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)    
     ; Case: At least one product of ...
     [((k⊗ r u) (k⊗ s u)) (< r s)]
@@ -150,6 +142,8 @@
        [(x (⊗ r x))    (<< 1 r)]  ; (Note: x ~ (* 1 x) )
        [(x _) #t]       
        ; ... two non-symbols
+       [(u (Expt u a)) (<< 1 a)]  ; Note u ~ (Expt u 1)
+       [((Expt u a) u) (<< a 1)]  ; Note u ~ (Expt u 1)
        [((Expt u a) (Expt u b)) (<< a b)]
        [((Expt u a) (Expt v b)) (<< u v)]
        [((Expt _ _) (app: _ _)) #t] ; (Note: Place powers before applications)
@@ -198,7 +192,9 @@
   (check-equal? (<<= '(+ (* 2 h (expt x 2)) (*   (expt h 2) x))
                      '(+ (*   h (expt x 2)) (* 2 (expt h 2) x))) #f)
   (check-equal? (<<= '(+ (*   h (expt x 2)) (* 2 (expt h 2) x))
-                     '(+ (* 2 h (expt x 2)) (*   (expt h 2) x))) #t))
+                     '(+ (* 2 h (expt x 2)) (*   (expt h 2) x))) #t)
+  (check-equal? (<<= '(* a (expt (+ 1 y) 2)) 'c) #t)
+  (check-equal? (<< '(* 2 (+ -1.0 x)) '(* 3 (expt (+ -1.0 x) 2))) #t))
 
 ;; (⊕ u ...) in an expression context expands to (plus u ...)
 ;; That is: Elsewhere use ⊕ in order to add expressions.
