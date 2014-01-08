@@ -44,12 +44,20 @@
 ;; The pattern ⊕ matches various sums
 ;;  (⊕ x y) matches (+ a b)       and binds x->a, y->b
 ;;  (⊕ x y) matches (+ a b c ...) and binds x->a, y->(+ b c ...)
-(define-match-expander ⊕
+#;(define-match-expander ⊕
   (λ (stx)
     (syntax-parse stx
       [(_ u v) 
        #'(or (list '+ (:pat u) (:pat v))
              (list-rest '+ (:pat u) (app (λ(ys) (cons '+ ys)) (:pat v))))]))
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(plus u ...)] [_ (identifier? stx) #'plus])))
+
+(define-match-expander ⊕
+  (λ (stx)
+    (syntax-parse stx
+      [(_ u v) 
+       #'(or (list '+ u v)
+             (list-rest '+ u (app (λ(ys) (cons '+ ys)) v)))]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(plus u ...)] [_ (identifier? stx) #'plus])))
 
 (module+ test 
@@ -62,10 +70,10 @@
 (define-match-expander ⊗
   (λ (stx)
     (syntax-parse stx
-      [(_ x y) 
-       #'(or (list '* x y)
-             (list-rest '* x (app (λ(ys) (cons '* ys)) y)))]))
-  (λ(stx) (syntax-parse stx [(_ x ...) #'(times x ...)][_ (identifier? stx) #'times])))
+      [(_ u v)
+       #'(or (list '* u v)
+             (list-rest '* u (app (λ(ys) (cons '* ys)) v)))]))
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(times u ...)][_ (identifier? stx) #'times])))
 
 
 (module+ test (require rackunit)
@@ -83,13 +91,14 @@
 (define-match-expander k⊗
   (λ (stx)
     (syntax-parse stx
-      [(_ r x)
+      [(_ k u)
        (syntax/loc stx
-         (or (⊗   (num:   r)        x)
-             (and (bind: r 1) (num: x))
-             (and (bind: r 1) (var: x))
-             (and (bind: r 1) (and x (⊗ _ _)))
-             (and (bind: r 1) (and x (app: _ _)))))])))
+         (or (list      '* (num:  k) u)
+             (list-rest '* (num:  k) (app (λ(ys) (cons '* ys)) u))
+             (and (bind: k 1) (num: u))
+             (and (bind: k 1) (var: u))
+             (and (bind: k 1) (and u (⊗ _ _)))
+             (and (bind: k 1) (and u (app: _ _)))))])))
 
 (module+ test
   (check-equal? (match '(* 3 a b) [(k⊗ x y) (list x y)]) '(3 (* a b)))
@@ -104,6 +113,7 @@
 ;;; The patterm (Prod us) matches a product of the form (* u ...) and binds us to (list u ...)
 (define-match-expander Prod (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
 
+#|
 ;;; ASSUMPTIONS
 (define assumptions (make-hash))
 (define (get-assumptions var)     (hash-ref assumptions var '()))
@@ -131,6 +141,7 @@
   (check-false (Positive? -1))
   (check-true  (Positive? x))
   (check-false (Positive? (Sqrt x)) #f))  ; TODO xxx
+|#
 
 ;; <<= defines an order on the set of symbolic expressions
 ;; Sorting the terms in a sum according to this order, brings together

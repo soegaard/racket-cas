@@ -67,7 +67,7 @@
                [pat-str (symbol->string pat-sym)])
           (define pred (find-convention-type pat-str))
           (cond [pred (with-syntax ([pred pred]
-                                    [name (datum->syntax stx pat-sym)])
+                                    [name (datum->syntax pat pat-sym)])
                         #'(? pred name))]
                 [else pat])))
       (define (rewrite pat0)
@@ -81,6 +81,9 @@
         [(_ #(pat ...))      (syntax/loc stx (vector (:pat pat) ...))]
         [(_ (? pred pat))  (with-syntax ([p (rewrite #'pat)])
                              (syntax/loc stx (? pred p)))]
+        [(_ (pat0 pat ...)) (and (identifier? #'pat0) 
+                                 (match-expander? (syntax-local-value #'pat0 (λ()#f))))
+                            (syntax/loc stx (pat0 (:pat pat) ...))]
         [(_ (pat0 pat ...))  (with-syntax ([(p ...) (map rewrite (syntax->list #'(pat0 pat ...)))])
                                (syntax/loc stx (p ...)))]
         [(_ pat)             #'pat])))
@@ -99,7 +102,7 @@
        (with-syntax ([((new-pat ...) ...) 
                       (for/list ([ps (in-list (syntax->list #'(pats ...)))])
                         (for/list ([pat (in-list (syntax->list ps))])
-                          (datum->syntax pat `(:pat ,(syntax->datum pat)))))])
+                          (datum->syntax ps `(:pat ,(syntax->datum pat)))))])
          (syntax/loc stx (match*/derived (val-expr ...) stx [(new-pat ...) . more] ...)))])))
 
 (module+ test (require (submod ".." math-match) math/bigfloat)
