@@ -15,6 +15,7 @@
 (define @e  '@e)  ; Euler's constant
 (define @pi '@pi) ; pi
 
+
 ;;; PATTERN MATCHERS
 ; In order to eventually define the patterns ⊕, ⊗ and k⊗ we need a few helpers.
 
@@ -46,14 +47,14 @@
 (define-match-expander ⊕
   (λ (stx)
     (syntax-parse stx
-      [(_ x y) 
-       #'(or (list '+ x y)
-             (list-rest '+ x (app (λ(ys) (cons '+ ys)) y)))]))
-  (λ(stx) (syntax-parse stx [(_ x ...) #'(plus x ...)] [_ (identifier? stx) #'plus])))
+      [(_ u v) 
+       #'(or (list '+ (:pat u) (:pat v))
+             (list-rest '+ (:pat u) (app (λ(ys) (cons '+ ys)) (:pat v))))]))
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(plus u ...)] [_ (identifier? stx) #'plus])))
 
 (module+ test 
-  (check-equal? (match '(+ a b)   [(⊕ x y) (list x y)]) '(a b))
-  (check-equal? (match '(+ a b c) [(⊕ x y) (list x y)]) '(a (+ b c))))
+  (check-equal? (match '(+ a b)   [(⊕ u v) (list u v)]) '(a b))
+  (check-equal? (match '(+ a b c) [(⊕ u v) (list u v)]) '(a (+ b c))))
 
 ;; The pattern ⊗ matches various products
 ;;  (⊗ x y) matches (* a b)       and binds x->a, y->b
@@ -65,6 +66,7 @@
        #'(or (list '* x y)
              (list-rest '* x (app (λ(ys) (cons '* ys)) y)))]))
   (λ(stx) (syntax-parse stx [(_ x ...) #'(times x ...)][_ (identifier? stx) #'times])))
+
 
 (module+ test (require rackunit)
   (check-equal? (match '(* a b)   [(⊗ x y) (list x y)]) '(a b))
@@ -101,6 +103,34 @@
 (define-match-expander Sum  (λ (stx) (syntax-case stx () [(_ id) #'(list '+ id (... ...))])))
 ;;; The patterm (Prod us) matches a product of the form (* u ...) and binds us to (list u ...)
 (define-match-expander Prod (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
+
+;;; ASSUMPTIONS
+(define assumptions (make-hash))
+(define (get-assumptions var)     (hash-ref assumptions var '()))
+(define (add-assumption! var tag) (hash-set! assumptions var (cons tag (get-assumptions tag))))
+(define (assume-real var)         (add-assumption! var 'real))
+(define (assume-positive var)     (add-assumption! var 'positive))
+(define (assume-negative var)     (add-assumption! var 'negative))
+
+(define (Positive? u)
+  (and (math-match u
+         [r       (positive? r)]
+         [r.bf    (bfpositive? r.bf)]
+         [x       (member 'positive (get-assumptions x))]
+         [(⊗ u v) (let ([pu (Positive? u)] [pv (Positive? v)])
+                    (or (and pu pv) (and (not pu) (not pv))))]
+         [(⊕ u v) (and (Positive? u) (Positive? v))]
+         ; ... ? Missing cases ?
+         [else #f])
+       #t))
+
+(module+ test
+  (check-false (Positive? x))
+  (assume-positive x)
+  (check-true  (Positive? 1))
+  (check-false (Positive? -1))
+  (check-true  (Positive? x))
+  (check-false (Positive? (Sqrt x)) #f))  ; TODO xxx
 
 ;; <<= defines an order on the set of symbolic expressions
 ;; Sorting the terms in a sum according to this order, brings together
@@ -369,13 +399,13 @@
 (define (distribute s)
   ; (displayln (list 'distribute s))
   (define d distribute)
-  (match s
-    [(⊗ a (⊕ x y)) (⊕ (d (⊗ a x)) (d (⊗ a y)))]
-    [(⊗ (⊕ x y) b) (⊕ (d (⊗ x b)) (d (⊗ y b)))]
+  (math-match s
+    [(⊗ a (⊕ u v)) (⊕ (d (⊗ a u)) (d (⊗ a v)))]
+    [(⊗ (⊕ u v) b) (⊕ (d (⊗ u b)) (d (⊗ v b)))]
     ; the following case handle a sum as a middle factor
     [(⊗ a b)       (let ([db (d b)])
                      (if (equal? b db) (⊗ a db) (d (⊗ a db))))]
-    [(⊕ x y)       (⊕ (d x) (d y))]
+    [(⊕ u v)       (⊕ (d u) (d v))]
     [_ s]))
 
 (module+ test
@@ -390,14 +420,14 @@
   (define e expand)
   (define d distribute)
   (match s
-    [(⊗ a (⊕ x y))   (e (⊕ (⊗ a x) (⊗ a y)))]
-    [(⊗ (⊕ x y) b)   (e (⊕ (⊗ x b) (⊗ y b)))]
+    [(⊗ a (⊕ u v))   (e (⊕ (⊗ a u) (⊗ a v)))]
+    [(⊗ (⊕ u v) b)   (e (⊕ (⊗ u b) (⊗ v b)))]
     [(⊗ a b)         (let ([ea (e a)] [eb (e b)])
                        (cond [(and (equal? a ea) (equal? b eb))    (⊗  a  b)]
                              [(equal? b eb)                     (e (⊗ ea  b))]
                              [(equal? a ea)                     (e (⊗  a eb))]
                              [else                              (e (⊗ ea eb))]))]
-    [(⊕ x y)          (⊕ (e x) (e y))]
+    [(⊕ u v)          (⊕ (e u) (e v))]
     [(Expt (⊕ u v) 2) (e (⊕ (Expt u 2) (Expt v 2) (⊗ 2 u v)))]
     ; TODO: Replace this with a sum the binomial theorem
     [(Expt (⊕ u v) n) #:when (and (>= n 3) (odd? n))
@@ -734,6 +764,17 @@
     (check-equal? (free-of u x) #f)
     (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
     (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
+
+#;(define (trig-expand u)
+  (define t trig-expand)
+  (math-match u
+    [r r]
+    [r.bf r.bf]
+    [x x]
+    [(⊕ u v) (⊕ (t u) (t v))]
+    [(⊗ u v) (⊗ (t u) (t v))]
+    [(Sin (k⊗ n u))]))
+    
 
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.

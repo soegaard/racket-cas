@@ -5,9 +5,11 @@
 
 (module+ test (require rackunit))
 
-(module predicates racket (provide natural? @e? @pi? inexact-number?)
+(module predicates racket (provide natural? @e? @pi? inexact-number? bigfloat-number?)
+  (require math/bigfloat)
   (define (natural? x) (and (integer? x) (>= x 0)))
   (define (inexact-number? x) (and (number? x) (inexact? x)))
+  (define (bigfloat-number? x) (bigfloat? x))
   (define (@e? u)  (eq? u '@e))   ; Euler's constant
   (define (@pi? u) (eq? u '@pi))) ; pi
 
@@ -31,6 +33,7 @@
   
   (define conventions
     (list (convention (make-ends-with-pred ".0")  #'inexact-number?)
+          (convention (make-ends-with-pred ".bf") #'bigfloat-number?)
           (convention (make-begins-with-pred "x") #'symbol?)
           (convention (make-begins-with-pred "y") #'symbol?)
           (convention (make-begins-with-pred "z") #'symbol?)
@@ -53,8 +56,10 @@
 
 (module math-match racket
   (provide math-match math-match* :pat)
-  (require (for-syntax racket/match racket/match/stxtime (submod ".." conventions))
+  (require racket/match racket/match/stxtime
+           (for-syntax racket/match racket/match/stxtime (submod ".." conventions))
            (for-syntax racket/syntax))
+  
   (define-match-expander :pat
     (λ (stx)
       (define (rewrite-id pat)
@@ -69,10 +74,13 @@
         (syntax-case pat0 ()
           [pat (identifier? #'pat) (rewrite-id #'pat)]
           [pat #'pat]))
-      (syntax-case stx ()
-        [(_ pat) (and (identifier? #'pat) (match-expander? #'pat)) #'pat]
+      (syntax-case stx (?)
+        [(_ pat) (and (identifier? #'pat) (match-expander? (syntax-local-value #'pat (λ()#f))))
+                 #'pat]
         [(_ pat) (identifier? #'pat) (rewrite-id #'pat)]
         [(_ #(pat ...))      (syntax/loc stx (vector (:pat pat) ...))]
+        [(_ (? pred pat))  (with-syntax ([p (rewrite #'pat)])
+                             (syntax/loc stx (? pred p)))]
         [(_ (pat0 pat ...))  (with-syntax ([(p ...) (map rewrite (syntax->list #'(pat0 pat ...)))])
                                (syntax/loc stx (p ...)))]
         [(_ pat)             #'pat])))
@@ -94,7 +102,7 @@
                           (datum->syntax pat `(:pat ,(syntax->datum pat)))))])
          (syntax/loc stx (match*/derived (val-expr ...) stx [(new-pat ...) . more] ...)))])))
 
-(module+ test (require (submod ".." math-match))
+(module+ test (require (submod ".." math-match) math/bigfloat)
   (check-equal? (math-match (list 1 1.2 'x) [(list n r x) (list n r x)]) (list 1 1.2 'x))
   (check-equal? (math-match 1.2 [n 1] [r 2]) 2)
   (check-equal? (math-match 'x [n 1] [r 2] [x 3]) 3)
@@ -105,6 +113,10 @@
   (check-equal? (math-match 1   [@e 2] [_ 3]) 3)
   (check-equal? (math-match '@e [@e 2] [_ 3]) 2)
   (check-equal? (math-match 2 [n.0 3] [_ 4]) 4)
-  (check-equal? (math-match 2.0 [n.0 3] [_ 4]) 3))
+  (check-equal? (math-match 2.0 [n.0 3] [_ 4]) 3)
+  (check-equal? (math-match (bf 2.0) [x.bf 3] [_ 4]) 3))
 
 (require (submod "." math-match))
+(require (for-syntax syntax/parse))
+
+
