@@ -44,14 +44,6 @@
 ;; The pattern ⊕ matches various sums
 ;;  (⊕ x y) matches (+ a b)       and binds x->a, y->b
 ;;  (⊕ x y) matches (+ a b c ...) and binds x->a, y->(+ b c ...)
-#;(define-match-expander ⊕
-  (λ (stx)
-    (syntax-parse stx
-      [(_ u v) 
-       #'(or (list '+ (:pat u) (:pat v))
-             (list-rest '+ (:pat u) (app (λ(ys) (cons '+ ys)) (:pat v))))]))
-  (λ(stx) (syntax-parse stx [(_ u ...) #'(plus u ...)] [_ (identifier? stx) #'plus])))
-
 (define-match-expander ⊕
   (λ (stx)
     (syntax-parse stx
@@ -74,7 +66,6 @@
        #'(or (list '* u v)
              (list-rest '* u (app (λ(ys) (cons '* ys)) v)))]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(times u ...)][_ (identifier? stx) #'times])))
-
 
 (module+ test (require rackunit)
   (check-equal? (match '(* a b)   [(⊗ x y) (list x y)]) '(a b))
@@ -504,7 +495,7 @@
     [(0 0)          +nan.0] ; TODO: is this the best we can do?
     [(u 0)          1]
     ; [(0 v)          0]
-    [(m n)          (expt m n)]
+    [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
     [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; only true for real u and v
@@ -518,6 +509,7 @@
 
 (module+ test
   (check-equal? (Expt 2 3) 8)
+  (check-equal? (Expt -1 2) 1)
   (check-equal? (bf-N '(expt (expt 5 1/2) 2)) (bf 5)))
 
 (define (Sqr: u)
@@ -755,9 +747,9 @@
 
 (module+ test
   (check-equal? (taylor '(sin x) x 0 5) '(+ x (* -1/6(expt x 3)) (* 1/120 (expt x 5))))
-  (check-equal? (N (expand (taylor '(sin x) x 2 3)))
-                '(+ -0.6318662024609201 (* 2.2347416901985055 x) 
-                    (* -0.8707955499599833 (expt x 2)) (* 0.0693578060911904 (expt x 3)))))
+  #;(check-equal? (N (expand (taylor '(sin x) x 2 3)))
+                  '(+ -0.6318662024609201 (* 2.2347416901985055 x) 
+                      (* -0.8707955499599833 (expt x 2)) (* 0.0693578060911904 (expt x 3)))))
 
 (define (free-of u v)
   ; return true if is not a complete subexpression of u, false otherwise
@@ -776,16 +768,61 @@
     (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
     (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
 
-#;(define (trig-expand u)
-  (define t trig-expand)
-  (math-match u
-    [r r]
-    [r.bf r.bf]
-    [x x]
-    [(⊕ u v) (⊕ (t u) (t v))]
-    [(⊗ u v) (⊗ (t u) (t v))]
-    [(Sin (k⊗ n u))]))
-    
+
+(require math/number-theory)  
+
+
+; rewrite sin(n*u) and cos(n*u) in terms of cos(u) and sin(u)
+; rewrite cos(u+v) and sin(u+v) in terms of cos(u),cos(v),sin(u) and sin(v)
+(define (trig-expand u)
+  (define sin-pi/2-table #(0 1 0 -1))
+  (define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
+  (define cos-pi/2-table #(1 0 -1 0))
+  (define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
+  (define (t u)
+    (math-match u
+      [r r]
+      [r.bf r.bf]
+      [x x]
+      [(⊕ u v) (⊕ (t u) (t v))]
+      [(⊗ u v) (⊗ (t u) (t v))]
+      [(Sin 0) 0]
+      [(Sin (⊗ n u)) #:when (negative? n)
+                     (⊖ (t (Sin (- n) u)))]
+      [(Sin (⊗ n u)) (for/⊕ ([k (in-range (+ n 1))])
+                            (⊗ (binomial n k) 
+                               (Expt (Cos x) k)
+                               (Expt (Sin x) (- n k))
+                               (sin-pi/2* (- n k))))]
+      [(Cos 0) 1]
+      [(Cos (⊗ n u)) #:when (negative? n)
+                     (t (Cos (- n) u))]
+      [(Cos (⊗ n u)) (for/⊕ ([k (in-range (+ n 1))])
+                            (⊗ (binomial n k)
+                               (Expt (Cos x) k)
+                               (Expt (Sin x) (- n k))
+                               (cos-pi/2* (- n k))))]
+      [(Sin (⊕ u v)) (t (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))]
+      [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]      
+      [_ u]))
+  (t u))
+
+(module+ test
+  (check-equal? (trig-expand (Sin (⊗ 2 x))) (⊗ 2 (Cos x) (Sin x)))
+  (check-equal? (trig-expand (Cos (⊗ 2 x))) (⊖ (Sqr (Cos x)) (Sqr (Sin x))))
+  (let ([u 'u] [v 'v])
+    (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
+    (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))))
+
+(define-syntax (for/⊕ stx)
+  (syntax-case stx ()
+    [(_ clauses body-or-break ... body)
+     (syntax/loc stx
+       (for/fold ([sum 0]) clauses
+         body-or-break ...
+         (⊕ body sum)))]))
+
+(module+ test (check-equal? (for/⊕ ([n 10]) (⊗ n x)) (⊗ (for/sum ([n 10]) n) x)))
 
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.

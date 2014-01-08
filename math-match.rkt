@@ -40,7 +40,9 @@
           (convention (make-begins-with-pred "r") #'number?)
           (convention (make-begins-with-pred "s") #'number?)
           (convention (make-begins-with-pred "m") #'natural?)
-          (convention (make-begins-with-pred "n") #'natural?)                    
+          (convention (make-begins-with-pred "n") #'natural?)
+          (convention (make-begins-with-pred "p") #'integer?)
+          (convention (make-begins-with-pred "q") #'integer?)
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)))
   
