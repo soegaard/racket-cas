@@ -1,4 +1,12 @@
 #lang racket
+; Current:
+;   - adding asin
+;     - handle asin(sin(u)) ?
+; Ideas:
+;   - add arcsin, arccos and arctan
+;   - solve
+;   - unparse (for better presentation of results)
+
 (require "math-match.rkt")
 (require (for-syntax syntax/parse))
 (module+ test (require rackunit)
@@ -374,6 +382,7 @@
     [(Expt u v) (Expt (n u) (n v))]
     [(Ln u)     (Ln (n u))]
     [(Sin u)    (Sin (n u))]
+    [(Asin u)   (Asin (n u))]
     [(Cos u)    (Cos (n u))]
     [(app: f us) (match u
                    [(list '/ u v)  (⊘ (n u) (n v))]
@@ -557,17 +566,37 @@
   (check-equal? (Cos 0.5) 0.8775825618903728))
 
 (define (Sin: u)
+  (define (odd-integer? n) (and (integer? n) (odd? n)))
   (math-match u
     [0 0]
     ; [r (sin r)] ; nope - automatic evaluation is for exact results only
     [r.0 (sin r.0)]
     [@pi 0]
     [(⊗ 2 @pi) 0]
+    [(⊗ r @pi) #:when (and (exact? r) (negative? r))
+               (⊖ (Sin: (⊗ (- r) @pi)))]
+    [(⊗ n @pi) 0]
+    [(⊗ r @pi) #:when (and (exact? (* 2 r)) (integer? (* 2 r)))
+               (if (= (remainder (* 2 r) 4) 1) 1 -1)]
+    [(Asin u) u]
     [_ `(sin ,u)]))
 
 (define-match-expander Sin
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'sin u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sin: u)] [_ (identifier? stx) #'Sin:])))
+
+(define (Asin: u)
+  (math-match u
+    [0 0]
+    [1  (⊗ 1/2 @pi)]
+    [-1 (⊗ -1/2 @pi)]
+    ; [r (sin r)] ; nope - automatic evaluation is for exact results only
+    [r.0 (asin r.0)]
+    [_ `(asin ,u)]))
+
+(define-match-expander Asin
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'asin u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Asin: u)] [_ (identifier? stx) #'Asin:])))
 
 (define (Tan u)
   (⊘ (Sin u) (Cos u)))
@@ -701,6 +730,7 @@
     [(Cos u)    (M cos Cos u)]
     [(Ln u)     (M log Ln  u)]
     [(Exp u)    (M exp Exp u)]
+    [(Asin u)   (M asin Asin u)]
     [_ u]))
 
 (module+ test (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5)))
