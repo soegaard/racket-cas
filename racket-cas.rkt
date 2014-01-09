@@ -386,6 +386,7 @@
     [(Sin u)    (Sin (n u))]
     [(Asin u)   (Asin (n u))]
     [(Cos u)    (Cos (n u))]
+    [(Acos u)   (Acos (n u))]
     [(app: f us) (match u
                    [(list '/ u v)  (⊘ (n u) (n v))]
                    [(list '- u)    (⊖ (n u))]
@@ -577,6 +578,12 @@
     [r.0 (cos r.0)]
     [@pi -1]
     [(⊗ 2 @pi) 1]
+    [(⊗ r @pi) #:when (and (exact? r) (negative? r))
+               (Cos: (⊗ (- r) @pi))]
+    [(⊗ n @pi) (if (even? n) 1 -1)]
+    [(⊗ r @pi) #:when (and (exact? (* 2 r)) (integer? (* 2 r)))
+               (cos-pi/2* (* 2 r))]
+    [(Acos u) u]
     [_ `(cos ,u)]))
 
 (define-match-expander Cos
@@ -621,6 +628,18 @@
 (define-match-expander Asin
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'asin u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Asin: u)] [_ (identifier? stx) #'Asin:])))
+
+(define (Acos: u)
+  (math-match u
+    [0 (⊘ @pi 2)]
+    [1 0]
+    [-1 @pi]
+    [r.0 (acos r.0)]
+    [_ `(acos ,u)]))
+
+(define-match-expander Acos
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'acos u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Acos: u)] [_ (identifier? stx) #'Acos:])))
 
 (define (Tan u)
   (⊘ (Sin u) (Cos u)))
@@ -826,13 +845,15 @@
 (require math/number-theory)  
 
 
+(define sin-pi/2-table #(0 1 0 -1))
+(define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
+(define cos-pi/2-table #(1 0 -1 0))
+(define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
+
 ; rewrite sin(n*u) and cos(n*u) in terms of cos(u) and sin(u)
 ; rewrite cos(u+v) and sin(u+v) in terms of cos(u),cos(v),sin(u) and sin(v)
 (define (trig-expand u)
-  (define sin-pi/2-table #(0 1 0 -1))
-  (define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
-  (define cos-pi/2-table #(1 0 -1 0))
-  (define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
+  
   (define (t u)
     (math-match u
       [r r]
