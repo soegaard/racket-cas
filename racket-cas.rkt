@@ -7,7 +7,7 @@
 ;   - solve
 ;   - unparse (for better presentation of results)
 
-(require "math-match.rkt")
+(require "math-match.rkt" racket/match)
 (require (for-syntax syntax/parse))
 (module+ test (require rackunit)
   (define x 'x) (define y 'y) (define z 'z))
@@ -327,8 +327,8 @@
            (times2 s u)]
     [(r x) (list '* r x)]
     [(u u) (Expt u 2)]
-    [(u (Expt u v)) (Expt u (⊕ 1 v))]
-    [((Expt u v) u) (Expt u (⊕ 1 v))]
+    [(u (Expt u v)) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
+    [((Expt u v) u) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) (Expt u w)) (Expt u (⊕ v w))]
     [(x y) (if (symbol<? x y) (list '* x y) (list '* y x))]
     ; all recursive calls must reduce size of s1 wrt <<=
@@ -368,6 +368,8 @@
   (check-equal? (⊗ y (Expt x 2)) '(* (expt x 2) y))
   (check-equal? (⊗ x (Cos x)) '(* x (cos x)))
   (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
+  (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
+  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2)))
   )
 
 ; normalize will given a non-canonical form u 
@@ -461,6 +463,27 @@
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2))))
 
+(define (simplify u)
+  (define s simplify)
+  (math-match u
+    [(Expt n 1/2) (sqrt-natural n)]
+    [(⊗ u v)      (⊗ (s u) (s v))]
+    [(⊕ u v)      (⊕ (s u) (s v))]
+    [_ u]))
+
+(define (sqrt-natural n)
+  ; suppose n = s^2 * f , where f is square-free
+  ; sqrt(n) = s * sqrt(f)
+  (define-values (ss ns)
+    (for/fold ([squares '()] [non-squares '()])
+      ([b^e (in-list (factorize n))])
+      (define-values (b e) (values (first b^e) (second b^e)))
+      (if (even? e)
+          (values (cons (expt b (/ e 2)) squares) non-squares)
+          (values (cons (expt b (/ (- e 1) 2)) squares) (cons b non-squares)))))
+  (⊗ (for/product ([s (in-list ss)]) s)
+     (Sqrt (for/product ([n (in-list ns)]) n))))
+
 
 ; divide u by v
 (define (Quotient: u v)
@@ -531,7 +554,8 @@
 (define (Ln: u)
   (math-match u
     [1  0]
-    [r  (log r)]
+    [0  +nan.0] ; TODO: error?
+    [r  #:when (positive? r) (log r)]
     [@e  1]
     [(Expt @e v) v]
     [_ `(ln ,u)]))
@@ -853,6 +877,16 @@
          (⊕ body sum)))]))
 
 (module+ test (check-equal? (for/⊕ ([n 10]) (⊗ n x)) (⊗ (for/sum ([n 10]) n) x)))
+
+(define-syntax (for/⊗ stx)
+  (syntax-case stx ()
+    [(_ clauses body-or-break ... body)
+     (syntax/loc stx
+       (for/fold ([prod 1]) clauses
+         body-or-break ...
+         (⊗ body prod)))]))
+
+(module+ test (check-equal? (for/⊗ ([n (in-range 2 5)]) n) 24))
 
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
