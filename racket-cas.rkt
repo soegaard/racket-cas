@@ -594,7 +594,8 @@
   (check-equal? (Cos 0) 1)
   (check-equal? (Cos @pi) -1)
   (check-equal? (Cos (⊗ 2 @pi)) 1)
-  (check-equal? (Cos 0.5) 0.8775825618903728))
+  (check-equal? (Cos 0.5) 0.8775825618903728)
+  (check-equal? (for/list ([n 8]) (Cos (⊗ n 1/2 @pi))) '(1 0 -1 0 1 0 -1 0)))
 
 (define (Sin: u)
   (define (odd-integer? n) (and (integer? n) (odd? n)))
@@ -615,6 +616,8 @@
 (define-match-expander Sin
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'sin u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sin: u)] [_ (identifier? stx) #'Sin:])))
+
+(module+ test (check-equal? (for/list ([n 8]) (Sin (⊗ n 1/2 @pi))) '(0 1 0 -1 0 1 0 -1)))
 
 (define (Asin: u)
   (math-match u
