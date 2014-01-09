@@ -1,14 +1,15 @@
 #lang racket
-; Current:
-;   - adding asin
-;     - handle asin(sin(u)) ?
+; Short term:
+;   - split expand into expand-one and expand (-all)
 ; Ideas:
-;   - add arcsin, arccos and arctan
+;   - add arctan
 ;   - solve
 ;   - unparse (for better presentation of results)
+;   - limit via Gruntz algorithm
 
-(require "math-match.rkt" racket/match)
-(require (for-syntax syntax/parse))
+(require "math-match.rkt" racket/match math/number-theory)
+(require (for-syntax syntax/parse))  
+
 (module+ test (require rackunit)
   (define x 'x) (define y 'y) (define z 'z))
 
@@ -429,6 +430,9 @@
   (check-equal? (distribute (⊕ 1 (⊗ 2 (⊕ 3 x y)))) '(+ 7 (* 2 x) (* 2 y)))
   (check-equal? (distribute '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x)))))
 
+(define (expand-one u)
+  (expand u))
+
 (define (expand s)
   ; (displayln (list 'expand s))
   (define e expand)
@@ -531,7 +535,7 @@
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
-    [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; only true for real u and v
+    [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
     [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
     [(Exp (Ln v))   v]    
     [(_ _)          `(expt ,u ,v)]))
@@ -845,8 +849,6 @@
     (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
 
 
-(require math/number-theory)  
-
 
 (define sin-pi/2-table #(0 1 0 -1))
 (define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
@@ -881,7 +883,9 @@
                                (Expt (Sin x) (- n k))
                                (cos-pi/2* (- n k))))]
       [(Sin (⊕ u v)) (t (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))]
-      [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]      
+      [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]
+      [(Expt u n)  (expand-one (Expt (t u) n))]
+      [(app: f us) `(,f ,@(map t us))]
       [_ u]))
   (t u))
 
@@ -890,7 +894,8 @@
   (check-equal? (trig-expand (Cos (⊗ 2 x))) (⊖ (Sqr (Cos x)) (Sqr (Sin x))))
   (let ([u 'u] [v 'v])
     (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
-    (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))))
+    (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
+    (check-equal? (trig-expand '(expt (sin (* 2 x)) 2)) '(* 4 (expt (cos x) 2) (expt (sin x) 2)))))
 
 (define-syntax (for/⊕ stx)
   (syntax-case stx ()
