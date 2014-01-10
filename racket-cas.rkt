@@ -631,12 +631,9 @@
     ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [r.0 (cos r.0)]
     [@pi -1]
-    [(⊗ 2 @pi) 1]
-    [(⊗ r @pi) #:when (and (exact? r) (negative? r))
-               (Cos: (⊗ (- r) @pi))]
-    [(⊗ n @pi) (if (even? n) 1 -1)]
-    [(⊗ r @pi) #:when (and (exact? (* 2 r)) (integer? (* 2 r)))
-               (cos-pi/2* (* 2 r))]
+    [(⊗ n @pi)                           (if (even? n) 1 -1)]
+    [(⊗ α @pi) #:when (negative? α)      (Cos: (⊗ (- α) @pi))]
+    [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
     [(Acos u) u]
     [_ `(cos ,u)]))
 
@@ -658,12 +655,9 @@
     ; [r (sin r)] ; nope - automatic evaluation is for exact results only
     [r.0 (sin r.0)]
     [@pi 0]
-    [(⊗ 2 @pi) 0]
-    [(⊗ r @pi) #:when (and (exact? r) (negative? r))
-               (⊖ (Sin: (⊗ (- r) @pi)))]
     [(⊗ n @pi) 0]
-    [(⊗ r @pi) #:when (and (exact? (* 2 r)) (integer? (* 2 r)))
-               (if (= (remainder (* 2 r) 4) 1) 1 -1)]
+    [(⊗ α @pi) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) @pi)))]
+    [(⊗ α @pi) #:when (integer? (* 2 α)) (if (= (remainder (* 2 α) 4) 1) 1 -1)]
     [(Asin u) u]
     [_ `(sin ,u)]))
 
