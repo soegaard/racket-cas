@@ -525,6 +525,7 @@
     [r.bf (bf 1)]
     [x 1]
     [(Expt u r) #:when (negative? r) (Expt u (- r))]
+    [(Expt u r) #:when (positive? r) 1]
     [(⊗ u v) (⊗ (denominator u) (denominator v))]
     [(⊕ u v) 1]
     [_ 1]))
@@ -536,6 +537,26 @@
   (check-equal? (denominator 2/3) 3)
   (check-equal? (denominator (⊘ 2 x)) x)
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
+
+(define (numerator u)
+  (local-require (prefix-in racket: (only-in racket numerator)))
+  (math-match u
+    [α (racket:numerator u)]
+    [r r]
+    [r.bf (bf 1)]
+    [x 1]
+    [(Expt v r) #:when (positive? r) u]
+    [(Expt v r) #:when (negative? r) 1]
+    [(⊗ u v) (⊗ (numerator u) (numerator v))]
+    [(⊕ v w) u]
+    [_ u]))
+
+(module+ test
+  (check-equal? (numerator 2) 2)
+  (check-equal? (numerator 2.1) 2.1)
+  (check-equal? (numerator 2/3) 2)
+  (check-equal? (numerator (⊘ 2 x)) 2)
+  (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2)))
 
 ; unary and binary minus 
 (define (⊖ . us)
