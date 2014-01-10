@@ -7,9 +7,7 @@
 ;   - unparse (for better presentation of results)
 ;   - limit via Gruntz algorithm
 
-(require "math-match.rkt" racket/match math/number-theory)
-(require (for-syntax syntax/parse))  
-
+(require "math-match.rkt" racket/match math/number-theory (for-syntax syntax/parse))
 (module+ test (require rackunit)
   (define x 'x) (define y 'y) (define z 'z))
 
@@ -56,9 +54,8 @@
 (define-match-expander ⊕
   (λ (stx)
     (syntax-parse stx
-      [(_ u v) 
-       #'(or (list '+ u v)
-             (list-rest '+ u (app (λ(ys) (cons '+ ys)) v)))]))
+      [(_ u v) #'(or (list '+ u v) (list-rest '+ u (app (λ(ys) (cons '+ ys)) v)))]
+      [(_ u)       #'(list '+ u)]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(plus u ...)] [_ (identifier? stx) #'plus])))
 
 (module+ test 
@@ -72,8 +69,8 @@
   (λ (stx)
     (syntax-parse stx
       [(_ u v)
-       #'(or (list '* u v)
-             (list-rest '* u (app (λ(ys) (cons '* ys)) v)))]))
+       #'(or (list '* u v) (list-rest '* u (app (λ(ys) (cons '* ys)) v)))]
+      [(_ u               )   #'(list '* u)]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(times u ...)][_ (identifier? stx) #'times])))
 
 (module+ test (require rackunit)
@@ -384,27 +381,37 @@
   (math-match u
     [r r]
     [x x]
+    [(⊕ u)      (n u)]
     [(⊕ u v)    (⊕ (n u) (n v))]
-    [(⊗ u v)    (⊗ (n u) (n v))]    
+    [(⊗ u)      (n u)]
+    [(⊗ u v)    (⊗ (n u) (n v))]
     [(Expt u v) (Expt (n u) (n v))]
-    [(Ln u)     (Ln (n u))]
-    [(Sin u)    (Sin (n u))]
+    [(Ln u)     (Ln   (n u))]
+    [(Sin u)    (Sin  (n u))]
     [(Asin u)   (Asin (n u))]
-    [(Cos u)    (Cos (n u))]
+    [(Cos u)    (Cos  (n u))]
     [(Acos u)   (Acos (n u))]
     [(app: f us) (match u
                    [(list '/ u v)  (⊘ (n u) (n v))]
                    [(list '- u)    (⊖ (n u))]
                    [(list '- u v)  (⊖ (n u) (n v))]
-                   [(list 'tan u)  (Tan (n u))]
-                   [(list 'sqr u)  (Sqr (n u))]
+                   [(list 'tan v)  (Tan  (n v))]
+                   [(list 'sqr u)  (Sqr  (n u))]
                    [(list 'sqrt u) (Sqrt (n u))]
-                   [(list 'exp u)  (Exp (n u))]  
+                   [(list 'exp u)  (Exp  (n u))]  
                    [(list 'bf u) (number? u) (bf u)]
                    [_ (let ([nus (map n us)])
                         (if (equal? us nus)
                             u
                             (n `(,f ,@nus))))])]))
+
+(module+ test
+  (check-equal? (normalize '(+ 1 x (* (expt (sin (ln (cos (asin (acos (sqrt (tan x))))))) 2))))
+                (⊕ 1 x (⊗ (Expt (Sin (Ln (Cos (Asin (Acos (Sqrt (Tan x))))))) 2))))
+  (check-equal? (normalize '(/ (- x) (+ (- x y) (exp x) (sqr x) (+ 3)))) 
+                (⊘ (⊖ x) (⊕ (⊖ x y) (Exp x) (Sqr x) (⊕ 3))))
+  (check-equal? (normalize '(bf 3)) (bf 3))
+  (check-equal? (normalize '(f (- x y))) `(f ,(⊖ x y))))
 
 ; Compile turns an expression into a Racket function.
 (define (compile u [x 'x])
@@ -432,7 +439,8 @@
   (check-equal? (distribute (⊗ (⊕ x y) (Cos x))) '(+ (* x (cos x)) (* y (cos x))))
   (check-equal? (distribute (⊗ (⊕ 3 x y) 2)) '(+ 6 (* 2 x) (* 2 y)))
   (check-equal? (distribute (⊕ 1 (⊗ 2 (⊕ 3 x y)))) '(+ 7 (* 2 x) (* 2 y)))
-  (check-equal? (distribute '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x)))))
+  (check-equal? (distribute '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
+  (check-equal? (distribute '(* (+ x 1) 2)) (⊕ (⊗ 2 x) 2)))
 
 (define (expand-one u)
   (expand u))
@@ -480,6 +488,9 @@
     [(⊕ u v)      (⊕ (s u) (s v))]
     [_ u]))
 
+(module+ test (check-equal? (simplify (⊕ (⊗ 2 (Expt 8 1/2)) 3)) (⊕ (⊗ 2 2 (Sqrt 2)) 3))) 
+
+
 (define (sqrt-natural n)
   ; suppose n = s^2 * f , where f is square-free
   ; sqrt(n) = s * sqrt(f)
@@ -493,11 +504,13 @@
   (⊗ (for/product ([s (in-list ss)]) s)
      (Sqrt (for/product ([n (in-list ns)]) n))))
 
+(module+ test (check-equal? (sqrt-natural 20) (⊗ 2 (Sqrt 5))))
+
 
 ; divide u by v
 (define (Quotient: u v)
   (math-match* (u v)
-    [(r 0) 'division-by-zero]
+    [(r 0) +nan.0]
     [(r s) (/ r s)]
     [(u 1) u]
     [(u -1) (⊖ u)]
@@ -531,6 +544,9 @@
   (check-equal? (denominator 2.1) 1)
   (check-equal? (denominator 0.5) 1)
   (check-equal? (denominator 2/3) 3)
+  (check-equal? (denominator y) 1)
+  (check-equal? (denominator (bf 1.2)) (bf 1)) ; xxx
+  (check-equal? (denominator (Sqrt x)) 1)
   (check-equal? (denominator (⊘ 2 x)) x)
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
