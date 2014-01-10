@@ -1,9 +1,5 @@
 #lang racket
 ; Short term:
-;   - fix bug in << : '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x)))
-;     > (diff '(+ (f x) (f (+ x h)) (f (+ x (* 2 h)))) x)
-;     output: (((D f x) (+ (* 2 h) x)) ((D f x) (+ h x)))
-;     crash
 ;   - split expand into expand-one and expand (-all)
 ; Ideas:
 ;   - add arctan
@@ -714,7 +710,7 @@
     [(app: f us)  #:when (symbol? f) 
                   (match us
                     [(list u) (⊗ `((D ,f ,x) ,u) (d u))] ; xxx
-                    [_ `(diff (f ,@us) ,x)])]              ; xxx
+                    [_ `(diff (f ,@us) ,x)])]             ; xxx
     [_ (error 'diff (~a "got: " u " wrt " x))]))
 
 (module+ test
