@@ -1,5 +1,9 @@
 #lang racket
 ; Short term:
+;   - fix bug in << : '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x)))
+;     > (diff '(+ (f x) (f (+ x h)) (f (+ x (* 2 h)))) x)
+;     output: (((D f x) (+ (* 2 h) x)) ((D f x) (+ h x)))
+;     crash
 ;   - split expand into expand-one and expand (-all)
 ; Ideas:
 ;   - add arctan
@@ -197,6 +201,9 @@
        ; ... two non-symbol/power/products  (i.e. sums or applications)
        [((⊕ u a) (⊕ u b)) (<< a b)]
        [((⊕ u a) (⊕ v b)) (<< u v)]
+       [(_ (⊕ v b)) #t] ; xxx
+       [((⊕ v b) _) #f] ; xxx
+       
        ; ... two non-symbol/power/products/sums  (i.e. applications)
        [((app: f us) (app: g vs))
         (or (symbol<? f g)
@@ -204,8 +211,8 @@
                  (let ([l (length us)] [m (length vs)])
                    (or (< l m)
                        (and (= l m)
-                            (for/and ([u us] [v vs])
-                              (<< u v)))))))]
+                            (for/or ([u us] [v vs])
+                              (<<= u v)))))))]
        ; no other possibilities left
        [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")])]
     [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")]))
@@ -306,8 +313,9 @@
   (check-equal? (⊕ x (Expt x 3) (⊖ x)) (Expt x 3))
   (check-equal? (⊕ (Sin x) (⊗ 2 (Sin x))) '(* 3 (sin x)))
   (check-equal? (⊕ 1 x (⊗ -1 (⊕ 1 x))) 0)
-  
-  )
+  (check-equal? (normalize '(+ (f x) (f y) (f x))) '(+ (* 2 (f x)) (f y)))
+  (check-equal? (normalize '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x))))
+                '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x)))))
 
 ;; (⊗ u ...) in an expression context expands to (times u ...)
 ;; That is: Elsewhere use ⊗ in order to multiply expressions.
@@ -508,6 +516,27 @@
 (module+ test
   (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y)))
 
+(define (denominator u)
+  (local-require (prefix-in racket: (only-in racket denominator)))
+  (math-match u
+    [p    1]
+    [α (racket:denominator u)]
+    [r.0  1]
+    [r.bf (bf 1)]
+    [x 1]
+    [(Expt u r) #:when (negative? r) (Expt u (- r))]
+    [(⊗ u v) (⊗ (denominator u) (denominator v))]
+    [(⊕ u v) 1]
+    [_ 1]))
+
+(module+ test
+  (check-equal? (denominator 2) 1)
+  (check-equal? (denominator 2.1) 1)
+  (check-equal? (denominator 0.5) 1)
+  (check-equal? (denominator 2/3) 3)
+  (check-equal? (denominator (⊘ 2 x)) x)
+  (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
+
 ; unary and binary minus 
 (define (⊖ . us)
   (match us
@@ -666,7 +695,11 @@
     [(Exp u)   (⊗ (Exp u) (d u))]
     [(Ln u)    (⊗ (⊘ 1 u) (d u))]
     [(Cos u)   (⊗ (⊖ 0 (Sin u)) (d u))]
-    [(Sin u)   (⊗ (Cos u) (d u))]    
+    [(Sin u)   (⊗ (Cos u) (d u))]
+    [(app: f us)  #:when (symbol? f) 
+                  (match us
+                    [(list u) (⊗ `((D ,f ,x) ,u) (d u))] ; xxx
+                    [_ `(diff (f ,@us) ,x)])]              ; xxx
     [_ (error 'diff (~a "got: " u " wrt " x))]))
 
 (module+ test

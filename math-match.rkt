@@ -5,10 +5,12 @@
 
 (module+ test (require rackunit))
 
-(module predicates racket (provide natural? @e? @pi? inexact-number? bigfloat-number?)
+(module predicates racket 
+  (provide natural? @e? @pi? inexact-number? exact-number? bigfloat-number?)
   (require math/bigfloat)
   (define (natural? x) (and (integer? x) (>= x 0)))
   (define (inexact-number? x) (and (number? x) (inexact? x)))
+  (define (exact-number? x)   (and (number? x) (exact? x)))
   (define (bigfloat-number? x) (bigfloat? x))
   (define (@e? u)  (eq? u '@e))   ; Euler's constant
   (define (@pi? u) (eq? u '@pi))) ; pi
@@ -43,6 +45,9 @@
           (convention (make-begins-with-pred "n") #'natural?)
           (convention (make-begins-with-pred "p") #'integer?)
           (convention (make-begins-with-pred "q") #'integer?)
+          (convention (make-begins-with-pred "α") #'exact-number?)
+          (convention (make-begins-with-pred "β") #'exact-number?)
+          
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)))
   
