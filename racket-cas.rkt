@@ -995,63 +995,65 @@
 
 (module+ test (check-equal? (for/⊗ ([n (in-range 2 5)]) n) 24))
 
+(define (exponent u w)
+  ; find the maximum exponent of w which is present in u
+  (define (e u)
+    (math-match u
+      [u #:when (equal? u w) 1]
+      [r 0]
+      [r.bf 0]
+      [x 0]
+      [(⊕ u v) (max (e u) (e v))]
+      [(⊗ u v) (+ (e u) (e v))]
+      [(Expt u r) #:when (equal? u w) r]
+      [(Expt (⊕ u v) r) (* (max (e u) (e v)) r)]
+      [_ 0]))
+  (e u))
+
+(module+ test 
+  (check-equal? (exponent '(+ 1 x (expt x 2)) x) 2)
+  (check-equal? (exponent '(+ 1 x (expt x 2)) y) 0)
+  (check-equal? (exponent '(* 1 x (+ 1 (expt x 2))) x) 3)
+  (check-equal? (exponent '(sin x) x) 0)
+  (check-equal? (exponent '(expt (+ 1 x) 7) x) 7))
+
 ; (coefficient u v)   find coefficient of v in u
 ; (coefficient u v n) find coefficient of v^n in u
-(define (coefficient u v [n #f])
-  (define (c u) 
+(define (coefficient u v [n 1])
+  (define (c u)
     (math-match u
-      [r  0] [r.bf 0]
-      [u #:when (equal? u v) 1]
-      [(⊗ u w) (if (equal? u v) w (⊗ u (c w)))]
-      [(⊕ u w) (⊕ (c u) (c w))]
+      [r                            (if (= n 0) r    0)]
+      [r.bf                         (if (= n 0) r.bf 0)]
+      [u #:when (equal? u v)        (if (= n 1) 1 0)]
+      [y #:when (not (equal? u v))  (if (= n 0) y 0)]
+      [(⊗ r w)                      (⊗ r (c w))]
+      [(⊗ u w) #:when (equal? u v)  (coefficient w v (- n 1))]
+      [(⊗ u w) #:when (equal? w v)  (coefficient u v (- n 1))]
+      [(⊗ u w)                      (for/⊕ ([i (in-range (+ n 1))])
+                                           (⊗ (coefficient u v i) (coefficient w v (- n i))))]
+      [(⊕ u w)                      (⊕ (c u) (c w))]
+      [(Expt u r) #:when (equal? u v) (if (= r n) 1 0)]
+      [(Expt (⊕ u w) m)             (for/⊕ ([i (in-range (+ m 1))])
+                                           (⊗ (binomial m i)
+                                              (coefficient (⊗ (Expt u i) (Expt w (- m i))) v n)))]
       [_ 0]))
-  (if n (coefficient u (Expt v n)) (c u)))
+  (c u))
 
 (module+ test 
   (let () (define u (normalize '(+ (* 3 (expt x 2) y z) x (* 2 (expt x 2)))))
     (check-equal? (coefficient u (Expt x 2)) '(+ 2 (* 3 y z)))
     (check-equal? (coefficient u x 2) '(+ 2 (* 3 y z)))
-    (check-equal? (coefficient u x) 1)))
+    (check-equal? (coefficient u x) 1)
+    (check-equal? (coefficient '(expt (+ x 1) 2) x) 2)))
 
 (define (coefficient-list u x)
   ; view u as a polynomial in x, return the list of coefficients
-  (define (c u s cs)
-    (define (add n cn) (cons (list n (⊗ s cn)) cs))
-    (define (add* ds)  (append ds cs))
-    (define (increase-exponents cs [d 1])
-      (for/list ([c (in-list cs)]) (match c [(list n cn) (list (+ n d) cn)])))
-    (math-match u
-      [r                     (add 0 r)]
-      [r.bf                  (add 0 r.bf)]
-      [y #:when (equal? y x) (add 1 1)]
-      [y                     (add 0 y)]
-      [(⊗ α v)               (c v (* α s) cs)]
-      [(⊗ v w)               (cond [(equal? v x) (add* (increase-exponents (c w s '())))] ; xxx
-                                   [(equal? w x) (add* (increase-exponents (c v s '())))]
-                                   [else         (c w (⊗ v s) cs)])]
-      [(Expt y n) #:when (eq? y x) (add n 1)]
-      [(Expt x v) (error (~a "expected a polynomial in " x " got " u))]
-      [(⊕ u v)               (c u s (c v s cs))]
-      [u (error 'coefficient-list (~a "expected a polynomial in " x " got " u))]))
-  (define (post cs) 
-    (define (loop i cs)
-      (cond [(empty? cs) '()]
-            [else (match-define (list n c) (first cs))
-                  (cond [(< i n) (cons 0 (loop (+ i 1) cs))]
-                        [(= i n) (cons c (loop (+ i 1) (rest cs)))]
-                        [else    (error 'internal-error)])]))
-    (loop 0 cs))
-  (define (coalesce cs)
-    (match cs
-      [(list)                             '()]
-      [(list u)                           (list u)]
-      [(list (list n cn) (list m cm))     (if (= n m) (list (list n (⊕ cn cm))) cs)]
-      [(list* (list n cn) (list m cm) ds) (cond [(= n m) (coalesce (cons (list n (⊕ cn cm)) ds))]
-                                                [else    (cons (first cs) (coalesce (rest cs)))])]))
-  (post (coalesce (sort (c (expand u) 1 '()) < #:key first))))
+  (match (for/list ([n (in-range (+ (exponent u x) 1))]) (coefficient u x n))
+    [(list 0) '()] [cs cs]))
 
 (module+ test 
   (check-equal? (coefficient-list 42 x) '(42))
+  (check-equal? (coefficient-list 0 x) '())
   (check-equal? (coefficient-list 'x x) '(0 1))
   (check-equal? (coefficient-list '(expt x 3) x) '(0 0 0 1))
   (check-equal? (coefficient-list '(* a x) x) '(0 a))
@@ -1075,13 +1077,23 @@
 (define (Or: . us)
   `(or ,@us))
 
+#;(define (Positive?: u)
+    (math-match u
+      [r      (positive? r)]
+      [r.bf   (bfpositive? r.bf)]
+      [(⊖ u)  #f]
+      [_      #t])) ; todo: add cases for variables with assumptions
 
-(define (solve u x)
+
+(define (solve u x) ; assume x is real (use csolve for complex solutions)
   (match u
     [(Equal u v) #:when (not (equal? v 0)) (solve (Equal (⊖ u v) 0) x)]
-    [(Equal u 0) (match (coefficient-list u x)
-                   [(list a)     (if (number? a) (= a 0) (Equal a 0))]
+    [(Equal u 0) (match (coefficient-list u x) ; note: leading coef is non-zero
+                   [(list)       #t]
+                   [(list a)     (Equal a 0)]
                    [(list b a)   (Equal x (⊘ (⊖ b) a))]
+                   [(list 0 0 a) (Equal x 0)]
+                   [(list 0 b a) (Or (Equal x 0) (Equal x (⊖ (⊘ b a))))]
                    [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
                                      (Equal x    (Sqrt (⊘ (⊖ c) a))))]
                    [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
@@ -1093,8 +1105,8 @@
 (module+ test
   (check-equal? (solve '(= x 2) x) '(= x 2))
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3)))
-  
-  
+
+
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
