@@ -179,6 +179,7 @@
        [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)
        [(x (Expt u v)) (<< x u)]
        [(x (⊗ r x))    (<< 1 r)]  ; (Note: x ~ (* 1 x) )
+       [(x (⊗ u v))    (<< x u)]  ; (Note: x ~ (* 1 x) )
        [(x _) #t]       
        ; ... two non-symbols
        [(u (Expt u a)) (<< 1 a)]  ; Note u ~ (Expt u 1)
@@ -220,6 +221,8 @@
   (check-equal? (<<= y x) #f)
   (check-equal? (<<= (⊗ 2 x) (⊗ 2 y)) #t)
   (check-equal? (<<= (⊗ 2 x) (⊗ 3 x)) #t)
+  (check-equal? (<< '(* a b) '(* 2 c)) #t)
+  (check-equal? (<< '(* 2 c) '(* a b)) #f)
   (check-equal? (<<= (Expt x 2) (⊗ 5 x)) #f)
   (check-equal? (<<= (⊗ 5 x) (Expt x 2)) #t)
   (check-equal? (<<= '(expt x 3) '(expt x 2)) #f)
@@ -243,6 +246,7 @@
 ;; Note: plus assumes the expressions are canonical.
 (define (plus . us) (foldl plus2 0 us))
 (define (plus2 s1 s2)
+  ; '(+ (* 2 c) (* a b) (* 3 c))
   ; (displayln (list 'plus2 s1 s2))
   ; Note: all recursive calls must reduce size of s1
   ; Note: This is the first use of math-match in this file.
@@ -606,6 +610,7 @@
     [(0 0)          +nan.0] ; TODO: is this the best we can do?
     [(u 0)          1]
     ; [(0 v)          0]
+    [(α p)          (expt α p)]
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
@@ -1123,7 +1128,19 @@
   (check-equal? (solve '(= x 2) x) '(= x 2))
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3)))
 
+(define (roots u x)
+  (define (solution u) (last u))
+  (define (extract u)
+    (match u
+      [(list 'or e ...) (map solution e)]
+      [(list _ '= x0)   (list x0)]
+      [_                '()]))
+  (extract (solve (Equal u 0) x)))
 
+; > (let () ; Example: The discriminant of a second degree polynomial
+;     (match-define (list x1 x2) (roots '(+ (* x x) (* b x) c) x))
+;     (expand (Sqr (⊖ x1 x2))))
+; '(+ (expt b 2) (* -4 c))
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
