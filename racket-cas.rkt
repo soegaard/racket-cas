@@ -507,7 +507,7 @@
           (values (cons (expt b (/ e 2)) squares) non-squares)
           (values (cons (expt b (/ (- e 1) 2)) squares) (cons b non-squares)))))
   (⊗ (for/product ([s (in-list ss)]) s)
-     (Sqrt (for/product ([n (in-list ns)]) n))))
+     `(expt ,(for/product ([n (in-list ns)]) n) 1/2)))
 
 (module+ test (check-equal? (sqrt-natural 20) (⊗ 2 (Sqrt 5))))
 
@@ -610,6 +610,7 @@
     [(0 0)          +nan.0] ; TODO: is this the best we can do?
     [(u 0)          1]
     ; [(0 v)          0]
+    [(n 1/2)        (sqrt-natural n)]
     [(α p)          (expt α p)]
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
