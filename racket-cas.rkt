@@ -1,6 +1,7 @@
 #lang racket
 ; Short term:
 ;   - split expand into expand-one and expand (-all)
+;   - finish toghether
 ; Ideas:
 ;   - add arctan
 ;   - solve
@@ -570,6 +571,17 @@
   (check-equal? (numerator (⊘ 2 x)) 2)
   (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2)))
 
+(define (together u)
+  ; todo : this doesn't handle sums with more than two terms
+  (math-match u
+    [(⊕ (⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
+    [_ u]))
+
+(module+ test 
+  (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
+  (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c))))
+
+
 ; unary and binary minus 
 (define (⊖ . us)
   (match us
@@ -977,6 +989,68 @@
 
 (module+ test (check-equal? (for/⊗ ([n (in-range 2 5)]) n) 24))
 
+; (coefficient u v)   find coefficient of v in u
+; (coefficient u v n) find coefficient of v^n in u
+(define (coefficient u v [n #f])
+  (define (c u) 
+    (math-match u
+      [r  0] [r.bf 0]
+      [u #:when (equal? u v) 1]
+      [(⊗ u w) (if (equal? u v) w (⊗ u (c w)))]
+      [(⊕ u w) (⊕ (c u) (c w))]
+      [_ 0]))
+  (if n (coefficient u (Expt v n)) (c u)))
+
+(module+ test 
+  (let () (define u (normalize '(+ (* 3 (expt x 2) y z) x (* 2 (expt x 2)))))
+    (check-equal? (coefficient u (Expt x 2)) '(+ 2 (* 3 y z)))
+    (check-equal? (coefficient u x 2) '(+ 2 (* 3 y z)))
+    (check-equal? (coefficient u x) 1)))
+
+(define (coefficient-list u x)
+  ; view u as a polynomial in x, return the list of coefficients
+  (define (c u s cs)
+    (define (add n cn) (cons (list n (⊗ s cn)) cs))
+    (define (add* ds)  (append ds cs))
+    (define (increase-exponents cs [d 1])
+      (for/list ([c (in-list cs)]) (match c [(list n cn) (list (+ n d) cn)])))
+    (math-match u
+      [r                     (add 0 r)]
+      [r.bf                  (add 0 r.bf)]
+      [y #:when (equal? y x) (add 1 1)]
+      [y                     (add 0 y)]
+      [(⊗ α v)               (c v (* α s) cs)]
+      [(⊗ v w)               (cond [(equal? v x) (add* (increase-exponents (c w s '())))] ; xxx
+                                   [(equal? w x) (add* (increase-exponents (c v s '())))]
+                                   [else         (c w (⊗ v s) cs)])]
+      [(Expt y n) #:when (eq? y x) (add n 1)]
+      [(Expt x v) (error (~a "expected a polynomial in " x " got " u))]
+      [(⊕ u v)               (c u s (c v s cs))]
+      [u (error 'coefficient-list (~a "expected a polynomial in " x " got " u))]))
+  (define (post cs) 
+    (define (loop i cs)
+      (cond [(empty? cs) '()]
+            [else (match-define (list n c) (first cs))
+                  (cond [(< i n) (cons 0 (loop (+ i 1) cs))]
+                        [(= i n) (cons c (loop (+ i 1) (rest cs)))]
+                        [else    (error 'internal-error)])]))
+    (loop 0 cs))
+  (define (coalesce cs)
+    (match cs
+      [(list)                             '()]
+      [(list u)                           (list u)]
+      [(list (list n cn) (list m cm))     (if (= n m) (list (list n (⊕ cn cm))) cs)]
+      [(list* (list n cn) (list m cm) ds) (cond [(= n m) (coalesce (cons (list n (⊕ cn cm)) ds))]
+                                                [else    (cons (first cs) (coalesce (rest cs)))])]))
+  (post (coalesce (sort (c (expand u) 1 '()) < #:key first))))
+
+(module+ test 
+  (check-equal? (coefficient-list 42 x) '(42))
+  (check-equal? (coefficient-list 'x x) '(0 1))
+  (check-equal? (coefficient-list '(expt x 3) x) '(0 0 0 1))
+  (check-equal? (coefficient-list '(* a x) x) '(0 a))
+  (check-equal? (coefficient-list (normalize '(+ (* a x) (* b y) (* c x))) x) '((* b y) (+ a c)))
+  (check-equal? (coefficient-list '(+ x (* 2 a (expt x 3))) x) '(0 1 0 (* 2 a))))
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
