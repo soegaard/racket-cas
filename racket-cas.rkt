@@ -999,6 +999,7 @@
   ; find the maximum exponent of w which is present in u
   (define (e u)
     (math-match u
+      [0 -inf.0]
       [u #:when (equal? u w) 1]
       [r 0]
       [r.bf 0]
@@ -1011,6 +1012,9 @@
   (e u))
 
 (module+ test 
+  (check-equal? (exponent 0 x) -inf.0)
+  (check-equal? (exponent x x) 1)
+  (check-equal? (exponent (Expt x 2) x) 2)
   (check-equal? (exponent '(+ 1 x (expt x 2)) x) 2)
   (check-equal? (exponent '(+ 1 x (expt x 2)) y) 0)
   (check-equal? (exponent '(* 1 x (+ 1 (expt x 2))) x) 3)
@@ -1059,6 +1063,19 @@
   (check-equal? (coefficient-list '(* a x) x) '(0 a))
   (check-equal? (coefficient-list (normalize '(+ (* a x) (* b y) (* c x))) x) '((* b y) (+ a c)))
   (check-equal? (coefficient-list '(+ x (* 2 a (expt x 3))) x) '(0 1 0 (* 2 a))))
+
+
+(define (leading-coefficient u x)
+  (coefficient u x (exponent u x)))
+
+(module+ test (check-equal? (leading-coefficient '(+ 2 (* 3 x) (* 17 x x)) x) 17))
+
+(define (leading-term u x)
+  (define n (exponent u x))
+  (⊗ (coefficient u x n) (Expt x n)))
+
+(module+ test (check-equal? (leading-term '(+ 2 (* 3 x) (* 17 x x)) x) (⊗ 17 x x)))
+
 
 (define-match-expander Equal
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '= u v)]))
@@ -1141,6 +1158,17 @@
   (define Δy   (expand (⊖ (f (⊕ x h)) (f x))))
   (define Δy/h (expand (⊘ Δy h)))
   (limit Δy/h h 0)) ; evaluates to (* 3 (expt x 2))
+
+; Let compute a list of the symmetric polynomials in 4 variables
+(let () 
+  (map expand 
+       (coefficient-list (for/⊗ ([xi '(x1 x2 x3 x4)]) 
+                                (⊕ 1 (⊗ xi x))) x)))
+#;'(1
+    (+ x1 x2 x3 x4)
+    (+ (* x1 x2) (* x1 x3) (* x1 x4) (* x2 x3) (* x2 x4) (* x3 x4))
+    (+ (* x1 x2 x3) (* x1 x2 x4) (* x1 x3 x4) (* x2 x3 x4))
+    (* x1 x2 x3 x4))
 
 (module+ start
   (provide quote)
