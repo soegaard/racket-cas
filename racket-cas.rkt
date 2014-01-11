@@ -1082,6 +1082,20 @@
 
 (module+ test (check-equal? (leading-term '(+ 2 (* 3 x) (* 17 x x)) x) (⊗ 17 x x)))
 
+(define (variables u)
+  ; find variables in sums, producs and powers with rational exponents
+  (define (vars u vs)
+    (math-match u
+      [r          vs]
+      [r.bf       vs]
+      [x          (set-add vs x)]
+      [(⊗ u v)   (vars u (vars v vs))]
+      [(⊕ u v)   (vars u (vars v vs))]
+      [(Expt u α) (vars u vs)]
+      [else       vs]))
+  (sort (set->list (vars u (set))) <<))
+
+(module+ test (check-equal? (variables '(+ (expt (+ x y) 3) z (* a b c) (sin u))) '(a b c x y z)))
 
 (define-match-expander Equal
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '= u v)]))
