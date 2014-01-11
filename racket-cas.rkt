@@ -845,17 +845,21 @@
     [r   r]
     [@pi pi]
     [@e  euler-e]
-    [(⊕ u v)    (M2 + ⊕ u v)]
-    [(⊗ u v)    (M2 * ⊗ u v)]
-    [(Expt u v) (M2 expt Expt u v)]
-    [(Sin u)    (M sin Sin u)]
-    [(Cos u)    (M cos Cos u)]
-    [(Ln u)     (M log Ln  u)]
-    [(Exp u)    (M exp Exp u)]
-    [(Asin u)   (M asin Asin u)]
+    [(⊕ u v)     (M2 + ⊕ u v)]
+    [(⊗ u v)     (M2 * ⊗ u v)]
+    [(Expt u v)  (M2 expt Expt u v)]
+    [(Sin u)     (M sin Sin u)]
+    [(Cos u)     (M cos Cos u)]
+    [(Ln u)      (M log Ln  u)]
+    [(Exp u)     (M exp Exp u)]
+    [(Asin u)    (M asin Asin u)]
+    [(Equal u v) (M2 = Equal u v)]
+    [(app: f us) `(,f ,@(map N us))]
     [_ u]))
 
-(module+ test (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5)))
+(module+ test 
+  (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
+  (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (require math/bigfloat)
 (bf-precision 100)
@@ -879,15 +883,17 @@
         [y #:when (eq? y x) x0.bf]
         [@pi pi.bf]
         [@e  e.bf]
-        [(⊕ u v)    (M2 bf+ ⊕ u v)]
-        [(⊗ u v)    (M2 bf* ⊗ u v)]
-        [(Expt u v) (M2 bfexpt Expt u v)]
-        [(Sin u)    (M bfsin Sin u)]
-        [(Cos u)    (M bfcos Cos u)]
-        [(Ln u)     (M bflog Ln  u)]
-        [(Exp u)    (M bfexp Exp u)]
+        [(⊕ u v)     (M2 bf+ ⊕ u v)]
+        [(⊗ u v)     (M2 bf* ⊗ u v)]
+        [(Expt u v)  (M2 bfexpt Expt u v)]
+        [(Sin u)     (M bfsin Sin u)]
+        [(Cos u)     (M bfcos Cos u)]
+        [(Ln u)      (M bflog Ln  u)]
+        [(Exp u)     (M bfexp Exp u)]
         [_ u]))
     (N u)))
+
+
 
 (define (taylor u x a n)
   (define (fact n) (if (<= n 0) 1 (* n (fact (- n 1)))))
@@ -1051,6 +1057,44 @@
   (check-equal? (coefficient-list '(* a x) x) '(0 a))
   (check-equal? (coefficient-list (normalize '(+ (* a x) (* b y) (* c x))) x) '((* b y) (+ a c)))
   (check-equal? (coefficient-list '(+ x (* 2 a (expt x 3))) x) '(0 1 0 (* 2 a))))
+
+(define-match-expander Equal
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list '= u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Equal: u v)] [_ (identifier? stx) #'Equal:])))
+
+(define (Equal: u v)
+  `(= ,u ,v))
+
+(define-match-expander Or
+  (λ (stx)
+    (syntax-parse stx
+      [(_ u v) #'(or (list 'or u v) (list-rest 'or u (app (λ(ys) (cons '+ ys)) v)))]
+      [(_ u)       #'(list 'or u)]))
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
+
+(define (Or: . us)
+  `(or ,@us))
+
+
+(define (solve u x)
+  (match u
+    [(Equal u v) #:when (not (equal? v 0)) (solve (Equal (⊖ u v) 0) x)]
+    [(Equal u 0) (match (coefficient-list u x)
+                   [(list a)     (if (number? a) (= a 0) (Equal a 0))]
+                   [(list b a)   (Equal x (⊘ (⊖ b) a))]
+                   [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
+                                     (Equal x    (Sqrt (⊘ (⊖ c) a))))]
+                   [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
+                                 (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
+                                     (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]
+                   [_            (Equal u 0)])]
+    [_ u]))
+
+(module+ test
+  (check-equal? (solve '(= x 2) x) '(= x 2))
+  (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3)))
+  
+  
 
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
