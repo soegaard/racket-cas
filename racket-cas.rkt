@@ -1,5 +1,6 @@
 #lang racket
 ; Short term:
+;   - Fix: (coefficient-list '(- (cos x) 1) x) (#f or call error?)
 ;   - split expand into expand-one and expand (-all)
 ;   - finish toghether
 ; Ideas:
@@ -160,6 +161,10 @@
     [(r s) (< r s)]
     [(r _) #t]
     [(u r) #f]
+    ; Case: at leat one big float
+    [(r.bf s.bf) (bf< r.bf s.bf)]
+    [(r.bf _) #t]
+    [(u r.bf) #f]
     ; Case: At least one symbol
     [(x y) (symbol<? x y)] 
     [(u x) (not (<< x u))]
@@ -385,6 +390,7 @@
   (define n normalize)
   (math-match u
     [r r]
+    [r.bf r.bf]
     [x x]
     [(⊕ u)      (n u)]
     [(⊕ u v)    (⊕ (n u) (n v))]
@@ -1167,6 +1173,14 @@
 ;     (expand (Sqr (⊖ x1 x2))))
 ; '(+ (expt b 2) (* -4 c))
 
+(define (continued-fraction cs)
+  (match cs
+    [(list)        1]
+    [(list c)      c]
+    [(list* c cs) (⊕ c (⊘ 1 (continued-fraction cs)))]
+    [_ (error 'continued-fraction (~a "expected list of expressions, got " cs))]))
+
+
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
 ; > (bf-N (taylor '(sin x) x 2 11) 100 x (bf 2.1))
@@ -1180,7 +1194,29 @@
 ; (bf #e-1.8915312386301848139346245961623e-21)
 ; Twenty digits!
 
+(define (newton-raphson f x u0 [n 10] #:trace? [trace? #f])
+  ; Use Newton-Raphson's metod to solve the equation f(x)=0.
+  ; The starting point is u0. The number of iterations is n.
+  (define df (diff f x))
+  (define g (normalize `(- x (/ ,f ,df))))
+  (for/fold ([xn (N u0)]) ([n n])
+    (when trace? (displayln (list n xn)))
+    (subst g x xn)))
+
+(define (bf-newton-raphson f x u0 [n 10] #:precision [prec 100] #:trace? [trace? #f])
+  ; Use Newton-Raphson's metod to solve the equation f(x)=0.
+  ; The starting point is u0. The number of iterations is n.
+  (define df (diff f x))
+  (define g (normalize `(- x (/ ,f ,df))))
+  (for/fold ([xn (bf-N u0 prec)]) ([n n])
+    (when trace? (displayln (list n xn)))
+    (bf-N g prec x xn)))
+
+; (bf-newton-raphson '(- (sin x) 1.0) x 1. 80 #:trace? #t)
+
+;;;
 ;;; Examples
+;;;
 
 (define x 'x) (define y 'y) (define z 'z) (define h 'h)
 
