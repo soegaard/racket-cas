@@ -1262,7 +1262,6 @@
 
 (module+ test 
   (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 3) (= x 2) (= x 1))))
-                            
 
 #;(define (Positive?: u)
     (math-match u
@@ -1293,8 +1292,13 @@
                      (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
                          (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]
        ; try factoring
-       ; (polynomial-square-free-factor u x)
-       [_            (Equal u 0)])]
+       [_ (match (polynomial-square-free-factor u x)
+            ; it helped!
+            [(⊗ v w) (solve (Equal (⊗ v w) 0) x)]
+            ; give up
+            [_        (Equal u 0)])]
+       [_ (Equal u 0)])]
+    
     [_ u]))
 
 (module+ test
@@ -1388,7 +1392,15 @@
     (displayln "Pascal's triangle")
     (for/list ([n 10]) 
       (displayln (coefficient-list (normalize `(expt (+ x 1) ,n)) x)))
-    (void)))
+    (void))
+  (let ()
+    (let ([u (expand '(* (- x 1) (expt (- x 2) 2) (- x 4)))])
+      (define eqn (Equal u 0))
+      (displayln (~a "Solving: " eqn))
+      (displayln (solve eqn x)))
+    ; Solving: (= (+ 16 (* -36 x) (* 28 (expt x 2)) (* -9 (expt x 3)) (expt x 4)) 0)
+    ; '(or (= x 2) (= x 2) (= x 4) (= x 1))
+    ))
 
 (module+ start
   (provide quote quasiquote)
