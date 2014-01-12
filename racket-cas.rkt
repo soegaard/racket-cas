@@ -1097,6 +1097,16 @@
 
 (module+ test (check-equal? (variables '(+ (expt (+ x y) 3) z (* a b c) (sin u))) '(a b c x y z)))
 
+(define (collect u x)
+  (for/⊕ ([n (in-naturals)]
+          [c (in-list (coefficient-list u x))])
+         (⊗ c (Expt x n))))
+
+(module+ test
+  (check-equal? (collect '(+ (* x y) x -3 (* 2 x x) (* -1 z x x) (* x x x)) x)
+                (⊕ -3 (⊗ x (⊕ 1 y)) (⊗ (Expt x 2) (⊕ 2 (⊗ -1 z))) (Expt x 3))))
+
+
 (define-match-expander Equal
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '= u v)]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Equal: u v)] [_ (identifier? stx) #'Equal:])))
