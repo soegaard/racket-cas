@@ -1187,6 +1187,44 @@
                                             '(* (+ 1 x) (+ 2 x) (+ 3 x)) x)
                             '(+ 2 (* 3 x) (expt x 2))))
 
+(define (polynomial-square-free? u x)
+  ; u a univariate polynomial in the symbol x
+  ; is u square-free ?
+  (equal? (polynomial-gcd u (diff u x) x) 1))
+
+(module+ test
+  (let ([u (⊕ x 1)] [v (⊕ x 2)] [w (⊕ x -1)])
+    (check-equal? (andmap (curryr polynomial-square-free? x) (list u v w)) #t)
+    (check-equal? (polynomial-square-free? (⊗ u v) x) #t)
+    (check-equal? (polynomial-square-free? (⊗ u w) x) #t)
+    (check-equal? (polynomial-square-free? (⊗ v w) x) #t)
+    (check-equal? (polynomial-square-free? (⊗ u u v w) x) #f)
+    (check-equal? (polynomial-square-free? (⊗ u v v w) x) #f)
+    (check-equal? (polynomial-square-free? (⊗ u w v w) x) #f)))
+
+(define (polynomial-square-free-factor u x)
+  ; u is a univariate polynomial in x
+  ; factor u = f*s^2 where f is square free
+  (match u
+    [0 u]
+    [_ (define c (leading-coefficient u x))
+       (define U (expand (⊘ u c)))
+       (define R (polynomial-gcd U (diff U x) x))
+       (define F (polynomial-quotient U R x))
+       (let loop ([j 1] [P 1] [R R] [F F])
+         (match R
+           [1 (⊗ c P (Expt F j))]
+           [_ (define G (polynomial-gcd R F x))
+              (define P+ (⊗ P (Expt (polynomial-quotient F G x) j)))
+              (define R+ (polynomial-quotient R G x))
+              (define F+ G)
+              (loop (+ j 1) P+ R+ F+)]))]))
+
+(module+ test
+  (check-equal? 
+   (polynomial-square-free-factor (expand '(* (+ x -1) (expt (+ x 1) 2) (expt (+ x 2) 5))) x)
+   (⊗ (Expt (⊕ 1 x) 2) (Expt (⊕ 2 x) 5) (⊕ -1 x))))
+
 ;;;
 ;;;
 ;;;
