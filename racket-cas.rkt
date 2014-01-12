@@ -495,7 +495,7 @@
 (define (simplify u)
   (define s simplify)
   (math-match u
-    [(Expt n 1/2) (sqrt-natural n)]
+    [(Expt n 1/2) (Expt n 1/2)]
     [(⊗ u v)      (⊗ (s u) (s v))]
     [(⊕ u v)      (⊕ (s u) (s v))]
     [_ u]))
@@ -503,20 +503,7 @@
 (module+ test (check-equal? (simplify (⊕ (⊗ 2 (Expt 8 1/2)) 3)) (⊕ (⊗ 2 2 (Sqrt 2)) 3))) 
 
 
-(define (sqrt-natural n)
-  ; suppose n = s^2 * f , where f is square-free
-  ; sqrt(n) = s * sqrt(f)
-  (define-values (ss ns)
-    (for/fold ([squares '()] [non-squares '()])
-      ([b^e (in-list (factorize n))])
-      (define-values (b e) (values (first b^e) (second b^e)))
-      (if (even? e)
-          (values (cons (expt b (/ e 2)) squares) non-squares)
-          (values (cons (expt b (/ (- e 1) 2)) squares) (cons b non-squares)))))
-  (⊗ (for/product ([s (in-list ss)]) s)
-     `(expt ,(for/product ([n (in-list ns)]) n) 1/2)))
 
-(module+ test (check-equal? (sqrt-natural 20) (⊗ 2 (Sqrt 5))))
 
 
 ; divide u by v
@@ -611,6 +598,22 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Expt: @e u)] [_ (identifier? stx) #'Exp:])))
 
 (define (Expt: u v)
+  (define (sqrt-natural n)
+    ; suppose n = s^2 * f , where f is square-free
+    ; sqrt(n) = s * sqrt(f)
+    (match n
+      [0 0]
+      [1 1]
+      [_ (define-values (ss ns)
+           (for/fold ([squares '()] [non-squares '()])
+             ([b^e (in-list (factorize n))])
+             (define-values (b e) (values (first b^e) (second b^e)))
+             (if (even? e)
+                 (values (cons (expt b (/ e 2)) squares) non-squares)
+                 (values (cons (expt b (/ (- e 1) 2)) squares) (cons b non-squares)))))
+         (⊗ (for/product ([s (in-list ss)]) s)
+            (match (for/product ([n (in-list ns)]) n) 
+              [1 1] [p `(expt ,p 1/2)]))]))
   (math-match* (u v)
     [(1 v)          1]
     [(u 1)          u]
@@ -737,6 +740,8 @@
 
 (define (Sqrt u)
   (Expt u 1/2))
+
+(module+ test (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
 
 (define (diff u x)
   (define (d u) (diff u x))
@@ -1140,7 +1145,7 @@
         [(>= m n) (define lcr (lc r))
                   (define t (⊗ (⊘ lcr lcv) (Expt x (- m n))))
                   (define r+ (expand (⊖    (⊖ r (⊗ lcr (Expt x m)))
-                                        (⊗ (⊖ v (⊗ lcv (Expt x n))) t))))
+                                           (⊗ (⊖ v (⊗ lcv (Expt x n))) t))))
                   (loop (⊕ q t) r+ (exponent r+ x))]
         [else     (list (distribute q) (distribute r))]))))
 
@@ -1223,7 +1228,9 @@
 (module+ test
   (check-equal? 
    (polynomial-square-free-factor (expand '(* (+ x -1) (expt (+ x 1) 2) (expt (+ x 2) 5))) x)
-   (⊗ (Expt (⊕ 1 x) 2) (Expt (⊕ 2 x) 5) (⊕ -1 x))))
+   (⊗ (Expt (⊕ 1 x) 2) (Expt (⊕ 2 x) 5) (⊕ -1 x)))
+  (let ([u (⊕ (⊗ x x x x x) (⊗ 6 x x x x) (⊗ 10 x x x) (⊗ -4 x x) (⊗ -24 x) -16)])
+    (check-equal? (polynomial-square-free-factor u x) '(* (expt (+ 2 x) 3) (+ -2 (expt x 2))))))
 
 ;;;
 ;;;
@@ -1244,6 +1251,7 @@
   (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
 
 (define (Or: . us)
+  ; TODO: flatten ors.
   `(or ,@us))
 
 #;(define (Positive?: u)
@@ -1256,24 +1264,34 @@
 
 (define (solve u x) ; assume x is real (use csolve for complex solutions)
   (match u
+    ; rewrite u=v to u-v=0
     [(Equal u v) #:when (not (equal? v 0)) (solve (Equal (⊖ u v) 0) x)]
-    [(Equal u 0) (match (coefficient-list u x) ; note: leading coef is non-zero
-                   [(list)       #t]
-                   [(list a)     (Equal a 0)]
-                   [(list b a)   (Equal x (⊘ (⊖ b) a))]
-                   [(list 0 0 a) (Equal x 0)]
-                   [(list 0 b a) (Or (Equal x 0) (Equal x (⊖ (⊘ b a))))]
-                   [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
-                                     (Equal x    (Sqrt (⊘ (⊖ c) a))))]
-                   [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
-                                 (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
-                                     (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]
-                   [_            (Equal u 0)])]
+    ; rule of zero product
+    [(Equal (⊗ u v) 0)                 (Or (solve (Equal u 0) x) 
+                                           (solve (Equal v 0) x))]
+    [(Equal u 0) 
+     (match (coefficient-list u x) ; note: leading coef is non-zero
+       [(list)       #t]
+       [(list a)     (Equal a 0)]             ; zero order
+       [(list b a)   (Equal x (⊘ (⊖ b) a))]  ; first order
+       ; second order
+       [(list 0 0 a) (Equal x 0)]
+       [(list 0 b a) (Or (Equal x 0) (Equal x (⊖ (⊘ b a))))]
+       [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
+                         (Equal x    (Sqrt (⊘ (⊖ c) a))))]
+       [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
+                     (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
+                         (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]
+       ; try factoring
+       ; (polynomial-square-free-factor u x)
+       [_            (Equal u 0)])]
     [_ u]))
 
 (module+ test
   (check-equal? (solve '(= x 2) x) '(= x 2))
-  (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3)))
+  (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
+  (check-equal? (solve (normalize '(= (* (- x 1) (- x 2) (- x 3)) 0)) x) 
+                '(or (= x 1) (= x 2) (= x 3))))
 
 (define (roots u x)
   (define (solution u) (last u))
