@@ -9,6 +9,7 @@
 ;   - unparse (for better presentation of results)
 ;   - limit via Gruntz algorithm
 
+(provide (all-defined-out))
 (require "math-match.rkt" racket/match math/number-theory (for-syntax syntax/parse))
 (module+ test (require rackunit)
   (define x 'x) (define y 'y) (define z 'z))
@@ -1173,14 +1174,6 @@
 ;     (expand (Sqr (⊖ x1 x2))))
 ; '(+ (expt b 2) (* -4 c))
 
-(define (continued-fraction cs)
-  (match cs
-    [(list)        1]
-    [(list c)      c]
-    [(list* c cs) (⊕ c (⊘ 1 (continued-fraction cs)))]
-    [_ (error 'continued-fraction (~a "expected list of expressions, got " cs))]))
-
-
 ; Example: Calculate the Taylor series of sin around x=2 up to degree 11.
 ;          Use 100 bits precision and evaluate for x=2.1
 ; > (bf-N (taylor '(sin x) x 2 11) 100 x (bf 2.1))
@@ -1206,6 +1199,7 @@
 (define (bf-newton-raphson f x u0 [n 10] #:precision [prec 100] #:trace? [trace? #f])
   ; Use Newton-Raphson's metod to solve the equation f(x)=0.
   ; The starting point is u0. The number of iterations is n.
+  ; Precision is the number of bits used in the big float compuations.
   (define df (diff f x))
   (define g (normalize `(- x (/ ,f ,df))))
   (for/fold ([xn (bf-N u0 prec)]) ([n n])
@@ -1220,41 +1214,51 @@
 
 (define x 'x) (define y 'y) (define z 'z) (define h 'h)
 
-;;; Is tan'(x) = 1 +tan(x)^2 ?
-(equal? (diff (Tan x) x) (expand (⊕ 1 (Sqr (Tan x)))))
-
-; Let's prove that (x^2)' = 2x
-(let ()
-  (define (f x) (⊗ x x))
-  (define Δy   (expand (⊖ (f (⊕ x h)) (f x))))
-  (define Δy/h (expand (⊘ Δy h)))
-  (limit Δy/h h 0)) ; evaluates to (* 2 x)
-
-; Let's prove that (x^3)' = 3x^2
-(let ()
-  (define (f x) (⊗ x x x))
-  (define Δy   (expand (⊖ (f (⊕ x h)) (f x))))
-  (define Δy/h (expand (⊘ Δy h)))
-  (limit Δy/h h 0)) ; evaluates to (* 3 (expt x 2))
-
-; Let compute a list of the symmetric polynomials in 4 variables
-(let () 
-  (map expand 
-       (coefficient-list (for/⊗ ([xi '(x1 x2 x3 x4)]) 
-                                (⊕ 1 (⊗ xi x))) x)))
-#;'(1
-    (+ x1 x2 x3 x4)
-    (+ (* x1 x2) (* x1 x3) (* x1 x4) (* x2 x3) (* x2 x4) (* x3 x4))
-    (+ (* x1 x2 x3) (* x1 x2 x4) (* x1 x3 x4) (* x2 x3 x4))
-    (* x1 x2 x3 x4))
+(define (examples)
+  (let ()
+    (displayln "Is tan'(x) = 1 +tan(x)^2 ?")
+    (equal? (diff (Tan x) x) (expand (⊕ 1 (Sqr (Tan x))))))
+  (let ()
+    (displayln "Proof of (x^2)' = 2x.")
+    (define (f x) (⊗ x x))
+    (define Δy   (expand (⊖ (f (⊕ x h)) (f x))))
+    (define Δy/h (expand (⊘ Δy h)))
+    (displayln (limit Δy/h h 0))) ; evaluates to (* 2 x)  
+  (let ()
+    (displayln "Proof of (x^3)' = 3x^2")
+    (define (f x) (⊗ x x x))
+    (define Δy   (expand (⊖ (f (⊕ x h)) (f x))))
+    (define Δy/h (expand (⊘ Δy h)))
+    (displayln (limit Δy/h h 0))) ; evaluates to (* 3 (expt x 2))  
+  (let () 
+    (displayln "Symmetric polynomials in 4 variables")
+    (map displayln 
+         (map expand 
+              (coefficient-list (for/⊗ ([xi '(x1 x2 x3 x4)]) 
+                                       (⊕ 1 (⊗ xi x))) x))))
+  #;'(1
+      (+ x1 x2 x3 x4)
+      (+ (* x1 x2) (* x1 x3) (* x1 x4) (* x2 x3) (* x2 x4) (* x3 x4))
+      (+ (* x1 x2 x3) (* x1 x2 x4) (* x1 x3 x4) (* x2 x3 x4))
+      (* x1 x2 x3 x4))  
+  (let () ; Pascal's triangle
+    (displayln "Pascal's triangle")
+    (for/list ([n 10]) 
+      (displayln (coefficient-list (normalize `(expt (+ x 1) ,n)) x)))
+    (void)))
 
 (module+ start
-  (provide quote)
+  (provide quote quasiquote)
   (require (submod ".."))
-  (require (prefix-in old: (only-in racket/base quote)))
+  (require (prefix-in old: (only-in racket/base quote quasiquote)))
   ; In the REPL it can be convenient to change the meaning of ' 
   ; to automatic normalization:
-  (define-syntax (quote stx) (syntax-case stx () [(_ . datum) #'(normalize (old:quote . datum))])))
+  (define-syntax (quote stx) 
+    (syntax-case stx () [(_ . datum) #'(normalize (old:quote . datum))]))
+  (define-syntax (quasiquote stx) 
+    (syntax-case stx () [(_ . datum) #'(normalize (old:quasiquote . datum))])))
+
+; (let () (define f '(* x x)) `(* x ,f))  
 
 ; This macro doesn't work as expected ... why?
 (define-syntax (repl stx) 
