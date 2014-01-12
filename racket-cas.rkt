@@ -412,6 +412,7 @@
                    [(list 'sqrt u) (Sqrt (n u))]
                    [(list 'exp u)  (Exp  (n u))]  
                    [(list 'bf u) (number? u) (bf u)]
+                   [(list* 'or us) (apply Or: us)]
                    [_ (let ([nus (map n us)])
                         (if (equal? us nus)
                             u
@@ -1251,8 +1252,17 @@
   (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
 
 (define (Or: . us)
-  ; TODO: flatten ors.
-  `(or ,@us))
+  (define (flatten us)
+    (reverse 
+     (for/fold ([vs '()]) ([u (in-list us)])
+      (match u
+        [(list* 'or ws) (append vs (map flatten ws))]
+        [_              (cons u vs)]))))
+  `(or ,@(sort (flatten us) <<)))
+
+(module+ test 
+  (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 3) (= x 2) (= x 1))))
+                            
 
 #;(define (Positive?: u)
     (math-match u
@@ -1291,7 +1301,7 @@
   (check-equal? (solve '(= x 2) x) '(= x 2))
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
   (check-equal? (solve (normalize '(= (* (- x 1) (- x 2) (- x 3)) 0)) x) 
-                '(or (= x 1) (= x 2) (= x 3))))
+                '(or (= x 3) (= x 1) (= x 2))))
 
 (define (roots u x)
   (define (solution u) (last u))
