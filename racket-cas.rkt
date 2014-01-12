@@ -732,6 +732,9 @@
 (define (Tan u)
   (⊘ (Sin u) (Cos u)))
 
+(define (Degree u)
+  (⊗ (⊘ @pi 180) u))
+
 (define (Sqrt u)
   (Expt u 1/2))
 
@@ -1053,7 +1056,7 @@
       [(Expt (⊕ u w) m)             (for/⊕ ([i (in-range (+ m 1))])
                                            (⊗ (binomial m i)
                                               (coefficient (⊗ (Expt u i) (Expt w (- m i))) v n)))]
-      [_ 0]))
+      [u                            (if (= n 0) u 0)]))
   (c u))
 
 (module+ test 
@@ -1061,7 +1064,8 @@
     (check-equal? (coefficient u (Expt x 2)) '(+ 2 (* 3 y z)))
     (check-equal? (coefficient u x 2) '(+ 2 (* 3 y z)))
     (check-equal? (coefficient u x) 1)
-    (check-equal? (coefficient '(expt (+ x 1) 2) x) 2)))
+    (check-equal? (coefficient '(expt (+ x 1) 2) x) 2)
+    (check-equal? (coefficient '(* (expt a -1) x)  x) '(expt a -1))))
 
 (define (coefficient-list u x)
   ; view u as a polynomial in x, return the list of coefficients
@@ -1113,6 +1117,52 @@
   (check-equal? (collect '(+ (* x y) x -3 (* 2 x x) (* -1 z x x) (* x x x)) x)
                 (⊕ -3 (⊗ x (⊕ 1 y)) (⊗ (Expt x 2) (⊕ 2 (⊗ -1 z))) (Expt x 3))))
 
+;;; A GME (General Monomial Expression has the form:
+;;;      c1 c2 ... cr x1^n1 x2^n2 ... xm^nm
+;;; where (free-of ci xj) holds and nj are non-negative integers.
+
+;;; A GPE (General Polynomial Expressions) is either
+;;; a GME or a sum of GMEs.
+
+(define (polynomial-quotient-remainder u v x)
+  ; u and v are polynomials in one variable x.
+  ; return list if quotient and remainder
+  ; Algorithm is correct, but think about efficiency.
+  (define (lc u) (leading-coefficient u x))
+  (let ([u (collect u x)] [v (collect v x)])
+    ; (displayln (list 'u u 'v 'v))
+    (define lcv (lc v))
+    (define n (exponent v x))
+    ; invariant: u = q*v + r,  m=degree(r)
+    (let loop ([q 0] [r u] [m (exponent u x)])
+      ; (displayln (list 'q q 'r r 'm m))
+      (cond
+        [(>= m n) (define lcr (lc r))
+                  (define s (⊘ lcr lcv))
+                  (define t (⊗ s (Expt x (- m n))))
+                  (define r+ (expand (⊖    (⊖ r (⊗ lcr (Expt x m)))
+                                        (⊗ (⊖ v (⊗ lcv (Expt x n))) t))))
+                  (loop (⊕ q t) r+ (exponent r+ x))]
+        [else     (list (distribute q) (distribute r))]))))
+
+(define (polynomial-quotient u v x)
+  (first (polynomial-quotient-remainder u v x)))
+
+(define (polynomial-remainder u v x)
+  (second (polynomial-quotient-remainder u v x)))
+
+(module+ test
+  (let ([a 'a] [b 'b]) 
+    (check-equal? (polynomial-quotient (Sqr x) (⊕ x a) x) (⊕ (⊖ a) x))
+    (check-equal? (polynomial-quotient-remainder '(+ (* x x) x 1) '(+ (* 2 x) 1) x)
+                  (list (⊕ 1/4 (⊘ x 2)) 3/4))
+    (check-equal? (polynomial-quotient (⊕ (⊗ x x) (⊗ b x) 1) (⊕ (⊗ a x) 1) x)
+                  '(+ (* -1 (expt a -2)) (* (expt a -1) b) (* (expt a -1) x)))))
+
+
+;;;
+;;;
+;;;
 
 (define-match-expander Equal
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '= u v)]))
