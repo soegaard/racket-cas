@@ -1138,8 +1138,7 @@
       ; (displayln (list 'q q 'r r 'm m))
       (cond
         [(>= m n) (define lcr (lc r))
-                  (define s (⊘ lcr lcv))
-                  (define t (⊗ s (Expt x (- m n))))
+                  (define t (⊗ (⊘ lcr lcv) (Expt x (- m n))))
                   (define r+ (expand (⊖    (⊖ r (⊗ lcr (Expt x m)))
                                         (⊗ (⊖ v (⊗ lcv (Expt x n))) t))))
                   (loop (⊕ q t) r+ (exponent r+ x))]
@@ -1159,6 +1158,34 @@
     (check-equal? (polynomial-quotient (⊕ (⊗ x x) (⊗ b x) 1) (⊕ (⊗ a x) 1) x)
                   '(+ (* -1 (expt a -2)) (* (expt a -1) b) (* (expt a -1) x)))))
 
+(define (polynomial-expansion u v x t)
+  ; u GPE in x, v GPE in x with deg(v,x)>0, x and t symbols
+  (match u
+    [0 0]
+    [_ (match-define (list q r) (polynomial-quotient-remainder u v x))
+       (expand (⊕ (⊗ t (polynomial-expansion q v x t)) r))]))
+
+(module+ test 
+  (let ([u (⊕ (⊗ x x x x x) (⊗ 11 x x x x) (⊗ 51 x x x) (⊗ 124 x x) (⊗ 159 x) 86)]
+        [v (⊕                                            (⊗     x x) (⊗   4 x)  5)])
+    (check-equal? (coefficient-list (polynomial-expansion u v x 't) 't)
+                  '((+ 1 x) (+ 2 x) (+ 3 x)))))
+
+(define (polynomial-gcd u v x)
+  ; u and v are polynomials in F[x]
+  ; where automatic simplification handles operations in F
+  (define U
+    (match* (u v)
+      [(0 0) 0]
+      [(_ _) (let loop ([U u] [V v])
+               (match V
+                 [0 U]
+                 [_ (loop V (polynomial-remainder U V x))]))]))
+  (expand (⊗ (⊘ 1 (leading-coefficient U x)) U)))
+
+(module+ test (check-equal? (polynomial-gcd '(* (expt (+ 1 x) 2) (+ 2 x) (+ 4 x))
+                                            '(* (+ 1 x) (+ 2 x) (+ 3 x)) x)
+                            '(+ 2 (* 3 x) (expt x 2))))
 
 ;;;
 ;;;
