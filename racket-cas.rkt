@@ -3,11 +3,20 @@
 ;   - Fix: (coefficient-list '(- (cos x) 1) x) (#f or call error?)
 ;   - split expand into expand-one and expand (-all)
 ;   - finish toghether
+;   - examine automatic simplification of output of (diff '(expt x x) x)
 ; Ideas:
+;   - implement bfracket where big floats are numbers
 ;   - add arctan
-;   - solve
+;   - detect linear equations in solve
+;   - add factor
+;   - use factor in solve
 ;   - unparse (for better presentation of results)
-;   - limit via Gruntz algorithm
+;   - tex
+;   - add Groebner bases
+;   - use Groebner bases in solve
+;   - use Gruntz algorithm to compute limit
+;   - use "poor man's integrator" to implement integrate
+;   - symbolic sums (see https://github.com/soegaard/bracket/blob/master/polynomials/poly.rkt)
 
 (provide (all-defined-out))
 (require "math-match.rkt" racket/match math/number-theory (for-syntax syntax/parse))
@@ -482,6 +491,7 @@
                         (e (⊗ t t)))]
     [(Expt (⊗ u v) w) (e (⊗ (Expt u w) (Expt v w)))]
     [(Ln (Expt u v))  (e (⊗ v (Ln (e u))))]
+    [(Equal u v)      (Equal (e u) (e v))]
     [_ s]))
 
 (module+ test
@@ -648,10 +658,11 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
 (define (Ln: u)
+  ; TODO add case for big floats
   (math-match u
     [1  0]
     [0  +nan.0] ; TODO: error?
-    [r  #:when (positive? r) (log r)]
+    [r.0   #:when (positive? r.0) (log r.0)]
     [@e  1]
     [(Expt @e v) v]
     [_ `(ln ,u)]))
@@ -921,6 +932,8 @@
         [(Cos u)     (M bfcos Cos u)]
         [(Ln u)      (M bflog Ln  u)]
         [(Exp u)     (M bfexp Exp u)]
+        [(app: f us) (displayln (list 'bf-N f us))
+                     `(,f ,@(map N us))]
         [_ u]))
     (N u)))
 
@@ -1264,9 +1277,9 @@
   (define (flatten us)
     (reverse 
      (for/fold ([vs '()]) ([u (in-list us)])
-      (match u
-        [(list* 'or ws) (append vs (map flatten ws))]
-        [_              (cons u vs)]))))
+       (match u
+         [(list* 'or ws) (append vs (map flatten ws))]
+         [_              (cons u vs)]))))
   `(or ,@(sort (flatten us) <<)))
 
 (module+ test 
@@ -1280,36 +1293,66 @@
       [_      #t])) ; todo: add cases for variables with assumptions
 
 
-(define (solve u x) ; assume x is real (use csolve for complex solutions)
-  (match u
-    ; rewrite u=v to u-v=0
-    [(Equal u v) #:when (not (equal? v 0)) (solve (Equal (⊖ u v) 0) x)]
-    ; rule of zero product
-    [(Equal (⊗ u v) 0)                 (Or (solve (Equal u 0) x) 
-                                           (solve (Equal v 0) x))]
-    [(Equal (Expt u r) 0)              (solve (Equal u 0) x)]
-    [(Equal u 0) 
-     (match (coefficient-list u x) ; note: leading coef is non-zero
-       [(list)       #t]
-       [(list a)     (Equal a 0)]             ; zero order
-       [(list b a)   (Equal x (⊘ (⊖ b) a))]  ; first order
-       ; second order
-       [(list 0 0 a) (Equal x 0)]
-       [(list 0 b a) (Or (Equal x 0) (Equal x (⊖ (⊘ b a))))]
-       [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
-                         (Equal x    (Sqrt (⊘ (⊖ c) a))))]
-       [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
-                     (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
-                         (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]
-       ; try factoring
-       [_ (match (polynomial-square-free-factor u x)
-            ; it helped!
-            [(⊗ v w) (solve (Equal (⊗ v w) 0) x)]
-            ; give up
-            [_        (Equal u 0)])]
-       [_ (Equal u 0)])]
-    
-    [_ u]))
+
+(define (solve eqn x) ; assume x is real (use csolve for complex solutions)
+  (let/ec return
+    (define (solve-by-inverse w)
+      (define (remove-invertibles w)
+        ; Input:  w = (Equal u v) where v is free of x
+        ; Output: If w=f(u) then (remove-invertibles u (f^-1 v))
+        ;         otherwise w.
+        (define r remove-invertibles)
+        (math-match w
+          [(Equal (⊕ w u) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
+          [(Equal (⊕ u w) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
+          [(Equal (⊗ w u) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
+          [(Equal (⊗ u w) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
+          [(Equal (Expt u n) v) #:when (odd? n)              (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u α) v) #:when (= (numerator α) 1)   (r (Equal u (Expt v (⊘ 1 α))))]
+          [(Equal (Expt @e u) s)    #:when (> s 0) (r (Equal u (Ln s)))]
+          [(Equal (Expt @e u) s)                   (return #f)]
+          [(Equal (Expt @e u) v)  (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
+          [(Equal (Asin u) v) (r (Equal u (Sin v)))]
+          [(Equal (Acos u) v) (r (Equal u (Acos v)))]
+          [(Equal (Cos u) v)  (r (Equal u (Acos v)))]        
+          ; [(Equal (Sin u) v)  (r (Equal u (Asin v)))] ; asin is problematic        
+          [_ w]))
+      (match w
+        [(Equal u v) ; got an equation
+         (cond 
+           [(free-of v x) (remove-invertibles (Equal u v))]
+           [(free-of u x) (remove-invertibles (Equal v u))]
+           [else          w])]
+        [_ w]))
+    (define (solve1 eqn) ; where eqn is returned from solve-by-inverse
+      (match eqn
+        ; rewrite u=v to u-v=0
+        [(Equal u v) #:when (not (equal? v 0)) (solve1 (Equal (⊖ u v) 0))]
+        ; rule of zero product
+        [(Equal (⊗ u v) 0)    (Or (solve (Equal u 0) x) (solve1 (Equal v 0)))]
+        [(Equal (Expt u r) 0) (solve1 (Equal u 0))]
+        [(Equal u 0) 
+         (match (coefficient-list u x) ; note: leading coef is non-zero
+           [(list)       #t]
+           [(list a)     (Equal a 0)]             ; zero order
+           [(list b a)   (Equal x (⊘ (⊖ b) a))]  ; first order
+           ; second order
+           [(list 0 0 a) (Equal x 0)]
+           [(list 0 b a) (Or (Equal x 0) (Equal x (⊖ (⊘ b a))))]
+           [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
+                             (Equal x    (Sqrt (⊘ (⊖ c) a))))]
+           [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
+                         (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
+                             (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]       
+           ; try factoring
+           [_ (match (polynomial-square-free-factor u x)
+                ; it helped!
+                [(⊗ v w) (solve1 (Equal (⊗ v w) 0) x)]
+                ; give up
+                [_        (Equal u 0)])]
+           [_ (Equal u 0)])]
+        [w w]))
+    (solve1 (solve-by-inverse eqn))))
 
 (module+ test
   (check-equal? (solve '(= x 2) x) '(= x 2))
