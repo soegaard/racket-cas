@@ -895,6 +895,8 @@
     [(Ln u)      (M log Ln  u)]
     [(Exp u)     (M exp Exp u)]
     [(Asin u)    (M asin Asin u)]
+    [(Acos u)    (M acos Acos u)]
+    ; [(Atan u)    (M atan Atan u)]
     [(Equal u v) (M2 = Equal u v)]
     [(app: f us) `(,f ,@(map N us))]
     [_ u]))
@@ -932,6 +934,9 @@
         [(Cos u)     (M bfcos Cos u)]
         [(Ln u)      (M bflog Ln  u)]
         [(Exp u)     (M bfexp Exp u)]
+        [(Asin u)    (M bfasin Asin u)]
+        [(Acos u)    (M bfacos Acos u)]
+        ; [(Atan u)    (M bfatan Atan u)]
         [(app: f us) (displayln (list 'bf-N f us))
                      `(,f ,@(map N us))]
         [_ u]))
@@ -1314,8 +1319,12 @@
           [(Equal (Expt @e u) v)  (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
           [(Equal (Acos u) v) (r (Equal u (Acos v)))]
-          [(Equal (Cos u) v)  (r (Equal u (Acos v)))]        
-          ; [(Equal (Sin u) v)  (r (Equal u (Asin v)))] ; asin is problematic        
+          [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
+          [(Equal (Cos u) v)  (return (Or (solve (Equal u (⊕ (⊗ 2 @pi '@n)    (Acos v)))  x)
+                                          (solve (Equal u (⊕ (⊗ 2 @pi '@n) (⊖ (Acos v)))) x)))]
+          [(Equal (Sin u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
+          [(Equal (Sin u) v)  (return (Or (solve (Equal u (⊕ (⊗ 2 @pi '@n) (⊖ @pi (Asin v)))) x) 
+                                          (solve (Equal u (⊕ (⊗ 2 @pi '@n)        (Asin v)))  x)))]
           [_ w]))
       (match w
         [(Equal u v) ; got an equation
