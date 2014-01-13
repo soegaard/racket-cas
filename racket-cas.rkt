@@ -675,6 +675,8 @@
     [(⊗ n @pi)                           (if (even? n) 1 -1)]
     [(⊗ α @pi) #:when (negative? α)      (Cos: (⊗ (- α) @pi))]
     [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
+    #;[(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
+                 (⊗ 'sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi))))))] ; xxx find sign
     [(Acos u) u]
     [_ `(cos ,u)]))
 
@@ -699,6 +701,8 @@
     [(⊗ n @pi) 0]
     [(⊗ α @pi) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) @pi)))]
     [(⊗ α @pi) #:when (integer? (* 2 α)) (if (= (remainder (* 2 α) 4) 1) 1 -1)]
+    #;[(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
+                 (⊗ 'sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi))))))] ; xxx find sign
     [(Asin u) u]
     [_ `(sin ,u)]))
 
@@ -750,17 +754,19 @@
     [r 0]
     [y #:when (eq? x y) 1]
     [y 0]
-    [(⊕ v w)   (⊕ (d v) (d w))]
-    [(⊗ v w)   (⊕ (⊗ (d v) w) (⊗ v (d w)))]
-    [(Expt u r)(⊗ r (Expt u (- r 1)) (d u))]
-    [(Exp u)   (⊗ (Exp u) (d u))]
+    [(⊕ v w)     (⊕ (d v) (d w))]
+    [(⊗ v w)     (⊕ (⊗ (d v) w) (⊗ v (d w)))]
+    [(Expt u r)  (⊗ r (Expt u (- r 1)) (d u))]
+    [(Expt @e u) (⊗ (Exp u) (d u))]
+    [(Expt u v)  (diff (Exp (⊗ v (Ln u))) x)] ; assumes u positive    
+    ; [(Exp u)   (⊗ (Exp u) (d u))]
     [(Ln u)    (⊗ (⊘ 1 u) (d u))]
     [(Cos u)   (⊗ (⊖ 0 (Sin u)) (d u))]
     [(Sin u)   (⊗ (Cos u) (d u))]
     [(app: f us)  #:when (symbol? f) 
                   (match us
                     [(list u) (⊗ `((D ,f ,x) ,u) (d u))] ; xxx
-                    [_ `(diff (f ,@us) ,x)])]             ; xxx
+                    [_ `(diff (,f ,@us) ,x)])]             ; xxx
     [_ (error 'diff (~a "got: " u " wrt " x))]))
 
 (module+ test
@@ -781,7 +787,10 @@
   (check-equal? (diff (Cos x) x) (⊖ (Sin x)))
   (check-equal? (diff (Cos (⊗ x x)) x) (⊗ (⊖ (Sin (⊗ x x))) 2 x))
   (check-equal? (diff (Sin x) x) (Cos x))
-  (check-equal? (diff (Sin (⊗ x x)) x) (⊗ 2 (Cos (Expt x 2)) x)))
+  (check-equal? (diff (Sin (⊗ x x)) x) (⊗ 2 (Cos (Expt x 2)) x))
+  ; TODO: ASE should rewrit the result to (* '(expt x x) (+ 1 (ln x)))
+  (check-equal? (diff (Expt x x) x) '(* (expt @e (* x (ln x))) (+ 1 (ln x))))
+  )
 
 ; (limit u x x0) computes the limit of the expression u for a variable x going towards x0
 (define (limit u x x0)
@@ -1278,6 +1287,7 @@
     ; rule of zero product
     [(Equal (⊗ u v) 0)                 (Or (solve (Equal u 0) x) 
                                            (solve (Equal v 0) x))]
+    [(Equal (Expt u r) 0)              (solve (Equal u 0) x)]
     [(Equal u 0) 
      (match (coefficient-list u x) ; note: leading coef is non-zero
        [(list)       #t]
