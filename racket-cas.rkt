@@ -1,5 +1,7 @@
 #lang racket
 ; Short term:
+;   - factorial and gamma
+;   - Implement Integer pattern that accepts @n as an integer
 ;   - Fix: (coefficient-list '(- (cos x) 1) x) (#f or call error?)
 ;   - split expand into expand-one and expand (-all)
 ;   - finish toghether
@@ -12,6 +14,7 @@
 ;   - use factor in solve
 ;   - unparse (for better presentation of results)
 ;   - tex
+;   - algorithms from the book A=B
 ;   - add Groebner bases
 ;   - use Groebner bases in solve
 ;   - use Gruntz algorithm to compute limit
@@ -19,7 +22,8 @@
 ;   - symbolic sums (see https://github.com/soegaard/bracket/blob/master/polynomials/poly.rkt)
 
 (provide (all-defined-out))
-(require "math-match.rkt" racket/match math/number-theory (for-syntax syntax/parse))
+(require "math-match.rkt" racket/match math/number-theory 
+         (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test (require rackunit)
   (define x 'x) (define y 'y) (define z 'z))
 
@@ -394,6 +398,40 @@
   (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2)))
   )
 
+(define-syntax (define-integer-function stx)
+  (syntax-parse stx
+    [(_ Name Name: sym-name expr)
+     (syntax/loc stx
+       (begin
+         (define-match-expander Name
+           (λ (stx) (syntax-parse stx [(_ u) #'(list 'sym-name u)]))
+           (λ (stx) (syntax-parse stx [(_ u) #'(Name: u)] [_ (identifier? stx) #'Name:])))
+         (define Name: expr)))]))
+
+(define-integer-function Factorial Factorial: factorial
+  (λ (u)
+    (math-match u
+      [n (factorial n)]
+      [_ `(factorial ,u)])))
+
+(define-syntax (define-simple-integer-function stx)
+  (syntax-parse stx
+    [(_ Name Name: name)
+     (syntax/loc stx
+       (define-integer-function Name Name: name
+         (λ (u)
+           (math-match u
+             [n (name n)]
+             [_ `(name ,u)]))))]))
+
+(define-simple-integer-function Prime? Prime?: prime?)
+(define-simple-integer-function Odd-prime? Odd-prime?: odd-prime?)
+(define-simple-integer-function Nth-prime Nth-prime: nth-prime)
+(define-simple-integer-function Random-prime Random-prime: random-prime)
+(define-simple-integer-function Next-prime Next-prime: next-prime)
+(define-simple-integer-function Prev-prime Prev-prime: prev-prime)
+(define-simple-integer-function Divisors divisors: divisors)
+
 ; normalize will given a non-canonical form u 
 ; return the corresponding canonical form.
 (define (normalize u)
@@ -402,16 +440,24 @@
     [r r]
     [r.bf r.bf]
     [x x]
-    [(⊕ u)      (n u)]
-    [(⊕ u v)    (⊕ (n u) (n v))]
-    [(⊗ u)      (n u)]
-    [(⊗ u v)    (⊗ (n u) (n v))]
-    [(Expt u v) (Expt (n u) (n v))]
-    [(Ln u)     (Ln   (n u))]
-    [(Sin u)    (Sin  (n u))]
-    [(Asin u)   (Asin (n u))]
-    [(Cos u)    (Cos  (n u))]
-    [(Acos u)   (Acos (n u))]
+    [(⊕ u)             (n u)]
+    [(⊕ u v)           (⊕ (n u) (n v))]
+    [(⊗ u)             (n u)]
+    [(⊗ u v)           (⊗ (n u) (n v))]
+    [(Expt u v)        (Expt (n u) (n v))]
+    [(Ln u)            (Ln   (n u))]
+    [(Sin u)           (Sin  (n u))]
+    [(Asin u)          (Asin (n u))]
+    [(Cos u)           (Cos  (n u))]
+    [(Acos u)          (Acos (n u))]
+    [(Factorial u)     (Factorial (n u))]
+    [(Prime? u)        (Prime? (n u))]
+    [(Odd-prime? u)    (Odd-prime? (n u))]
+    [(Nth-prime u)     (Nth-prime (n u))]
+    [(Random-prime u)  (Random-prime (n u))]
+    [(Next-prime u)    (Next-prime (n u))]
+    [(Prev-prime u)    (Prev-prime (n u))]
+    [(Divisors u)      (Divisors (n u))]
     [(app: f us) (match u
                    [(list '/ u v)  (⊘ (n u) (n v))]
                    [(list '- u)    (⊖ (n u))]
@@ -656,6 +702,12 @@
 (define-match-expander Sqr
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
+
+
+
+
+
+
 
 (define (Ln: u)
   ; TODO add case for big floats
@@ -1297,8 +1349,6 @@
       [(⊖ u)  #f]
       [_      #t])) ; todo: add cases for variables with assumptions
 
-
-
 (define (solve eqn x) ; assume x is real (use csolve for complex solutions)
   (let/ec return
     (define (solve-by-inverse w)
@@ -1312,9 +1362,9 @@
           [(Equal (⊕ u w) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
           [(Equal (⊗ w u) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
           [(Equal (⊗ u w) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
-          [(Equal (Expt u n) v) #:when (odd? n)              (r (Equal u (Expt v (⊘ 1 n))))]
-          [(Equal (Expt u α) v) #:when (= (numerator α) 1)   (r (Equal u (Expt v (⊘ 1 α))))]
-          [(Equal (Expt @e u) s)    #:when (> s 0) (r (Equal u (Ln s)))]
+          [(Equal (Expt u n) v)  #:when (odd? n)              (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u α) v)  #:when (= (numerator α) 1)   (r (Equal u (Expt v (⊘ 1 α))))]
+          [(Equal (Expt @e u) s) #:when (> s 0) (r (Equal u (Ln s)))]
           [(Equal (Expt @e u) s)                   (return #f)]
           [(Equal (Expt @e u) v)  (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
