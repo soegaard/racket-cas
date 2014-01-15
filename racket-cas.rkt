@@ -1380,7 +1380,7 @@
                                           (solve (Equal u (⊕ (⊗ 2 @pi '@n)        (Asin v)))  x)))]
           [_ w]))
       
-      (match (match (N w) [#t #t] [#f #f] [eqn eqn])
+      (match (match (N w) [#t #t] [#f #f] [_ w])
         [(Equal u v) ; got an equation
          (cond      
            [(free-of v x) (remove-invertibles (Equal u v))]
