@@ -1,6 +1,5 @@
 #lang racket
-; Short term: 
-;   - factorial and gamma
+; Short term:
 ;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
 ;   - Fix: (coefficient-list '(- (cos x) 1) x) (#f or call error?)
@@ -23,7 +22,7 @@
 ;   - symbolic sums (see https://github.com/soegaard/bracket/blob/master/polynomials/poly.rkt)
 
 (provide (all-defined-out))
-(require "math-match.rkt" racket/match math/number-theory 
+(require "math-match.rkt" racket/match math/number-theory math/special-functions
          (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test (require rackunit)
   (define x 'x) (define y 'y) (define z 'z))
@@ -397,7 +396,7 @@
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
   (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
 
-(define-syntax (define-integer-function stx)
+(define-syntax (define-function stx)
   (syntax-parse stx
     [(_ Name Name: sym-name expr)
      (syntax/loc stx
@@ -407,29 +406,33 @@
            (λ (stx) (syntax-parse stx [(_ u) #'(Name: u)] [_ (identifier? stx) #'Name:])))
          (define Name: expr)))]))
 
-(define-integer-function Factorial Factorial: factorial
+(define-function Gamma Gamma: gamma
   (λ (u)
     (math-match u
-      [n (factorial n)]
-      [_ `(factorial ,u)])))
+      [n (gamma n)]
+      [p 'undefined]
+      [r (gamma r)]
+      [r.bf (bfgamma r.bf)]
+      [_ `(gamma ,u)])))
 
-(define-syntax (define-simple-integer-function stx)
+(define-syntax (define-integer-function stx)
   (syntax-parse stx
     [(_ Name Name: name)
      (syntax/loc stx
-       (define-integer-function Name Name: name
+       (define-function Name Name: name
          (λ (u)
            (math-match u
              [n (name n)]
              [_ `(name ,u)]))))]))
 
-(define-simple-integer-function Prime? Prime?: prime?)
-(define-simple-integer-function Odd-prime? Odd-prime?: odd-prime?)
-(define-simple-integer-function Nth-prime Nth-prime: nth-prime)
-(define-simple-integer-function Random-prime Random-prime: random-prime)
-(define-simple-integer-function Next-prime Next-prime: next-prime)
-(define-simple-integer-function Prev-prime Prev-prime: prev-prime)
-(define-simple-integer-function Divisors divisors: divisors)
+(define-integer-function Factorial Factorial: factorial)
+(define-integer-function Prime? Prime?: prime?)
+(define-integer-function Odd-prime? Odd-prime?: odd-prime?)
+(define-integer-function Nth-prime Nth-prime: nth-prime)
+(define-integer-function Random-prime Random-prime: random-prime)
+(define-integer-function Next-prime Next-prime: next-prime)
+(define-integer-function Prev-prime Prev-prime: prev-prime)
+(define-integer-function Divisors divisors: divisors)
 
 ; normalize will given a non-canonical form u 
 ; return the corresponding canonical form.
@@ -450,6 +453,7 @@
     [(Cos u)           (Cos  (n u))]
     [(Acos u)          (Acos (n u))]
     [(Factorial u)     (Factorial (n u))]
+    [(Gamma u)         (Gamma (n u))]
     [(Prime? u)        (Prime? (n u))]
     [(Odd-prime? u)    (Odd-prime? (n u))]
     [(Nth-prime u)     (Nth-prime (n u))]
