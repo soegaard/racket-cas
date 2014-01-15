@@ -1,6 +1,7 @@
 #lang racket
-; Short term:
+; Short term: 
 ;   - factorial and gamma
+;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
 ;   - Fix: (coefficient-list '(- (cos x) 1) x) (#f or call error?)
 ;   - split expand into expand-one and expand (-all)
@@ -217,7 +218,6 @@
        [((⊕ u a) (⊕ v b)) (<< u v)]
        [(_ (⊕ v b)) #t] ; xxx
        [((⊕ v b) _) #f] ; xxx
-       
        ; ... two non-symbol/power/products/sums  (i.e. applications)
        [((app: f us) (app: g vs))
         (or (symbol<? f g)
@@ -395,8 +395,7 @@
   (check-equal? (⊗ x (Cos x)) '(* x (cos x)))
   (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
-  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2)))
-  )
+  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
 
 (define-syntax (define-integer-function stx)
   (syntax-parse stx
@@ -510,14 +509,18 @@
   (check-equal? (distribute '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (distribute '(* (+ x 1) 2)) (⊕ (⊗ 2 x) 2)))
 
-(define (expand-one u)
-  (expand u))
+(define (expand u)
+  ; expand products and powers with positive integer exponents
+  ; expand terms, but don't recurse into sub terms
+  ; TODO : implement the above description
+  (expand-all u))
 
-(define (expand s)
+(define (expand-all u)
+  ; expand products and powers with positive integer exponents, do recurse
   ; (displayln (list 'expand s))
-  (define e expand)
+  (define e expand-all)
   (define d distribute)
-  (match s
+  (match u
     [(⊗ a (⊕ u v))   (e (⊕ (⊗ a u) (⊗ a v)))]
     [(⊗ (⊕ u v) b)   (e (⊕ (⊗ u b) (⊗ v b)))]
     [(⊗ a b)         (let ([ea (e a)] [eb (e b)])
@@ -538,7 +541,7 @@
     [(Expt (⊗ u v) w) (e (⊗ (Expt u w) (Expt v w)))]
     [(Ln (Expt u v))  (e (⊗ v (Ln (e u))))]
     [(Equal u v)      (Equal (e u) (e v))]
-    [_ s]))
+    [_ u]))
 
 (module+ test
   (check-equal? (expand (Sqr (⊕ x y))) (⊕ (Sqr x) (Sqr y) (⊗ 2 x y)))
@@ -1036,8 +1039,7 @@
 
 ; rewrite sin(n*u) and cos(n*u) in terms of cos(u) and sin(u)
 ; rewrite cos(u+v) and sin(u+v) in terms of cos(u),cos(v),sin(u) and sin(v)
-(define (trig-expand u)
-  
+(define (trig-expand u)  
   (define (t u)
     (math-match u
       [r r]
@@ -1063,7 +1065,7 @@
                                (cos-pi/2* (- n k))))]
       [(Sin (⊕ u v)) (t (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))]
       [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]
-      [(Expt u n)  (expand-one (Expt (t u) n))]
+      [(Expt u n)  (expand (Expt (t u) n))]
       [(app: f us) `(,f ,@(map t us))]
       [_ u]))
   (t u))
@@ -1362,13 +1364,14 @@
           [(Equal (⊕ u w) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
           [(Equal (⊗ w u) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
           [(Equal (⊗ u w) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
-          [(Equal (Expt u n) v)  #:when (odd? n)              (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u n) v)  #:when (odd? n)  (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
           [(Equal (Expt u α) v)  #:when (= (numerator α) 1)   (r (Equal u (Expt v (⊘ 1 α))))]
           [(Equal (Expt @e u) s) #:when (> s 0) (r (Equal u (Ln s)))]
-          [(Equal (Expt @e u) s)                   (return #f)]
+          [(Equal (Expt @e u) s) (return #f)]
           [(Equal (Expt @e u) v)  (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
-          [(Equal (Acos u) v) (r (Equal u (Acos v)))]
+          [(Equal (Acos u) v) (r (Equal u (Cos v)))]
           [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
           [(Equal (Cos u) v)  (return (Or (solve (Equal u (⊕ (⊗ 2 @pi '@n)    (Acos v)))  x)
                                           (solve (Equal u (⊕ (⊗ 2 @pi '@n) (⊖ (Acos v)))) x)))]
@@ -1376,9 +1379,10 @@
           [(Equal (Sin u) v)  (return (Or (solve (Equal u (⊕ (⊗ 2 @pi '@n) (⊖ @pi (Asin v)))) x) 
                                           (solve (Equal u (⊕ (⊗ 2 @pi '@n)        (Asin v)))  x)))]
           [_ w]))
-      (match w
+      
+      (match (match (N w) [#t #t] [#f #f] [eqn eqn])
         [(Equal u v) ; got an equation
-         (cond 
+         (cond      
            [(free-of v x) (remove-invertibles (Equal u v))]
            [(free-of u x) (remove-invertibles (Equal v u))]
            [else          w])]
@@ -1414,7 +1418,18 @@
     (solve1 (solve-by-inverse eqn))))
 
 (module+ test
-  (check-equal? (solve '(= x 2) x) '(= x 2))
+  (check-equal? (solve '(= x 1) x) '(= x 1))
+  (check-equal? (solve '(= 1 x) x) '(= x 1))
+  (check-equal? (solve '(= x y) x) '(= x y))
+  (check-equal? (solve '(= y x) x) '(= x y))
+  (check-equal? (solve '(= 1 1) x) #t)
+  (check-equal? (solve '(= 1 2) x) #f)
+  (check-equal? (solve '(= x x) x) #t)
+  (check-equal? (solve '(= (+ x 1) (+ x 1)) x) #t)
+  (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
+  (check-equal? (solve (normalize '(= (sqr x) 9)) x) '(or (= x 3) (= x -3))) ; xxx
+  (check-equal? (solve '(= (asin x) 1/2) x) '(= x (sin 1/2)))
+  (check-equal? (solve '(= (acos x) 1/2) x) '(= x (cos 1/2)))
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
   (check-equal? (solve (normalize '(= (* (- x 1) (- x 2) (- x 3)) 0)) x) 
                 '(or (= x 3) (= x 1) (= x 2))))
