@@ -1386,7 +1386,7 @@
            [(free-of v x) (remove-invertibles (Equal u v))]
            [(free-of u x) (remove-invertibles (Equal v u))]
            [else          w])]
-        [_ w]))
+        [w w]))
     (define (solve1 eqn) ; where eqn is returned from solve-by-inverse
       (match eqn
         ; rewrite u=v to u-v=0
