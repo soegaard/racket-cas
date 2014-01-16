@@ -1,8 +1,9 @@
 #lang racket
 ; Short term:
+;   - in-terms  ( in-terms/proc is done )
+;   - polynomial?  
 ;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
-;   - Fix: (coefficient-list '(- (cos x) 1) x) (#f or call error?)
 ;   - split expand into expand-one and expand (-all)
 ;   - finish toghether
 ;   - examine automatic simplification of output of (diff '(expt x x) x)
@@ -1158,6 +1159,7 @@
 
 (define (coefficient-list u x)
   ; view u as a polynomial in x, return the list of coefficients
+  ; use same interpretation as  coefficient  for terms not in the form c*x^n
   (match (for/list ([n (in-range (+ (exponent u x) 1))]) (coefficient u x n))
     [(list 0) '()] [cs cs]))
 
@@ -1169,6 +1171,27 @@
   (check-equal? (coefficient-list '(* a x) x) '(0 a))
   (check-equal? (coefficient-list (normalize '(+ (* a x) (* b y) (* c x))) x) '((* b y) (+ a c)))
   (check-equal? (coefficient-list '(+ x (* 2 a (expt x 3))) x) '(0 1 0 (* 2 a))))
+
+(define (is-power-of? u w)
+  ; view u as a power of w, is it a non-zero exponent?
+  (not (zero? (exponent u w))))
+
+(module+ test
+  (check-equal? (is-power-of? '(expt x 3) x) #t)
+  (check-equal? (is-power-of? '(expt y 3) x) #f)
+  (check-equal? (is-power-of? '(sin x) x) #f))
+
+(define (in-terms/proc u)
+  (match u
+    [(⊕ u v) (cons u (in-terms/proc v))]
+    [u       (list u)]))
+
+(module+ test 
+  (check-equal? (in-terms/proc '(+ 1 2 x y (expt x 4) (sin x))) '(3 x (expt x 4) y (sin x))))
+
+#;(define (polynomial? u v)
+    ; is u a polynomial in v ?
+    ...)
 
 
 (define (leading-coefficient u x)
