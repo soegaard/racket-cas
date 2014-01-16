@@ -564,11 +564,7 @@
     [(⊕ u v)      (⊕ (s u) (s v))]
     [_ u]))
 
-(module+ test (check-equal? (simplify (⊕ (⊗ 2 (Expt 8 1/2)) 3)) (⊕ (⊗ 2 2 (Sqrt 2)) 3))) 
-
-
-
-
+(module+ test (check-equal? (simplify (⊕ (⊗ 2 (Expt 8 1/2)) 3)) (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 ; divide u by v
 (define (Quotient: u v)
@@ -1130,6 +1126,7 @@
 
 ; (coefficient u v)   find coefficient of v in u
 ; (coefficient u v n) find coefficient of v^n in u
+; (coeffecient u v 0) returns the sum of all terms not of the form c*v^n, n>0
 (define (coefficient u v [n 1])
   (define (c u)
     (math-match u
@@ -1156,7 +1153,8 @@
     (check-equal? (coefficient u x 2) '(+ 2 (* 3 y z)))
     (check-equal? (coefficient u x) 1)
     (check-equal? (coefficient '(expt (+ x 1) 2) x) 2)
-    (check-equal? (coefficient '(* (expt a -1) x)  x) '(expt a -1))))
+    (check-equal? (coefficient '(* (expt a -1) x)  x) '(expt a -1))
+    (check-equal? (coefficient (normalize '(+ 1 x (sqr x) (sin x))) x 0) '(+ 1 (sin x)))))
 
 (define (coefficient-list u x)
   ; view u as a polynomial in x, return the list of coefficients
