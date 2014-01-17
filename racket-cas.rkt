@@ -1186,9 +1186,13 @@
     [(⊕ u v) (cons u (in-terms/proc v))]
     [u       (list u)]))
 
+(module+ test 
+  (check-equal? (in-terms/proc (normalize '(+ 1 2 x y (expt x 4) (sin x)))) 
+                '(3 x (expt x 4) y (sin x))))
 
 (define (part u . ns)
   ; as in Maxima http://maxima.sourceforge.net/docs/manual/en/maxima_6.html#IDX225 
+  ; or perhaps I should write as in Maxima's inpart.
   (define (pick u ns)
     (match ns
       [(list) u]
@@ -1203,8 +1207,6 @@
   (check-equal? (part (⊕ 1 (⊗ 2 x) y) 2 2) x)
   (check-equal? (part (⊕ 1 (⊗ 2 x) y) 2 1) 2))
 
-(module+ test 
-  (check-equal? (in-terms/proc '(+ 1 2 x y (expt x 4) (sin x))) '(3 x (expt x 4) y (sin x))))
 
 #;(define (polynomial? u v)
     ; is u a polynomial in v ?
