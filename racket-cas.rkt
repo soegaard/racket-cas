@@ -1186,6 +1186,23 @@
     [(⊕ u v) (cons u (in-terms/proc v))]
     [u       (list u)]))
 
+
+(define (part u . ns)
+  ; as in Maxima http://maxima.sourceforge.net/docs/manual/en/maxima_6.html#IDX225 
+  (define (pick u ns)
+    (match ns
+      [(list) u]
+      [(list* n ns) (pick (list-ref u n) ns)]))
+  (pick u ns))
+
+(module+ test 
+  (check-equal? (part (⊕ 1 x y) 0) '+)
+  (check-equal? (part (⊕ 1 x y) 1) 1)
+  (check-equal? (part (⊕ 1 x y) 2) x)
+  (check-equal? (part (⊕ 1 x y) 3) y)
+  (check-equal? (part (⊕ 1 (⊗ 2 x) y) 2 2) x)
+  (check-equal? (part (⊕ 1 (⊗ 2 x) y) 2 1) 2))
+
 (module+ test 
   (check-equal? (in-terms/proc '(+ 1 2 x y (expt x 4) (sin x))) '(3 x (expt x 4) y (sin x))))
 
