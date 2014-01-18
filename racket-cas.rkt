@@ -1530,8 +1530,25 @@
 ;;; Display
 ;;;
 
+(define output-application-brackets   (make-parameter (list "(" ")")))
+(define output-format-function-symbol (make-parameter ~a))
+
+(define (use-mma-output-style)
+  (output-application-brackets (list "[" "]"))
+  (output-format-function-symbol (λ(s) (string-titlecase (~a s)))))
+
+(define (use-default-output-style)
+  (output-application-brackets (list "(" ")"))
+  (output-format-function-symbol ~a))
+  
+  
+; Uncomment to get Mathematica style brackets
+; (output-application-brackets (list "[" "]"))
+
+
 ; ~ converts an expression into a string
 (define (verbose~ u)
+  (match-define (list left right) (output-application-brackets))
   (define v~ verbose~)
   (define (paren u) ; always wrap in parentheses
     (~a "(" (verbose~ u) ")"))
@@ -1550,9 +1567,13 @@
     ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
     [(⊘ u v)     (~a (par u) "/" (par v))]
     [(Expt u v)  (~a (par u) "^" (par v))]
-    [(app: f us) (~a f "(" (apply string-append (add-between (map v~ us) ",")) ")")]
+    [(app: f us) (let ()
+                   (define arguments (apply string-append (add-between (map v~ us) ",")))
+                   (define head ((output-format-function-symbol) f))
+                   (~a head left arguments right))]
     [_ (display u)
        (error 'verbose~ (~a "internal error, got: " u))]))
+(define ~ verbose~)
 
 (module+ test
   (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+(3*x)+(3*x^2)+x^3")
@@ -1560,7 +1581,11 @@
   (check-equal? (verbose~ (normalize '(* (sin (+ x -7)) (+ (cos (+ x -7)) (asin (+ x -7))))))
                 "(sin((-7)+x))*(asin((-7)+x))+cos((-7)+x)")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
-                "3.1415926535897932384626433832793"))
+                "3.1415926535897932384626433832793")
+  (use-mma-output-style)
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[(-7)+x]")
+  (use-default-output-style)
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin((-7)+x)"))
 
 
 ;;;
