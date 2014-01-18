@@ -1531,48 +1531,65 @@
 ;;;
 
 (define output-application-brackets   (make-parameter (list "(" ")")))
-(define output-format-function-symbol (make-parameter ~a))
+(define output-format-function-symbol (make-parameter ~a))             
+(define output-sub-expression-parens  (make-parameter (list "(" ")")))
+(define output-wrapper                (make-parameter values))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
-  (output-format-function-symbol (λ(s) (string-titlecase (~a s)))))
+  (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
+  (output-sub-expression-parens (list "(" ")"))
+  (output-wrapper values))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
-  (output-format-function-symbol ~a))
-  
-  
-; Uncomment to get Mathematica style brackets
-; (output-application-brackets (list "[" "]"))
+  (output-format-function-symbol ~a)
+  (output-sub-expression-parens (list "(" ")"))
+  (output-wrapper values))
 
+(define (use-tex-output-style)
+  (define operators '(sin cos tan asin acos atan))
+  (define (~symbol s) 
+    (match s
+      [_ #:when (member s operators) (~a "\\" s)]
+      ['* "\\cdot "]
+      [_  (~a s)]))
+  (output-application-brackets (list "(" ")"))
+  (output-format-function-symbol ~symbol)
+  (output-sub-expression-parens (list "{" "}"))
+  (output-wrapper (λ (s) (~a "$" s "$"))))
 
 ; ~ converts an expression into a string
 (define (verbose~ u)
-  (match-define (list left right) (output-application-brackets))
-  (define v~ verbose~)
-  (define (paren u) ; always wrap in parentheses
-    (~a "(" (verbose~ u) ")"))
-  (define (par u) ; wrap if (locally) necessary
+  (match-define (list app-left app-right) (output-application-brackets))
+  (match-define (list left right)         (output-sub-expression-parens))
+  (define ~sym (output-format-function-symbol))
+  (define (v~ u)
+    (define (paren u) ; always wrap in parentheses
+      (~a left (verbose~ u) right))
+    (define (par u) ; wrap if (locally) necessary
+      (math-match u
+        [r    #:when (>= r 0)           (~a r)]
+        [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
+        [x (~a x)]
+        [_  (~a left (v~ u) right)]))
     (math-match u
-      [r    #:when (>= r 0)           (~a r)]
-      [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
-      [x (~a x)]
-      [_  (~a "(" (verbose~ u) ")")]))
-  (math-match u
-    [r           (~a r)]
-    [r.bf        (bigfloat->string r.bf)]
-    [x           (~a x)]
-    [(⊗ u v)     (~a (par u) "*" (v~ v))]
-    [(⊕ u v)     (~a (par u) "+" (v~ v))]
-    ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
-    [(⊘ u v)     (~a (par u) "/" (par v))]
-    [(Expt u v)  (~a (par u) "^" (par v))]
-    [(app: f us) (let ()
-                   (define arguments (apply string-append (add-between (map v~ us) ",")))
-                   (define head ((output-format-function-symbol) f))
-                   (~a head left arguments right))]
-    [_ (display u)
-       (error 'verbose~ (~a "internal error, got: " u))]))
+      [r           (~a r)]
+      [r.bf        (bigfloat->string r.bf)]
+      [x           (~a x)]
+      [(⊗ u v)     (~a (par u) (~sym '*) (v~ v))]
+      [(⊕ u v)     (~a (par u) (~sym '+) (v~ v))]
+      ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
+      [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
+      [(Expt u v)  (~a (par u) (~sym '^) (par v))]
+      [(app: f us) (let ()
+                     (define arguments (apply string-append (add-between (map v~ us) ",")))
+                     (define head ((output-format-function-symbol) f))
+                     (~a head app-left arguments app-right))]
+      [_ (display u)
+         (error 'verbose~ (~a "internal error, got: " u))]))
+  ((output-wrapper) (v~ u)))
+
 (define ~ verbose~)
 
 (module+ test
