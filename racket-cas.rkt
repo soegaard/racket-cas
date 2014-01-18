@@ -1527,6 +1527,43 @@
 ; (bf-newton-raphson '(- (sin x) 1.0) x 1. 80 #:trace? #t)
 
 ;;;
+;;; Display
+;;;
+
+; ~ converts an expression into a string
+(define (verbose~ u)
+  (define v~ verbose~)
+  (define (paren u) ; always wrap in parentheses
+    (~a "(" (verbose~ u) ")"))
+  (define (par u) ; wrap if (locally) necessary
+    (math-match u
+      [r    #:when (>= r 0)           (~a r)]
+      [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
+      [x (~a x)]
+      [_  (~a "(" (verbose~ u) ")")]))
+  (math-match u
+    [r           (~a r)]
+    [r.bf        (bigfloat->string r.bf)]
+    [x           (~a x)]
+    [(⊗ u v)     (~a (par u) "*" (v~ v))]
+    [(⊕ u v)     (~a (par u) "+" (v~ v))]
+    ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
+    [(⊘ u v)     (~a (par u) "/" (par v))]
+    [(Expt u v)  (~a (par u) "^" (par v))]
+    [(app: f us) (~a f "(" (apply string-append (add-between (map v~ us) ",")) ")")]
+    [_ (display u)
+       (error 'verbose~ (~a "internal error, got: " u))]))
+
+(module+ test
+  (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+(3*x)+(3*x^2)+x^3")
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin((-7)+x)")
+  (check-equal? (verbose~ (normalize '(* (sin (+ x -7)) (+ (cos (+ x -7)) (asin (+ x -7))))))
+                "(sin((-7)+x))*(asin((-7)+x))+cos((-7)+x)")
+  (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
+                "3.1415926535897932384626433832793"))
+
+
+;;;
 ;;; Examples
 ;;;
 
