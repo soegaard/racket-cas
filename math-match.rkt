@@ -81,19 +81,21 @@
         (syntax-case pat0 ()
           [pat (identifier? #'pat) (rewrite-id #'pat)]
           [pat #'pat]))
-      (syntax-case stx (?)
+      (syntax-case stx (? app)
         [(_ pat) (and (identifier? #'pat) (match-expander? (syntax-local-value #'pat (λ()#f))))
                  #'pat]
         [(_ pat) (identifier? #'pat) (rewrite-id #'pat)]
-        [(_ #(pat ...))      (syntax/loc stx (vector (:pat pat) ...))]
-        [(_ (? pred pat))  (with-syntax ([p (rewrite #'pat)])
-                             (syntax/loc stx (? pred p)))]
-        [(_ (pat0 pat ...)) (and (identifier? #'pat0) 
-                                 (match-expander? (syntax-local-value #'pat0 (λ()#f))))
-                            (syntax/loc stx (pat0 (:pat pat) ...))]
-        [(_ (pat0 pat ...))  (with-syntax ([(p ...) (map rewrite (syntax->list #'(pat0 pat ...)))])
-                               (syntax/loc stx (p ...)))]
-        [(_ pat)             #'pat])))
+        [(_ #(pat ...))           (syntax/loc stx (vector (:pat pat) ...))]
+        [(_ (? pred pat))         (with-syntax ([p (rewrite #'pat)])
+                                    (syntax/loc stx (? pred p)))]
+        [(_ (app expr pats ...))  (with-syntax ([(p ...) (map rewrite (syntax->list #'(pats ...)))])
+                                    (syntax/loc stx (app expr pats ...)))]
+        [(_ (pat0 pat ...))       (and (identifier? #'pat0) 
+                                       (match-expander? (syntax-local-value #'pat0 (λ()#f))))
+                                  (syntax/loc stx (pat0 (:pat pat) ...))]
+        [(_ (pat0 pat ...))    (with-syntax ([(p ...) (map rewrite (syntax->list #'(pat0 pat ...)))])
+                                 (syntax/loc stx (p ...)))]
+        [(_ pat)                #'pat])))
   
   (define-syntax (math-match stx)
     (syntax-case stx ()

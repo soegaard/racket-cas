@@ -25,7 +25,7 @@
 (provide (all-defined-out))
 (require "math-match.rkt" racket/match math/number-theory math/special-functions
          (for-syntax syntax/parse racket/syntax racket/format))
-(module+ test (require rackunit)
+(module+ test (require rackunit math/bigfloat)
   (define x 'x) (define y 'y) (define z 'z))
 
 ;;; A SYMBOLIC EXPRESSION is :
@@ -568,7 +568,7 @@
 (module+ test (check-equal? (simplify (⊕ (⊗ 2 (Expt 8 1/2)) 3)) (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 ; divide u by v
-(define (Quotient: u v)
+(define (Oslash: u v)
   (math-match* (u v)
     [(r 0) +nan.0]
     [(r s) (/ r s)]
@@ -577,13 +577,25 @@
     [(u v) (⊗ u (Expt v -1))]))
 
 (define-match-expander ⊘
-  ; Note: This matches only the simplest kind of quotient
+  ; Note: This matches kind of quotient only
   (λ (stx) (syntax-parse stx [(_ u v) #'(or (list '* u (list 'expt v -1))
                                             (list '* (list 'expt v -1) u))]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(Quotient: u v)] [_ (identifier? stx) #'Quotient:])))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
 
 (module+ test
   (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y)))
+
+(define (Quotient: u v)
+  (⊘ u v))
+
+(define-match-expander Quotient
+  ; Note: This matches everything and writes it as a quotient
+  (λ (stx) (syntax-parse stx [(_ u v) #'(and (app numerator u) (app denominator v))]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Quotient: u v)] [_ (identifier? stx) #'Quotient:])))
+
+(module+ test
+  (check-equal? (math-match 2/3 [(Quotient u v) (list u v)]) '(2 3))
+  (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
 
 (define (denominator u)
   (local-require (prefix-in racket: (only-in racket denominator)))
@@ -613,22 +625,26 @@
 (define (numerator u)
   (local-require (prefix-in racket: (only-in racket numerator)))
   (math-match u
-    [α (racket:numerator u)]
+    [α (racket:numerator α)]
     [r r]
-    [r.bf (bf 1)]
-    [x 1]
-    [(Expt v r) #:when (positive? r) u]
-    [(Expt v r) #:when (negative? r) 1]
+    [r.bf r.bf]
+    [x x]
     [(⊗ u v) (⊗ (numerator u) (numerator v))]
     [(⊕ v w) u]
+    [(Expt v r) #:when (positive? r) u]
+    [(Expt v r) #:when (negative? r) 1]
     [_ u]))
 
 (module+ test
   (check-equal? (numerator 2) 2)
   (check-equal? (numerator 2.1) 2.1)
   (check-equal? (numerator 2/3) 2)
+  (check-equal? (numerator pi.bf) pi.bf)
+  (check-equal? (numerator 'a) 'a)
+  (check-equal? (numerator '(⊕ (⊘ 1 x) (⊘ 1 y))) '(⊕ (⊘ 1 x) (⊘ 1 y)))
   (check-equal? (numerator (⊘ 2 x)) 2)
-  (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2)))
+  (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2))
+  (check-equal? (numerator (⊘ x y)) x))
 
 (define (together u)
   ; todo : this doesn't handle sums with more than two terms
