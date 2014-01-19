@@ -1547,19 +1547,23 @@
 ;;;
 
 (define output-application-brackets   (make-parameter (list "(" ")")))
-(define output-format-function-symbol (make-parameter ~a))             
+(define output-format-function-symbol (make-parameter ~a))
+(define output-format-quotient        (make-parameter #f)) ; #f means default u/v
 (define output-sub-expression-parens  (make-parameter (list "(" ")")))
 (define output-wrapper                (make-parameter values))
+(define output-use-quotients?         (make-parameter #t))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
+  (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
   (output-wrapper values))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~a)
+  (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
   (output-wrapper values))
 
@@ -1572,6 +1576,7 @@
       [_  (~a s)]))
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~symbol)
+  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$"))))
 
@@ -1579,6 +1584,7 @@
 (define (verbose~ u)
   (match-define (list app-left app-right) (output-application-brackets))
   (match-define (list left right)         (output-sub-expression-parens))
+  (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol))
   (define (v~ u)
     (define (paren u) ; always wrap in parentheses
@@ -1593,6 +1599,11 @@
       [r           (~a r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a x)]
+      [(Quotient u v) #:when (and use-quotients? (not (equal? v 1)))
+                      (define format/ 
+                        (or (output-format-quotient)
+                            (λ (u v) (~a u "/" v))))
+                      (format/ (par u) (par v))]
       [(⊗ u v)     (~a (par u) (~sym '*) (v~ v))]
       [(⊕ u v)     (~a (par u) (~sym '+) (v~ v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
