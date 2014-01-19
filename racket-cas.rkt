@@ -2,6 +2,7 @@
 ; Short term:
 ;   - in-terms  ( in-terms/proc is done )
 ;   - polynomial?  
+;   - use multivariable polynomial-quotient/remainder to simplify trig (cos^2+sin^2=1)
 ;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
 ;   - split expand into expand-one and expand (-all)
@@ -38,6 +39,8 @@
 ;;; SYMBOLIC CONSTANTS
 (define @e  '@e)  ; Euler's constant
 (define @pi '@pi) ; pi
+(define @n  '@n)  ; stands for an arbitrary natural number
+(define @p  '@p)  ; stands for an arbotrary integer
 
 
 ;;; PATTERN MATCHERS
@@ -65,6 +68,15 @@
 (define-match-expander bind: (λ (stx) (syntax-parse stx [(_ x r)  #'(app (λ(__) r) x)])))
 (module+ test (check-equal? (match 41 [(bind: x 42) x]) 42))
 
+(define-match-expander Integer 
+  (λ (stx) (syntax-parse stx [(_ u)  #'(or (? number? (and (? integer? u)))
+                                           (and (quote @n) (bind: u '@n))
+                                           (and (quote @p) (bind: u '@n)))])))
+(module+ test 
+  (check-equal? (match 41 [(Integer x) x]) 41)
+  (check-equal? (match '@n [(Integer x) x]) '@n)
+  (check-equal? (match '@foo [(Integer x) x] [_ 'foo]) 'foo))
+
 ;; The pattern ⊕ matches various sums
 ;;  (⊕ x y) matches (+ a b)       and binds x->a, y->b
 ;;  (⊕ x y) matches (+ a b c ...) and binds x->a, y->(+ b c ...)
@@ -87,7 +99,10 @@
     (syntax-parse stx
       [(_ u v)
        #'(or (list '* u v) (list-rest '* u (app (λ(ys) (cons '* ys)) v)))]
-      [(_ u               )   #'(list '* u)]))
+      [(_ u v w)
+       #'(or (⊗ u (⊗ v w)) (⊗ u (⊗ w v)))]
+      [(_ u               )   #'(list '* u)]
+      [_ (error '⊗-match-expander (~a "only (⊗ u v) and (⊗ u) works, got: " stx))]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(times u ...)][_ (identifier? stx) #'times])))
 
 (module+ test (require rackunit)
@@ -723,12 +738,6 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
-
-
-
-
-
-
 (define (Ln: u)
   ; TODO add case for big floats
   (math-match u
@@ -755,12 +764,21 @@
     ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [r.0 (cos r.0)]
     [@pi -1]
-    [(⊗ n @pi)                           (if (even? n) 1 -1)]
-    [(⊗ α @pi) #:when (negative? α)      (Cos: (⊗ (- α) @pi))]
+    [(⊗ α u)   #:when (negative? α)      (Cos: (⊗ (- α) u))]  ; cos is even
+    [(⊗ n @pi)                           (if (even? n) 1 -1)]    
     [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
     #;[(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                  (⊗ 'sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi))))))] ; xxx find sign
-    [(Acos u) u]
+    [(⊗ p (Integer _) @pi) #:when (even? p) 1]
+    
+    [(⊕ u (k⊗ p @pi)) #:when (odd? p)  (⊖ (Cos: u))]
+    [(⊕ (k⊗ p @pi) u) #:when (odd? p)  (⊖ (Cos: u))]
+    [(⊕ u (k⊗ p @pi)) #:when (even? p) (Cos: u)]
+    [(⊕ (k⊗ p @pi) u) #:when (even? p) (Cos: u)]
+    [(⊕ u (⊗ p (Integer _) @pi)) #:when (even? p) (Cos: u)]
+    [(⊕ (⊗ p (Integer _) @pi) u) #:when (even? p) (Cos: u)]
+    
+    [(Acos u) u]    ; xxx only of -1<u<1 
     [_ `(cos ,u)]))
 
 (define-match-expander Cos
@@ -772,28 +790,56 @@
   (check-equal? (Cos @pi) -1)
   (check-equal? (Cos (⊗ 2 @pi)) 1)
   (check-equal? (Cos 0.5) 0.8775825618903728)
-  (check-equal? (for/list ([n 8]) (Cos (⊗ n 1/2 @pi))) '(1 0 -1 0 1 0 -1 0)))
+  (check-equal? (for/list ([n 8]) (Cos (⊗ n 1/2 @pi))) '(1 0 -1 0 1 0 -1 0))
+  (check-equal? (Cos (⊖ x)) (Cos x))
+  (check-equal? (Cos (⊕ x (⊗ 2 @pi)))  (Cos x))
+  (check-equal? (Cos (⊕ x (⊗ 4 @pi)))  (Cos x))
+  (check-equal? (Cos (⊕ x (⊗ -4 @pi))) (Cos x))
+  (check-equal? (Cos (⊕ x @pi))        (⊖ (Cos x)))
+  (check-equal? (Cos (⊕ x (⊗ 3 @pi)))  (⊖ (Cos x)))
+  (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
+  (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
+  (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x)))
 
 (define (Sin: u)
-  (define (odd-integer? n) (and (integer? n) (odd? n)))
+  (define (Odd? n)  (and (integer? n) (odd? n)))
+  (define (Even? n) (and (integer? n) (even? n)))
   (math-match u
     [0 0]
-    ; [r (sin r)] ; nope - automatic evaluation is for exact results only
     [r.0 (sin r.0)]
     [@pi 0]
-    [(⊗ n @pi) 0]
-    [(⊗ α @pi) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) @pi)))]
-    [(⊗ α @pi) #:when (integer? (* 2 α)) (if (= (remainder (* 2 α) 4) 1) 1 -1)]
+    [(⊗ (Integer _) @pi) 0]
+    [(⊗ α     u) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) u)))]
+    [(⊗ α   @pi) #:when (integer? (* 2 α)) (if (= (remainder (* 2 α) 4) 1) 1 -1)]
+    [(⊗ (Integer _) (Integer _) @pi) 0]
+    [(⊕ u (k⊗ (Integer v) @pi)) #:when (Even? v) (Sin: u)]
+    [(⊕ (k⊗ (Integer v) @pi) u) #:when (Even? v) (Sin: u)]
+    [(⊕ u (k⊗ (Integer v) @pi)) #:when (Odd? v) (⊖ (Sin: u))]
+    [(⊕ (k⊗ (Integer v) @pi) u) #:when (Odd? v) (⊖ (Sin: u))]
+    [(⊕ u (⊗ p (Integer v) @pi)) #:when (Even? p) (Sin: u)]
+    [(⊕ (⊗ p (Integer v) @pi) u) #:when (Even? p) (Sin: u)]
+    [(⊕ u (⊗ p (Integer v) @pi)) #:when (Odd? p) (⊖ (Sin: u))]
+    [(⊕ (⊗ p (Integer v) @pi) u) #:when (Odd? p) (⊖ (Sin: u))]
     #;[(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                  (⊗ 'sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi))))))] ; xxx find sign
-    [(Asin u) u]
+    [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
     [_ `(sin ,u)]))
 
 (define-match-expander Sin
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'sin u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sin: u)] [_ (identifier? stx) #'Sin:])))
 
-(module+ test (check-equal? (for/list ([n 8]) (Sin (⊗ n 1/2 @pi))) '(0 1 0 -1 0 1 0 -1)))
+(module+ test 
+  (check-equal? (for/list ([n 8]) (Sin (⊗ n 1/2 @pi))) '(0 1 0 -1 0 1 0 -1))
+  (check-equal? (Sin (⊖ x))              (⊖ (Sin x)))
+  (check-equal? (Sin (⊕ x (⊗ 2 @pi)))       (Sin x))
+  (check-equal? (Sin (⊕ x (⊗ 4 @pi)))       (Sin x))
+  (check-equal? (Sin (⊕ x (⊗ -4 @pi)))      (Sin x))
+  (check-equal? (Sin (⊕ x       @pi))    (⊖ (Sin x)))
+  (check-equal? (Sin (⊕ x (⊗ 3 @pi)))    (⊖ (Sin x)))
+  (check-equal? (Sin (⊕ x (⊗ 2 @n @pi)))    (Sin x))
+  (check-equal? (Sin (⊕ x (⊗ 4 @n @pi)))    (Sin x))
+  (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x)))
 
 (define (Asin: u)
   (math-match u
