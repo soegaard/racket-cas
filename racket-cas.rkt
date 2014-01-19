@@ -1580,21 +1580,44 @@
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$"))))
 
+(define (tex u)
+  (define operators '(sin cos tan asin acos atan))
+  (define (~symbol s) 
+    (match s
+      [_ #:when (member s operators) (~a "\\" s)]
+      ['* "\\cdot "]
+      [_  (~a s)]))
+  (parameterize ((output-application-brackets (list "(" ")"))
+                 (output-format-function-symbol ~symbol)
+                 (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
+                 (output-sub-expression-parens (list "{" "}"))
+                 (output-wrapper (λ (s) (~a "$" s "$"))))
+    (verbose~ u)))
+
 ; ~ converts an expression into a string
 (define (verbose~ u)
   (match-define (list app-left app-right) (output-application-brackets))
-  (match-define (list left right)         (output-sub-expression-parens))
+  (match-define (list sub-left sub-right) (output-sub-expression-parens))
   (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol))
   (define (v~ u)
-    (define (paren u) ; always wrap in parentheses
-      (~a left (verbose~ u) right))
-    (define (par u) ; wrap if (locally) necessary
+    (define (sub u) ; always wrap in sub-left and sub-right parentheses
+      (~a sub-left (v~ u) sub-right))
+    (define (paren u) ; always wrap in ( )
+      (~a "(" (v~ u) ")"))
+    (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       (math-match u
         [r    #:when (>= r 0)           (~a r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x (~a x)]
-        [_  (~a left (v~ u) right)]))
+        [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
+        [(⊕ _ __)   (paren u)]
+        [(Expt u v) (~a (par u) (~sym '^) (par v #:use sub))]
+        [(app: f us) (let ()
+                     (define arguments (apply string-append (add-between (map v~ us) ",")))
+                     (define head ((output-format-function-symbol) f))
+                     (~a head app-left arguments app-right))]
+        [_  (wrap u)]))
     (math-match u
       [r           (~a r)]
       [r.bf        (bigfloat->string r.bf)]
@@ -1603,12 +1626,13 @@
                       (define format/ 
                         (or (output-format-quotient)
                             (λ (u v) (~a u "/" v))))
-                      (format/ (par u) (par v))]
-      [(⊗ u v)     (~a (par u) (~sym '*) (v~ v))]
-      [(⊕ u v)     (~a (par u) (~sym '+) (v~ v))]
+                      (format/ (par u #:use sub) (par v #:use sub))]
+      [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
+      [(⊕ u v)     (~a (v~ u) (~sym '+) (v~ v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
-      [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
-      [(Expt u v)  (~a (par u) (~sym '^) (par v))]
+      ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
+      [(Expt u v)  (~a (par u) (~sym '^) (par v #:use sub))]
+      [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(app: f us) (let ()
                      (define arguments (apply string-append (add-between (map v~ us) ",")))
                      (define head ((output-format-function-symbol) f))
@@ -1620,16 +1644,16 @@
 (define ~ verbose~)
 
 (module+ test
-  (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+(3*x)+(3*x^2)+x^3")
-  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin((-7)+x)")
+  (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+3*x+3*x^2+x^3")
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)")
   (check-equal? (verbose~ (normalize '(* (sin (+ x -7)) (+ (cos (+ x -7)) (asin (+ x -7))))))
-                "(sin((-7)+x))*(asin((-7)+x))+cos((-7)+x)")
+                "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
   (use-mma-output-style)
-  (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[(-7)+x]")
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
   (use-default-output-style)
-  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin((-7)+x)"))
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)"))
 
 
 ;;;
