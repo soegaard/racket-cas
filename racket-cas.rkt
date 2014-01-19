@@ -565,7 +565,7 @@
     [(⊕ u v)      (⊕ (s u) (s v))]
     [_ u]))
 
-(module+ test (check-equal? (simplify (⊕ (⊗ 2 (Expt 8 1/2)) 3)) (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
+(module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2)))) (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 ; divide u by v
 (define (Oslash: u v)
