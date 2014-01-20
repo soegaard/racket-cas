@@ -462,6 +462,10 @@
     [(⊕ u v)           (⊕ (n u) (n v))]
     [(⊗ u)             (n u)]
     [(⊗ u v)           (⊗ (n u) (n v))]
+    [(And u v)         (And (n u) (n v))]
+    [(Or u v)          (Or (n u) (n v))]
+    [(And u)           (And (n u))]
+    [(Or u)            (Or  (n u))]
     [(Expt u v)        (Expt (n u) (n v))]
     [(Ln u)            (Ln   (n u))]
     [(Sin u)           (Sin  (n u))]
@@ -561,6 +565,8 @@
     [(Expt (⊗ u v) w) (e (⊗ (Expt u w) (Expt v w)))]
     [(Ln (Expt u v))  (e (⊗ v (Ln (e u))))]
     [(Equal u v)      (Equal (e u) (e v))]
+    [(Or u v)         (Or (e u) (e v))]
+    [(And u v)        (And (e u) (e v))]
     [_ u]))
 
 (module+ test
@@ -1434,7 +1440,7 @@
 (define-match-expander Or
   (λ (stx)
     (syntax-parse stx
-      [(_ u v) #'(or (list 'or u v) (list-rest 'or u (app (λ(ys) (cons '+ ys)) v)))]
+      [(_ u v) #'(or (list 'or u v) (list-rest 'or u (app (λ(ys) (cons 'or ys)) v)))]
       [(_ u)       #'(list 'or u)]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
 
@@ -1449,6 +1455,25 @@
 
 (module+ test 
   (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 3) (= x 2) (= x 1))))
+
+(define-match-expander And
+  (λ (stx)
+    (syntax-parse stx
+      [(_ u v) #'(or (list 'and u v) (list-rest 'and u (app (λ(ys) (cons 'and ys)) v)))]
+      [(_ u)       #'(list 'and u)]))
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(And: u ...)] [_ (identifier? stx) #'And:])))
+
+(define (And: . us)
+  (define (flatten us)
+    (reverse 
+     (for/fold ([vs '()]) ([u (in-list us)])
+       (match u
+         [(list* 'and ws) (append vs (map flatten ws))]
+         [_               (cons u vs)]))))
+  `(and ,@(sort (flatten us) <<)))
+
+(module+ test 
+  (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 3) (= x 2) (= x 1))))
 
 #;(define (Positive?: u)
     (math-match u
@@ -1598,20 +1623,23 @@
 (define output-sub-expression-parens  (make-parameter (list "(" ")")))
 (define output-wrapper                (make-parameter values))
 (define output-use-quotients?         (make-parameter #t))
+(define output-format-sqrt            (make-parameter (λ(u) (~a "sqrt(" (verbose~ u) ")"))))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
   (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
-  (output-wrapper values))
+  (output-wrapper values)
+  (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]"))))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~a)
   (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
-  (output-wrapper values))
+  (output-wrapper values)
+  (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")"))))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan asin acos atan))
@@ -1619,12 +1647,16 @@
     (match s
       [_ #:when (member s operators) (~a "\\" s)]
       ['* "\\cdot "]
+      ['or "\\vee "]
+      ['and "\\wedge "]
       [_  (~a s)]))
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~symbol)
   (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
   (output-sub-expression-parens (list "{" "}"))
-  (output-wrapper (λ (s) (~a "$" s "$"))))
+  (output-wrapper (λ (s) (~a "$" s "$")))
+  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
+                              (~a "\\sqrt{" (verbose~ u) "}")))))
 
 (define (tex u)
   (define operators '(sin cos tan asin acos atan))
@@ -1632,12 +1664,16 @@
     (match s
       [_ #:when (member s operators) (~a "\\" s)]
       ['* "\\cdot "]
+      ['or "\\vee "]
+      ['and "\\wedge "]
       [_  (~a s)]))
   (parameterize ((output-application-brackets (list "(" ")"))
                  (output-format-function-symbol ~symbol)
                  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
                  (output-sub-expression-parens (list "{" "}"))
-                 (output-wrapper (λ (s) (~a "$" s "$"))))
+                 (output-wrapper (λ (s) (~a "$" s "$")))
+                 (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
+                                             (~a "\\sqrt{" (verbose~ u) "}")))))
     (verbose~ u)))
 
 ; ~ converts an expression into a string
@@ -1656,9 +1692,17 @@
         [r    #:when (>= r 0)           (~a r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x (~a x)]
+        ; infix operators and relations
         [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
-        [(⊕ _ __)   (paren u)]
-        [(Expt u v) (~a (par u) (~sym '^) (par v #:use sub))]
+        [(⊕ _ __)    (paren u)]
+        [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
+        [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
+        [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
+        ; powers
+        [(Expt u 1/2) ((output-format-sqrt) u)]
+        [(Expt u p)   (~a (par u) (~sym '^) (par p #:use sub))]
+        [(Expt u v)   (~a (par u) (~sym '^) (wrap v))]
+        ; applications
         [(app: f us) (let ()
                      (define arguments (apply string-append (add-between (map v~ us) ",")))
                      (define head ((output-format-function-symbol) f))
@@ -1668,13 +1712,16 @@
       [r           (~a r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a x)]
-      [(Quotient u v) #:when (and use-quotients? (not (equal? v 1)))
+      [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
                       (define format/ 
                         (or (output-format-quotient)
                             (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use sub) (par v #:use sub))]
       [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
       [(⊕ u v)     (~a (v~ u) (~sym '+) (v~ v))]
+      [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
+      [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
+      [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u v)  (~a (par u) (~sym '^) (par v #:use sub))]
