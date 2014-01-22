@@ -1,4 +1,6 @@
 #lang racket
+; Added rult for (solve '(= v (expt u x ) x) to solve.
+; TODO: add rule that returns exact result when u dividies v
 ; Short term:
 ;   - in-terms  ( in-terms/proc is done )
 ;   - polynomial?  
@@ -240,7 +242,7 @@
                  (let ([l (length us)] [m (length vs)])
                    (or (< l m)
                        (and (= l m)
-                            (for/or ([u us] [v vs])
+                            (for/and ([u us] [v vs])
                               (<<= u v)))))))]
        ; no other possibilities left
        [(_ _) (displayln (list s1 s2)) (error '<< "internal error: missing a case")])]
@@ -1454,7 +1456,7 @@
   `(or ,@(sort (flatten us) <<)))
 
 (module+ test 
-  (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 3) (= x 2) (= x 1))))
+  (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 1) (= x 2) (= x 3))))
 
 (define-match-expander And
   (λ (stx)
@@ -1473,7 +1475,7 @@
   `(and ,@(sort (flatten us) <<)))
 
 (module+ test 
-  (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 3) (= x 2) (= x 1))))
+  (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3))))
 
 #;(define (Positive?: u)
     (math-match u
@@ -1495,12 +1497,16 @@
           [(Equal (⊕ u w) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
           [(Equal (⊗ w u) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
           [(Equal (⊗ u w) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
-          [(Equal (Expt u n) v)  #:when (odd? n)  (r (Equal u (Expt v (⊘ 1 n))))]
-          [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
-          [(Equal (Expt u α) v)  #:when (= (numerator α) 1)   (r (Equal u (Expt v (⊘ 1 α))))]
-          [(Equal (Expt @e u) s) #:when (> s 0) (r (Equal u (Ln s)))]
+          [(Equal (Expt @e u) s) #:when (> s 0)   (r (Equal u (Ln s)))]
           [(Equal (Expt @e u) s) (return #f)]
           [(Equal (Expt @e u) v)  (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
+          [(Equal (Expt u n) v)  #:when (odd? n)  (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
+          [(Equal (Expt u α) v)  #:when (= (numerator α) 1)  (r (Equal u (Expt v (⊘ 1 α))))]
+          #;[(Equal (Expt n u) m)  #:when (and (free-of v x) (free-of w x) (divides? n m))
+                                   (r (Equal u (⊘ (Ln m) (Ln n))))]
+          [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) 
+                                 (r (Equal u (⊘ (Ln w) (Ln v))))]
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
           [(Equal (Acos u) v) (r (Equal u (Cos v)))]
           [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
@@ -1558,12 +1564,14 @@
   (check-equal? (solve '(= x x) x) #t)
   (check-equal? (solve '(= (+ x 1) (+ x 1)) x) #t)
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
-  (check-equal? (solve (normalize '(= (sqr x) 9)) x) '(or (= x 3) (= x -3))) ; xxx
+  (check-equal? (solve (normalize '(= (sqr x) 9)) x) '(or (= x -3) (= x 3)))
   (check-equal? (solve '(= (asin x) 1/2) x) '(= x (sin 1/2)))
   (check-equal? (solve '(= (acos x) 1/2) x) '(= x (cos 1/2)))
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
   (check-equal? (solve (normalize '(= (* (- x 1) (- x 2) (- x 3)) 0)) x) 
-                '(or (= x 3) (= x 1) (= x 2))))
+                '(or (= x 1) (= x 2) (= x 3)))
+  (check-equal? (solve (normalize '(= 8.0 (expr 2.0 x))) x) '(= x 3.0)))
+                
 
 (define (roots u x)
   (define (solution u) (last u))
@@ -1642,12 +1650,12 @@
   (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")"))))
 
 (define (use-tex-output-style)
-  (define operators '(sin cos tan asin acos atan))
+  (define operators '(sin cos tan asin acos atan log ln))
   (define (~symbol s) 
     (match s
       [_ #:when (member s operators) (~a "\\" s)]
-      ['* "\\cdot "]
-      ['or "\\vee "]
+      ['*   "\\cdot "]
+      ['or  "\\vee "]
       ['and "\\wedge "]
       [_  (~a s)]))
   (output-application-brackets (list "(" ")"))
@@ -1659,7 +1667,7 @@
                               (~a "\\sqrt{" (verbose~ u) "}")))))
 
 (define (tex u)
-  (define operators '(sin cos tan asin acos atan))
+  (define operators '(sin cos tan asin acos atan log ln))
   (define (~symbol s) 
     (match s
       [_ #:when (member s operators) (~a "\\" s)]
