@@ -1,6 +1,4 @@
 #lang racket
-; Added rult for (solve '(= v (expt u x ) x) to solve.
-; TODO: add rule that returns exact result when u dividies v
 ; Short term:
 ;   - in-terms  ( in-terms/proc is done )
 ;   - polynomial?  
@@ -470,6 +468,8 @@
     [(Or u)            (Or  (n u))]
     [(Expt u v)        (Expt (n u) (n v))]
     [(Ln u)            (Ln   (n u))]
+    [(Log u)           (Ln   (n u))]
+    [(Log u v)         (Log  (n u) (n v))]
     [(Sin u)           (Sin  (n u))]
     [(Asin u)          (Asin (n u))]
     [(Cos u)           (Cos  (n u))]
@@ -765,6 +765,33 @@
   (check-equal? (Ln @e) 1)
   (check-equal? (Ln (Exp x)) x)
   (check-equal? (Ln (Expt x 3)) '(ln (expt x 3))))
+
+(define (Log: u [v #f])
+  (math-match* (u v)
+    [(_ #f)    (Ln: u)]
+    [(@e v)    (Ln: v)]
+    ; TODO add case for big floats
+    [(_ 1)     0]
+    [(_ 0)     +nan.0] ; TODO: error?
+    [(r.0 s.0) #:when (and (positive? r.0) (positive? s.0)) (⊘ (Log s.0) (Log r.0))]
+    [(u u)          1]
+    [(u (Expt u v)) v]
+    [(n m) #:when (divides? n m) (let ([k (max-dividing-power n m)])
+                                   (⊕ k (Log n (⊘ m (Expt n k)))))]
+    [(_ _)          `(log ,u ,v)]))
+
+(define-match-expander Log
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'log u)] [(_ u v) #'(list 'log u v)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Log: u)] [(_ u v) #'(Log: u v)] [_ (identifier? stx) #'Log:])))
+
+(module+ test
+  (check-equal? (Log 2 1) 0)
+  (check-equal? (Log 2 2) 1)
+  (check-equal? (Log 2 4) 2)
+  (check-equal? (Log 2 8) 3)
+  (check-equal? (Log 2. 8.) 3.)
+  (check-equal? (Log @e x) (Ln x))
+  (check-equal? (Log 2 (Expt 2 x)) x))
 
 (define (Cos: u)
   (math-match u
@@ -1493,20 +1520,20 @@
         ;         otherwise w.
         (define r remove-invertibles)
         (math-match w
-          [(Equal (⊕ w u) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
-          [(Equal (⊕ u w) v) #:when (free-of w x) (r (Equal u (⊖ v w)))]
-          [(Equal (⊗ w u) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
-          [(Equal (⊗ u w) v) #:when (free-of w x) (r (Equal u (⊘ v w)))]
-          [(Equal (Expt @e u) s) #:when (> s 0)   (r (Equal u (Ln s)))]
+          [(Equal (⊕ w u) v)     #:when (free-of w x) (r (Equal u (⊖ v w)))]
+          [(Equal (⊕ u w) v)     #:when (free-of w x) (r (Equal u (⊖ v w)))]
+          [(Equal (⊗ w u) v)     #:when (free-of w x) (r (Equal u (⊘ v w)))]
+          [(Equal (⊗ u w) v)     #:when (free-of w x) (r (Equal u (⊘ v w)))]
+          [(Equal (Expt @e u) s) #:when (> s 0)        (r (Equal u (Ln s)))]
           [(Equal (Expt @e u) s) (return #f)]
-          [(Equal (Expt @e u) v)  (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
+          [(Equal (Expt @e u) v) (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
           [(Equal (Expt u n) v)  #:when (odd? n)  (r (Equal u (Expt v (⊘ 1 n))))]
           [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
-          [(Equal (Expt u α) v)  #:when (= (numerator α) 1)  (r (Equal u (Expt v (⊘ 1 α))))]
-          #;[(Equal (Expt n u) m)  #:when (and (free-of v x) (free-of w x) (divides? n m))
-                                   (r (Equal u (⊘ (Ln m) (Ln n))))]
+          [(Equal (Expt u α) v)  #:when (= (numerator α) 1)           (r (Equal u (Expt v (⊘ 1 α))))]
+          [(Equal (Expt n u) m)  #:when (and (free-of n x) (free-of m x)) (r (Equal u (Log n m)))]
           [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) 
-                                 (r (Equal u (⊘ (Ln w) (Ln v))))]
+                                 (displayln "!!")
+                                 (r (Equal u (⊘ (Ln w) (Ln v))))]          
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
           [(Equal (Acos u) v) (r (Equal u (Cos v)))]
           [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
@@ -1570,8 +1597,9 @@
   (check-equal? (solve '(= (* 3 x) 2) x) '(= x 2/3))
   (check-equal? (solve (normalize '(= (* (- x 1) (- x 2) (- x 3)) 0)) x) 
                 '(or (= x 1) (= x 2) (= x 3)))
-  (check-equal? (solve (normalize '(= 8.0 (expr 2.0 x))) x) '(= x 3.0)))
-                
+  (check-equal? (solve (normalize '(= 8.0 (expt 2.0 x))) x) '(= x 3.0))
+  (check-equal? (solve '(= 8 (expt 2 x)) x) '(= x 3)))
+
 
 (define (roots u x)
   (define (solution u) (last u))
@@ -1712,9 +1740,9 @@
         [(Expt u v)   (~a (par u) (~sym '^) (wrap v))]
         ; applications
         [(app: f us) (let ()
-                     (define arguments (apply string-append (add-between (map v~ us) ",")))
-                     (define head ((output-format-function-symbol) f))
-                     (~a head app-left arguments app-right))]
+                       (define arguments (apply string-append (add-between (map v~ us) ",")))
+                       (define head ((output-format-function-symbol) f))
+                       (~a head app-left arguments app-right))]
         [_  (wrap u)]))
     (math-match u
       [r           (~a r)]
