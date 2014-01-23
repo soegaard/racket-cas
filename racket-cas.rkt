@@ -24,7 +24,7 @@
 ;   - symbolic sums (see https://github.com/soegaard/bracket/blob/master/polynomials/poly.rkt)
 
 (provide (all-defined-out))
-(require "math-match.rkt" racket/match math/number-theory math/special-functions
+(require "math-match.rkt" racket/match math/flonum math/number-theory math/special-functions
          (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test (require rackunit math/bigfloat)
   (define x 'x) (define y 'y) (define z 'z))
@@ -468,7 +468,7 @@
     [(Or u)            (Or  (n u))]
     [(Expt u v)        (Expt (n u) (n v))]
     [(Ln u)            (Ln   (n u))]
-    [(Log u)           (Ln   (n u))]
+    [(Log u)           (Log  (n u))]
     [(Log u v)         (Log  (n u) (n v))]
     [(Sin u)           (Sin  (n u))]
     [(Asin u)          (Asin (n u))]
@@ -504,7 +504,8 @@
   (check-equal? (normalize '(/ (- x) (+ (- x y) (exp x) (sqr x) (+ 3)))) 
                 (⊘ (⊖ x) (⊕ (⊖ x y) (Exp x) (Sqr x) (⊕ 3))))
   (check-equal? (normalize '(bf 3)) (bf 3))
-  (check-equal? (normalize '(f (- x y))) `(f ,(⊖ x y))))
+  (check-equal? (normalize '(f (- x y))) `(f ,(⊖ x y)))
+  (check-equal? (normalize '(log 3)) '(log 10 3)))
 
 ; Compile turns an expression into a Racket function.
 (define (compile u [x 'x])
@@ -747,11 +748,11 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
 (define (Ln: u)
-  ; TODO add case for big floats
   (math-match u
     [1  0]
-    [0  +nan.0] ; TODO: error?
-    [r.0   #:when (positive? r.0) (log r.0)]
+    ; [0  +nan.0] ; TODO: error?
+    [r.0   #:when (positive? r.0)    (log r.0)]
+    [r.bf  #:when (bfpositive? r.bf) (bflog r.bf)]
     [@e  1]
     [(Expt @e v) v]
     [_ `(ln ,u)]))
@@ -766,18 +767,36 @@
   (check-equal? (Ln (Exp x)) x)
   (check-equal? (Ln (Expt x 3)) '(ln (expt x 3))))
 
+(define (log10 u [v #f])
+  (math-match* (u v)
+    [(_ #f)    (log10 10 u)]
+    [(r.0 s.0) (fllogb r.0 s.0)]
+    [(r.0 s)   (fllogb r.0 (exact->inexact s))]
+    [(r   s.0) (fllogb (exact->inexact r) s.0)]
+    [(_ _)     (error 'log10 (~ "got: " u " and " v))]))
+
 (define (Log: u [v #f])
   (math-match* (u v)
-    [(_ #f)    (Ln: u)]
-    [(@e v)    (Ln: v)]
-    ; TODO add case for big floats
+    [(_ #f)    (Log: 10 u)] ; 10 is the default base
+    [(@e v)    (Ln: v)]     ; special case the natural logarithm
     [(_ 1)     0]
-    [(_ 0)     +nan.0] ; TODO: error?
-    [(r.0 s.0) #:when (and (positive? r.0) (positive? s.0)) (⊘ (Log s.0) (Log r.0))]
-    [(u u)          1]
-    [(u (Expt u v)) v]
+    ; [(_ 0)     +nan.0] ; TODO: error?
     [(n m) #:when (divides? n m) (let ([k (max-dividing-power n m)])
                                    (⊕ k (Log n (⊘ m (Expt n k)))))]
+    [(n m) `(log ,n ,m)]
+    [(2 r)  (fllog2 r)]
+    [(r s)  #:when (and (positive? r) (positive? s)) (log10 r s)]
+    
+    [(10   r.bf) #:when (bfpositive? r.bf)                          (bflog10 r.bf)]
+    [(2    r.bf) #:when (bfpositive? r.bf)                          (bflog2  r.bf)]
+    [(r.bf s.bf) #:when (and (bfpositive? r.bf) (bfpositive? s.bf)) (bf/ (bflog r.bf) (bflog s.bf))]
+    [(r    s.bf)  (Log: (bf r) s.bf)]
+    [(r.bf s)     (Log: r.bf  (bf s))]
+    
+    [(u u)          1]
+    [(u (Expt u v)) v]
+    
+    ; [(n r.0) (log10 n r.0)]
     [(_ _)          `(log ,u ,v)]))
 
 (define-match-expander Log
@@ -1046,6 +1065,8 @@
     [(Sin u)     (M sin Sin u)]
     [(Cos u)     (M cos Cos u)]
     [(Ln u)      (M log Ln  u)]
+    [(Log u)     (M  log10 Log u)]
+    [(Log u v)   (M2 log10 Log u v)]
     [(Exp u)     (M exp Exp u)]
     [(Asin u)    (M asin Asin u)]
     [(Acos u)    (M acos Acos u)]
@@ -1532,8 +1553,7 @@
           [(Equal (Expt u α) v)  #:when (= (numerator α) 1)           (r (Equal u (Expt v (⊘ 1 α))))]
           [(Equal (Expt n u) m)  #:when (and (free-of n x) (free-of m x)) (r (Equal u (Log n m)))]
           [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) 
-                                 (displayln "!!")
-                                 (r (Equal u (⊘ (Ln w) (Ln v))))]          
+                                 (r (Equal u (Log v w)))]          
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
           [(Equal (Acos u) v) (r (Equal u (Cos v)))]
           [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
@@ -1653,13 +1673,19 @@
 ;;; Display
 ;;;
 
+(define (default-output-log u [v #f])
+  (match-define (list l r) (output-application-brackets))
+  (cond [v    (~a "log_" (verbose~ u) l (verbose~ v) r)]
+        [else (~a "log" l (verbose~ u) r)]))
+
 (define output-application-brackets   (make-parameter (list "(" ")")))
 (define output-format-function-symbol (make-parameter ~a))
 (define output-format-quotient        (make-parameter #f)) ; #f means default u/v
 (define output-sub-expression-parens  (make-parameter (list "(" ")")))
 (define output-wrapper                (make-parameter values))
 (define output-use-quotients?         (make-parameter #t))
-(define output-format-sqrt            (make-parameter (λ(u) (~a "sqrt(" (verbose~ u) ")"))))
+(define output-format-sqrt            (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
+(define output-format-log             (make-parameter default-output-log))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -1667,7 +1693,8 @@
   (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
   (output-wrapper values)
-  (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]"))))
+  (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]")))
+  (output-format-log default-output-log))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
@@ -1675,7 +1702,8 @@
   (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
   (output-wrapper values)
-  (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")"))))
+  (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")")))
+  (output-format-log default-output-log))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan asin acos atan log ln))
@@ -1692,7 +1720,12 @@
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
   (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
-                              (~a "\\sqrt{" (verbose~ u) "}")))))
+                              (~a "\\sqrt{" (verbose~ u) "}"))))
+  (output-format-log 
+   (λ (u [v #f])
+     (parameterize ([output-wrapper values])
+       (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
+             [else (~a "log(" (verbose~ u) ")")])))))
 
 (define (tex u)
   (define operators '(sin cos tan asin acos atan log ln))
@@ -1709,7 +1742,12 @@
                  (output-sub-expression-parens (list "{" "}"))
                  (output-wrapper (λ (s) (~a "$" s "$")))
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
-                                             (~a "\\sqrt{" (verbose~ u) "}")))))
+                                             (~a "\\sqrt{" (verbose~ u) "}"))))
+                 (output-format-log
+                  (parameterize ([output-wrapper values])
+                    (λ (u [v #f])
+                      (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
+                            [else (~a "log(" (verbose~ u) ")")])))))
     (verbose~ u)))
 
 ; ~ converts an expression into a string
@@ -1738,6 +1776,8 @@
         [(Expt u 1/2) ((output-format-sqrt) u)]
         [(Expt u p)   (~a (par u) (~sym '^) (par p #:use sub))]
         [(Expt u v)   (~a (par u) (~sym '^) (wrap v))]
+        [(Log u)      ((output-format-log) u)]
+        [(Log u v)    ((output-format-log) u v)]
         ; applications
         [(app: f us) (let ()
                        (define arguments (apply string-append (add-between (map v~ us) ",")))
@@ -1760,8 +1800,11 @@
       [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
+      [(Expt u 1/2) ((output-format-sqrt) u)]
       [(Expt u v)  (~a (par u) (~sym '^) (par v #:use sub))]
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
+      [(Log u)     ((output-format-log) u)]
+      [(Log u v)   ((output-format-log) u v)]
       [(app: f us) (let ()
                      (define arguments (apply string-append (add-between (map v~ us) ",")))
                      (define head ((output-format-function-symbol) f))
