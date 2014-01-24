@@ -762,18 +762,33 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Ln: u)] [_ (identifier? stx) #'Ln:])))
 
 (module+ test
-  (check-equal? (Ln 1) 0)
+  (check-equal? (Ln 1)  0)
+  (check-equal? (Ln 1.) 0.)
+  (check-equal? (Ln (bf 1)) 0.bf)
   (check-equal? (Ln @e) 1)
+  (check-equal? (Ln (Exp 1.0)) 1.0)
+  (check-true   (bf<  (bfabs (bf- (bflog (bfexp (bf 1))) (bf 1)))  (bfexpt (bf 10) (bf -30))))
   (check-equal? (Ln (Exp x)) x)
+  (check-equal? (Ln (Expt (Exp x) 2)) '(* 2 x))
   (check-equal? (Ln (Expt x 3)) '(ln (expt x 3))))
 
-(define (log10 u [v #f])
+
+(define (fllog10 u [v #f])
   (math-match* (u v)
-    [(_ #f)    (log10 10 u)]
+    [(_ #f)    (fllog10 10 u)]
     [(r.0 s.0) (fllogb r.0 s.0)]
     [(r.0 s)   (fllogb r.0 (exact->inexact s))]
     [(r   s.0) (fllogb (exact->inexact r) s.0)]
-    [(_ _)     (error 'log10 (~ "got: " u " and " v))]))
+    [(r    s)  (fllogb (exact->inexact r) (exact->inexact s))]
+    [(_ _)     (error 'fllog10 (~ "got: " u " and " v))]))
+
+(module+ test
+  (check-equal? (fllog10 1)  0.)
+  (check-equal? (fllog10 1.) 0.)
+  (check-equal? (fllog10 10.) 1.)
+  (check-equal? (fllog10 100.) 2.)
+  (check-equal? (fllog10 2. 8.) 3.)
+  (check-equal? (fllog10 2. 16.) 4.))
 
 (define (Log: u [v #f])
   (math-match* (u v)
@@ -785,7 +800,7 @@
                                    (⊕ k (Log n (⊘ m (Expt n k)))))]
     [(n m) `(log ,n ,m)]
     [(2 r)  (fllog2 r)]
-    [(r s)  #:when (and (positive? r) (positive? s)) (log10 r s)]
+    [(r s)  #:when (and (positive? r) (positive? s)) (fllog10 r s)]
     
     [(10   r.bf) #:when (bfpositive? r.bf)                          (bflog10 r.bf)]
     [(2    r.bf) #:when (bfpositive? r.bf)                          (bflog2  r.bf)]
@@ -1065,8 +1080,8 @@
     [(Sin u)     (M sin Sin u)]
     [(Cos u)     (M cos Cos u)]
     [(Ln u)      (M log Ln  u)]
-    [(Log u)     (M  log10 Log u)]
-    [(Log u v)   (M2 log10 Log u v)]
+    [(Log u)     (M  fllog10 Log u)]
+    [(Log u v)   (M2 fllog10 Log u v)]
     [(Exp u)     (M exp Exp u)]
     [(Asin u)    (M asin Asin u)]
     [(Acos u)    (M acos Acos u)]
