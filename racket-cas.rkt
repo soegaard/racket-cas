@@ -1309,7 +1309,8 @@
 (define (coefficient-list u x)
   ; view u as a polynomial in x, return the list of coefficients
   ; use same interpretation as  coefficient  for terms not in the form c*x^n
-  (match (for/list ([n (in-range (+ (exponent u x) 1))]) (coefficient u x n))
+  (define max-n (exact-floor (max 0 (exponent u x))))
+  (match (for/list ([n (in-range (+ max-n 1))]) (coefficient u x n))
     [(list 0) '()] [cs cs]))
 
 (module+ test 
