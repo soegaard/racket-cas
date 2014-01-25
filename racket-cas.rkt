@@ -1266,14 +1266,17 @@
       [r                            (if (= n 0) r    0)]
       [r.bf                         (if (= n 0) r.bf 0)]
       [u #:when (equal? u v)        (if (= n 1) 1 0)]
-      [y #:when (not (equal? u v))  (if (= n 0) y 0)]
+      [y #:when (not (equal? y v))  (if (= n 0) y 0)]
       [(⊗ r w)                      (⊗ r (c w))]
       [(⊗ u w) #:when (equal? u v)  (coefficient w v (- n 1))]
       [(⊗ u w) #:when (equal? w v)  (coefficient u v (- n 1))]
       [(⊗ u w)                      (for/⊕ ([i (in-range (+ n 1))])
                                            (⊗ (coefficient u v i) (coefficient w v (- n i))))]
       [(⊕ u w)                      (⊕ (c u) (c w))]
-      [(Expt u r) #:when (equal? u v) (if (= r n) 1 0)]
+      [(Expt u r) #:when (equal? u v) (cond [(= r n)                                       1]
+                                            [(= n 0) (if (and (integer? r) (positive? r)) 
+                                                         0 (Expt u r))] ; xxx
+                                            [else                                          0])]
       [(Expt (⊕ u w) m)             (for/⊕ ([i (in-range (+ m 1))])
                                            (⊗ (binomial m i)
                                               (coefficient (⊗ (Expt u i) (Expt w (- m i))) v n)))]
@@ -1289,7 +1292,8 @@
     (check-equal? (coefficient '(* (expt a -1) x)  x) '(expt a -1))
     (check-equal? (coefficient (normalize '(+ 1 x (sqr x) (sin x))) x 0) '(+ 1 (sin x)))
     (check-equal? (coefficient (⊘ 3 x) x 1) 0)
-    (check-equal? (coefficient (⊘ 3 x) x -1) 3)))
+    (check-equal? (coefficient (⊘ 3 x) x -1) 3)
+    (check-equal? (coefficient (Sqrt x) x 0) (Sqrt x))))
 
 ; (polynomial? u x)  is u a univariate polynomial in x ?
 (define (polynomial? u x)
