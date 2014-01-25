@@ -40,8 +40,7 @@
 (define @e  '@e)  ; Euler's constant
 (define @pi '@pi) ; pi
 (define @n  '@n)  ; stands for an arbitrary natural number
-(define @p  '@p)  ; stands for an arbotrary integer
-
+(define @p  '@p)  ; stands for an arbitrary integer
 
 ;;; PATTERN MATCHERS
 ; In order to eventually define the patterns ⊕, ⊗ and k⊗ we need a few helpers.
@@ -1288,7 +1287,20 @@
     (check-equal? (coefficient u x) 1)
     (check-equal? (coefficient '(expt (+ x 1) 2) x) 2)
     (check-equal? (coefficient '(* (expt a -1) x)  x) '(expt a -1))
-    (check-equal? (coefficient (normalize '(+ 1 x (sqr x) (sin x))) x 0) '(+ 1 (sin x)))))
+    (check-equal? (coefficient (normalize '(+ 1 x (sqr x) (sin x))) x 0) '(+ 1 (sin x)))
+    (check-equal? (coefficient (⊘ 3 x) x 1) 0)
+    (check-equal? (coefficient (⊘ 3 x) x -1) 3)))
+
+; (polynomial? u x)  is u a univariate polynomial in x ?
+(define (polynomial? u x)
+  (free-of (coefficient u x 0) x))
+
+(module+ test
+  (check-equal? (polynomial? '(/ z x) x) #f)
+  (check-true 
+   (andmap (curryr polynomial? x) 
+           (list 0 x '(expt x 2) '(* 3 (expt x 4)) '(expt (+ 1 x) 3)
+                 (⊕ (⊘ 3 y) (Expt x 2))))))
 
 (define (coefficient-list u x)
   ; view u as a polynomial in x, return the list of coefficients
@@ -1303,7 +1315,8 @@
   (check-equal? (coefficient-list '(expt x 3) x) '(0 0 0 1))
   (check-equal? (coefficient-list '(* a x) x) '(0 a))
   (check-equal? (coefficient-list (normalize '(+ (* a x) (* b y) (* c x))) x) '((* b y) (+ a c)))
-  (check-equal? (coefficient-list '(+ x (* 2 a (expt x 3))) x) '(0 1 0 (* 2 a))))
+  (check-equal? (coefficient-list '(+ x (* 2 a (expt x 3))) x) '(0 1 0 (* 2 a)))
+  (check-equal? (coefficient-list (⊘ 'z 'x) x) (list (⊘ 'z 'x))))
 
 (define (is-power-of? u w)
   ; view u as a power of w, is it a non-zero exponent?
