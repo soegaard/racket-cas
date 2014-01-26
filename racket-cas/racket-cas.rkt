@@ -1,5 +1,7 @@
 #lang racket
+(provide (all-defined-out))
 ; Short term:
+;   - simplify: rewrite fractions with square roots in the denominator
 ;   - in-terms  ( in-terms/proc is done )
 ;   - polynomial?  
 ;   - use multivariable polynomial-quotient/remainder to simplify trig (cos^2+sin^2=1)
@@ -1376,7 +1378,7 @@
 (module+ test (check-equal? (leading-term '(+ 2 (* 3 x) (* 17 x x)) x) (⊗ 17 x x)))
 
 (define (variables u)
-  ; find variables in sums, producs and powers with rational exponents
+  ; return list of expressions in which u is a polynomial
   (define (vars u vs)
     (math-match u
       [r          vs]
@@ -1385,10 +1387,11 @@
       [(⊗ u v)   (vars u (vars v vs))]
       [(⊕ u v)   (vars u (vars v vs))]
       [(Expt u α) (vars u vs)]
-      [else       vs]))
+      [else       (set-add vs u)]))
   (sort (set->list (vars u (set))) <<))
 
-(module+ test (check-equal? (variables '(+ (expt (+ x y) 3) z (* a b c) (sin u))) '(a b c x y z)))
+(module+ test 
+  (check-equal? (variables '(+ (expt (+ x y) 3) z (* a b c) (sin u))) '(a b c x y z (sin u))))
 
 (define (collect u x)
   (for/⊕ ([n (in-naturals)]
@@ -1931,8 +1934,8 @@
 
 ; Require start makes ' automatically normalize all expressions.
 
-(displayln "Enter the following in the REPL to redefine ' to do automatic simplification.")
-(write '(require (submod "." start))) (newline)
+; (displayln "Enter the following in the REPL to redefine ' to do automatic simplification.")
+; (write '(require (submod "." start))) (newline)
 ;> (require (submod "." start))
 ;> '(+ x 1)
 ;'(+ 1 x)

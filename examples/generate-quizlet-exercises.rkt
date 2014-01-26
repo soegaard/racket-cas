@@ -7,7 +7,7 @@
 ;;; See:    http://quizlet.com/33695503/scatter
 ;;;
 
-(require "../racket-cas.rkt")
+(require racket-cas)
 
 (define (poly->string p x [var "x"])
   (define (sign r) 
