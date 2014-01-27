@@ -1,6 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 ; Short term:
+;   - documentation
 ;   - simplify: rewrite fractions with square roots in the denominator
 ;   - in-terms  ( in-terms/proc is done )
 ;   - polynomial?  
