@@ -31,3 +31,19 @@ the expression @racket[u] and returns an expression in ASE form.
 }
 @interaction[#:eval cas-eval
                     (normalize '(+ 1 x 2 y x 3))]
+
+@defproc[(polynomial [u symbolic-expression] [x symbolic-expression]) boolean]{
+Returns @racket[#t] if @racket[u] is a polynomial in @racket[x].
+Note that @racket[x] need not be a variable, it can be an arbitrary expression.
+}
+@interaction[#:eval cas-eval
+                    (polynomial? (normalize '(+ (* 3 x x) (* 7 x) -2)) x)
+                    (polynomial? (normalize '(/ x a)) x)
+                    (polynomial? (normalize '(/ x a)) 'a)
+                    (polynomial? (normalize '(+ (sin x) (expt (sin x) 3))) x)
+                    (polynomial? (normalize '(+ (sin x) (expt (sin x) 3))) '(sin x))]
+                    
+                    
+                    
+                    
+                    
