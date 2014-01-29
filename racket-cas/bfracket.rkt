@@ -174,6 +174,21 @@
          [(bigfloat? x) (%/ m (bigfloat->real x))]
          [else (error '/ (~a "number or bigfloat expected, got: " x))]))]))
 
+(provide numerator)
+(define (numerator x) ; this follows Maxima and MMA 
+  (if (number? x)
+      (if (or (inexact? x) (bigfloat? x))
+          x
+          (%numerator x))
+      (error 'numerator (~a "number or bigfloat expected, got: " x))))
+
+(provide denominator)
+(define (denominator x) ; this follows Maxima and MMA
+  (if (number? x)
+      (if (or (inexact? x) (bigfloat? x))
+          1
+          (%denominator x))
+      (error 'denominator (~a "number or bigfloat expected, got: " x))))
 
 
 

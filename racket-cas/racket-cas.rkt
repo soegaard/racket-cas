@@ -1,6 +1,9 @@
 #lang racket
 (provide (all-defined-out))
+(require (prefix-in % "bfracket.rkt"))
+
 ; Short term:
+;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
 ;   - documentation
 ;   - simplify: rewrite fractions with square roots in the denominator
 ;   - in-terms  ( in-terms/proc is done )
@@ -155,8 +158,8 @@
 
 (define (Positive? u)
   (and (math-match u
-         [r       (positive? r)]
-         [r.bf    (bfpositive? r.bf)]
+         [r.      (positive? r.)]
+         ; [r.bf    (bfpositive? r.bf)]
          [x       (member 'positive (get-assumptions x))]
          [(⊗ u v) (let ([pu (Positive? u)] [pv (Positive? v)])
                     (or (and pu pv) (and (not pu) (not pv))))]
@@ -624,12 +627,8 @@
   (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
 
 (define (denominator u)
-  (local-require (prefix-in racket: (only-in racket denominator)))
   (math-match u
-    [p    1]
-    [α (racket:denominator u)]
-    [r.0  1]
-    [r.bf (bf 1)]
+    [r (%denominator u)]
     [x 1]
     [(Expt u r) #:when (negative? r) (Expt u (- r))]
     [(Expt u r) #:when (positive? r) 1]
@@ -639,21 +638,17 @@
 
 (module+ test
   (check-equal? (denominator 2) 1)
-  (check-equal? (denominator 2.1) 1)
   (check-equal? (denominator 0.5) 1)
   (check-equal? (denominator 2/3) 3)
   (check-equal? (denominator y) 1)
-  (check-equal? (denominator (bf 1.2)) (bf 1)) ; xxx
+  (check-equal? (denominator (bf 1.2)) 1)
   (check-equal? (denominator (Sqrt x)) 1)
   (check-equal? (denominator (⊘ 2 x)) x)
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
 (define (numerator u)
-  (local-require (prefix-in racket: (only-in racket numerator)))
   (math-match u
-    [α (racket:numerator α)]
-    [r r]
-    [r.bf r.bf]
+    [r (%numerator u)]
     [x x]
     [(⊗ u v) (⊗ (numerator u) (numerator v))]
     [(⊕ v w) u]
