@@ -6,11 +6,13 @@
 (module+ test (require rackunit))
 
 (module predicates racket 
-  (provide exact-natural? @e? @pi? inexact-number? exact-number? bigfloat-number?)
+  (provide exact-natural? @e? @pi? inexact-number? exact-number? bigfloat-number? 
+           inexact-number-or-bigloat?)
   (require math/bigfloat)
   (define (exact-number? x)   (and (number? x) (exact? x)))
   (define (exact-natural? x)  (and (exact-number? x) (integer? x) (>= x 0)))
   (define (inexact-number? x) (and (number? x) (inexact? x)))
+  (define (inexact-number-or-bigloat? x) (or (and (number? x) (inexact? x)) (bigfloat? x)))
   (define (bigfloat-number? x) (bigfloat? x))
   (define (@e? u)  (eq? u '@e))   ; Euler's constant
   (define (@pi? u) (eq? u '@pi))) ; pi
@@ -30,11 +32,15 @@
   (define (make-ends-with-pred s)
     (λ (t) (regexp-match (~a s "$") t)))
   
+  (define (ends-with-dot? t)
+    (and (regexp-match "\\.$" t) (not (equal? t "..."))))
+  
   (define (make-is-pred s)
     (λ (t) (equal? s t)))
   
   (define conventions
-    (list (convention (make-ends-with-pred ".0")  #'inexact-number?)
+    (list (convention ends-with-dot?              #'inexact-number-or-bigloat?)
+          (convention (make-ends-with-pred ".0")  #'inexact-number?)
           (convention (make-ends-with-pred ".bf") #'bigfloat-number?)
           (convention (make-begins-with-pred "x") #'symbol?)
           (convention (make-begins-with-pred "y") #'symbol?)
