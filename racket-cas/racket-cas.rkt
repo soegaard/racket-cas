@@ -1717,7 +1717,8 @@
 (define output-use-quotients?         (make-parameter #t))
 (define output-format-sqrt            (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
 (define output-format-log             (make-parameter default-output-log))
-(define output-sub-exponent-parens    (make-parameter (list "(" ")")))
+(define output-sub-exponent-parens    (make-parameter (list "(" ")"))) ; for Tex it is { }
+(define output-sub-exponent-wrapper   (make-parameter values))         ; TeX needs extra {}
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -1727,7 +1728,8 @@
   (output-wrapper values)
   (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]")))
   (output-format-log default-output-log)
-  (output-sub-exponent-parens (list "(" ")")))
+  (output-sub-exponent-parens (list "(" ")"))
+  (output-sub-exponent-wrapper values))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
@@ -1737,7 +1739,8 @@
   (output-sub-exponent-parens (list "(" ")"))
   (output-wrapper values)
   (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")")))
-  (output-format-log default-output-log))
+  (output-format-log default-output-log)
+  (output-sub-exponent-wrapper values))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan asin acos atan log ln))
@@ -1760,7 +1763,8 @@
      (parameterize ([output-wrapper values])
        (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
              [else (~a "log(" (verbose~ u) ")")]))))
-  (output-sub-exponent-parens (list "{" "}")))
+  (output-sub-exponent-parens (list "{" "}"))
+  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}"))))
 
 (define (tex u)
   (define operators '(sin cos tan asin acos atan log ln))
@@ -1779,6 +1783,7 @@
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
                                              (~a "\\sqrt{" (verbose~ u) "}"))))
                  (output-sub-exponent-parens (list "{" "}"))
+                 (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
                  (output-format-log
                   (parameterize ([output-wrapper values])
                     (λ (u [v #f])
@@ -1830,22 +1835,25 @@
       (~a sub-left (v~ u) sub-right))    
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (~a expt-left (v~ u) expt-right))
-    (define (exponent-wrap s) (~a expt-left s expt-right))
+    (define (exponent-wrap s)
+      (~a expt-left s expt-right))
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       (math-match u
         [r    #:when (>= r 0)           (~a r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
         ; infix operators and relations
-        [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
+        [(⊗ u v)     (exponent-wrap (~a (par u) (~sym '*) (par v)))]
         [(⊕ _ __)    (paren u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
         [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) ((output-format-sqrt) u)]
-        [(Expt u p)   (~a (par u) (~sym '^) (exponent-wrap (par p #:use sub)))]
-        [(Expt u v)   (~a (par u) (~sym '^) (wrap v))]
+        [(Expt u p)   (~a (par u) (~sym '^) ((output-format-function-symbol)
+                                             (par p #:use exponent-sub)))]
+        [(Expt u v)   (~a (par u) (~sym '^) ((output-format-function-symbol)
+                                             (par v #:use exponent-sub)))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
         ; applications
@@ -1871,7 +1879,7 @@
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) ((output-format-sqrt) u)]
-      [(Expt u v)  (~a (par u) (~sym '^) (exponent-wrap (v~ v)))]
+      [(Expt u v)  (~a (par u) (~sym '^) ((output-sub-exponent-wrapper) (par v #:use exponent-sub)))]
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
