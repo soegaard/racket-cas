@@ -748,8 +748,7 @@
   (math-match u
     [1  0]
     ; [0  +nan.0] ; TODO: error?
-    [r.0   #:when (positive? r.0)    (log r.0)]
-    [r.bf  #:when (bfpositive? r.bf) (bflog r.bf)]
+    [r. #:when (%positive? r.)  (%ln r.)]
     [@e  1]
     [(Expt @e v) v]
     [_ `(ln ,u)]))
@@ -799,8 +798,8 @@
     [(2 r)  (fllog2 r)]
     [(r s)  #:when (and (positive? r) (positive? s)) (fllog10 r s)]
     
-    [(10   r.bf) #:when (bfpositive? r.bf)                          (bflog10 r.bf)]
-    [(2    r.bf) #:when (bfpositive? r.bf)                          (bflog2  r.bf)]
+    [(10   r.bf) #:when (bfpositive? r.bf) (bflog10 r.bf)]
+    [(2    r.bf) #:when (bfpositive? r.bf) (bflog2  r.bf)]
     [(r.bf s.bf) #:when (and (bfpositive? r.bf) (bfpositive? s.bf)) (bf/ (bflog r.bf) (bflog s.bf))]
     [(r    s.bf)  (Log: (bf r) s.bf)]
     [(r.bf s)     (Log: r.bf  (bf s))]
@@ -1236,7 +1235,7 @@
       [0 -inf.0]
       [u #:when (equal? u w) 1]
       [r 0]
-      [r.bf 0]
+      [r. 0]
       [x 0]
       [(⊕ u v) (max (e u) (e v))]
       [(⊗ u v) (+ (e u) (e v))]
@@ -1718,6 +1717,7 @@
 (define output-use-quotients?         (make-parameter #t))
 (define output-format-sqrt            (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
 (define output-format-log             (make-parameter default-output-log))
+(define output-sub-exponent-parens    (make-parameter (list "(" ")")))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -1726,13 +1726,15 @@
   (output-sub-expression-parens (list "(" ")"))
   (output-wrapper values)
   (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]")))
-  (output-format-log default-output-log))
+  (output-format-log default-output-log)
+  (output-sub-exponent-parens (list "(" ")")))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~a)
   (output-format-quotient #f)
   (output-sub-expression-parens (list "(" ")"))
+  (output-sub-exponent-parens (list "(" ")"))
   (output-wrapper values)
   (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")")))
   (output-format-log default-output-log))
@@ -1752,21 +1754,22 @@
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
   (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
-                              (~a "\\sqrt{" (verbose~ u) "}"))))
+                              (~a "\\sqrt{" (verbose~ u) "}"))))  
   (output-format-log 
    (λ (u [v #f])
      (parameterize ([output-wrapper values])
        (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
-             [else (~a "log(" (verbose~ u) ")")])))))
+             [else (~a "log(" (verbose~ u) ")")]))))
+  (output-sub-exponent-parens (list "{" "}")))
 
 (define (tex u)
   (define operators '(sin cos tan asin acos atan log ln))
-  (define (~symbol s) 
+  (define (~symbol s)
     (match s
-      [_ #:when (member s operators) (~a "\\" s)]
-      ['* "\\cdot "]
-      ['or "\\vee "]
-      ['and "\\wedge "]
+      [_ #:when (member s operators) (~a "\\" s)]      
+      ['*   "\\cdot "]   ; multiplication
+      ['or  "\\vee "]    ; logical or
+      ['and "\\wedge "]  ; logical and      
       [_  (~a s)]))
   (parameterize ((output-application-brackets (list "(" ")"))
                  (output-format-function-symbol ~symbol)
@@ -1775,6 +1778,7 @@
                  (output-wrapper (λ (s) (~a "$" s "$")))
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
                                              (~a "\\sqrt{" (verbose~ u) "}"))))
+                 (output-sub-exponent-parens (list "{" "}"))
                  (output-format-log
                   (parameterize ([output-wrapper values])
                     (λ (u [v #f])
@@ -1782,22 +1786,56 @@
                             [else (~a "log(" (verbose~ u) ")")])))))
     (verbose~ u)))
 
+(define char->tex
+  (let ()
+    (define dict
+      (hash
+       ; symbolic constants
+       'α "\\alpha"   'β "\\beta"    'γ "\\gamma"   'Γ "\\Gamma" 'δ "\\delta" 'Δ "\\Delta"
+       'ε "\\epsilon" 'ζ "\\zeta"    'η "\\eta"     'θ "\\theta" 'Θ "\\Theta" 'ι "\\iota"
+       'κ "\\kappa"   'λ "\\lambda"  'Λ "\\Lambda"  'μ "\\mu"    'ν "\\nu"    'ξ "\\xi"
+       'Ξ "\\Xi"      'π "\\pi"      'Π "\\Pi"      'ρ "\\rho"   'σ "\\sigma" 'Σ "\\Sigma"
+       'τ "\\Tau"     'υ "\\upsilon" 'Υ "\\Upsilon" 'φ "\\phi"   'Φ "\\Phi"   'χ "\\chi"
+       'ψ "\\psi"     'Ψ "\\Psi"     'ω "\\omega"   'Ω "\\Omega"))
+    (λ (c)
+      (define s (string->symbol (string c)))
+      (hash-ref dict s (string c)))))
+
+(define (string->tex s)
+  (define s1 (string-append* (map char->tex (string->list s))))
+  (if (equal? s s1) s s1))
+
+(define (symbol->tex s)
+  (define t (string->symbol (string->tex (symbol->string s))))
+  (match t
+    ['@e  "e"]         ; Euler's constant
+    ['@pi "\\pi"]      ; pi
+    ['@n  "@n"]        ; an arbitrary natural number
+    ['@p  "@p"]        ; an arbitrary integer
+    [_ t]))
+          
+
 ; ~ converts an expression into a string
 (define (verbose~ u)
-  (match-define (list app-left app-right) (output-application-brackets))
-  (match-define (list sub-left sub-right) (output-sub-expression-parens))
+  (match-define (list app-left  app-right)  (output-application-brackets))
+  (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
+  (match-define (list expt-left expt-right) (output-sub-exponent-parens))
   (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol))
+  (define ~var symbol->tex)
   (define (v~ u)
-    (define (sub u) ; always wrap in sub-left and sub-right parentheses
-      (~a sub-left (v~ u) sub-right))
     (define (paren u) ; always wrap in ( )
       (~a "(" (v~ u) ")"))
+    (define (sub u) ; always wrap in sub-left and sub-right parentheses
+      (~a sub-left (v~ u) sub-right))    
+    (define (exponent-sub u) ; wraps the exponent of an expt-expression
+      (~a expt-left (v~ u) expt-right))
+    (define (exponent-wrap s) (~a expt-left s expt-right))
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       (math-match u
         [r    #:when (>= r 0)           (~a r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
-        [x (~a x)]
+        [x                              (~a (~var x))]
         ; infix operators and relations
         [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
         [(⊕ _ __)    (paren u)]
@@ -1806,7 +1844,7 @@
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) ((output-format-sqrt) u)]
-        [(Expt u p)   (~a (par u) (~sym '^) (par p #:use sub))]
+        [(Expt u p)   (~a (par u) (~sym '^) (exponent-wrap (par p #:use sub)))]
         [(Expt u v)   (~a (par u) (~sym '^) (wrap v))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
@@ -1819,21 +1857,21 @@
     (math-match u
       [r           (~a r)]
       [r.bf        (bigfloat->string r.bf)]
-      [x           (~a x)]
+      [x           (~a (~var x))]
       [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
                       (define format/ 
                         (or (output-format-quotient)
                             (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use sub) (par v #:use sub))]
       [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
-      [(⊕ u v)     (~a (v~ u) (~sym '+) (v~ v))]
+      [(⊕ u v)     (~a (v~ u)  (~sym '+) (v~ v))]
       [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
       [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
       [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) ((output-format-sqrt) u)]
-      [(Expt u v)  (~a (par u) (~sym '^) (par v #:use sub))]
+      [(Expt u v)  (~a (par u) (~sym '^) (exponent-wrap (v~ v)))]
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
@@ -1925,6 +1963,11 @@
   (syntax-case stx () 
     [_ (with-syntax ([req (datum->syntax stx 'require)])
          (syntax/loc stx (req (submod "." start))))]))
+
+(require racket-poppler/render-tex pict)
+(define (render u)
+  (pict->bitmap (scale (latex->pict (tex u)) 4)))
+
 
 ;;; Example from the REPL.
 
