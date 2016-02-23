@@ -16,6 +16,12 @@ will simplify all quoted and quasi-quoted expressions.
     > '(+ x 2 a 3 (* 4 x))
     '(+ 5 a (* 5 x))
 
+TeX output is also available;
+    > (tex (expand '(expt (+ a b) 2)))
+
+This can also be rendered at the REPL:
+    > (render (expand '(expt (+ a b) 2)))
+
 The Taylor series of sin(x) around x=2 of degree 3:
     > (taylor '(sin x) x 2 3)
     '(+ (* -1/2 (expt (+ -2 x) 2) (sin 2)) (* -1/6 (expt (+ -2 x) 3)
