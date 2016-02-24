@@ -76,7 +76,7 @@
 (define-match-expander Integer 
   (λ (stx) (syntax-parse stx [(_ u)  #'(or (? number? (and (? integer? u)))
                                            (and (quote @n) (bind: u '@n))
-                                           (and (quote @p) (bind: u '@n)))])))
+                                           (and (quote @p) (bind: u '@p)))])))
 (module+ test 
   (check-equal? (match 41 [(Integer x) x]) 41)
   (check-equal? (match '@n [(Integer x) x]) '@n)
@@ -1801,7 +1801,7 @@
        'κ "\\kappa"   'λ "\\lambda"  'Λ "\\Lambda"  'μ "\\mu"    'ν "\\nu"    'ξ "\\xi"
        'Ξ "\\Xi"      'π "\\pi"      'Π "\\Pi"      'ρ "\\rho"   'σ "\\sigma" 'Σ "\\Sigma"
        'τ "\\Tau"     'υ "\\upsilon" 'Υ "\\Upsilon" 'φ "\\phi"   'Φ "\\Phi"   'χ "\\chi"
-       'ψ "\\psi"     'Ψ "\\Psi"     'ω "\\omega"   'Ω "\\Omega"))
+       'ψ "\\psi"     'Ψ "\\Psi"     'ω "\\omega"   'Ω "\\Omega" ))
     (λ (c)
       (define s (string->symbol (string c)))
       (hash-ref dict s (string c)))))
@@ -1996,3 +1996,5 @@
 ;'(expt (+ x y) 3)
 ;> (expand '(expt (+ x y) 2))
 ;'(+ (expt x 2) (expt y 2) (* 2 x y))
+;> (render '(+ x 1))
+; ...
