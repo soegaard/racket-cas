@@ -8,10 +8,19 @@ Here is a short example. Open racket-cas.rkt in DrRacket and run it.
 
 To begin write:
     > (require racket-cas/repl)
+note: if that fails use
+    > (require (submod "." start))
+    
 This changes the meaning of quote such that automatic simplifier
 will simplify all quoted and quasi-quoted expressions.
     > '(+ x 2 a 3 (* 4 x))
     '(+ 5 a (* 5 x))
+
+TeX output is also available;
+    > (tex (expand '(expt (+ a b) 2)))
+
+This can also be rendered at the REPL:
+    > (render (expand '(expt (+ a b) 2)))
 
 The Taylor series of sin(x) around x=2 of degree 3:
     > (taylor '(sin x) x 2 3)
