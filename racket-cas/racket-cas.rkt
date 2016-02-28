@@ -149,6 +149,7 @@
 
 #|
 ;;; ASSUMPTIONS
+; This idea has been postponed.
 (define assumptions (make-hash))
 (define (get-assumptions var)     (hash-ref assumptions var '()))
 (define (add-assumption! var tag) (hash-set! assumptions var (cons tag (get-assumptions tag))))
@@ -587,6 +588,7 @@
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2))))
 
 (define (simplify u)
+  ; TODO: rewrite fractions with square roots in the denominator
   (define s simplify)
   (math-match u
     [(Expt n 1/2) (Expt n 1/2)]
@@ -668,6 +670,7 @@
   (check-equal? (numerator (⊘ x y)) x))
 
 (define (together u)
+  ; add terms - give the result a single denominator
   ; todo : this doesn't handle sums with more than two terms
   (math-match u
     [(⊕ (⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
@@ -735,7 +738,7 @@
 (module+ test
   (check-equal? (Expt 2 3) 8)
   (check-equal? (Expt -1 2) 1)
-  (check-equal? (bf-N '(expt (expt 5 1/2) 2)) (bf 5)))
+  (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
 (define (Sqr: u)
   (Expt u 2))
@@ -751,6 +754,7 @@
     [r. #:when (%positive? r.)  (%ln r.)]
     [@e  1]
     [(Expt @e v) v]
+    [(⊗ u v)  (⊕ (Ln: u) (Ln: v))]
     [_ `(ln ,u)]))
 
 (define-match-expander Ln
@@ -766,7 +770,8 @@
   (check-true   (bf<  (bfabs (bf- (bflog (bfexp (bf 1))) (bf 1)))  (bfexpt (bf 10) (bf -30))))
   (check-equal? (Ln (Exp x)) x)
   (check-equal? (Ln (Expt (Exp x) 2)) '(* 2 x))
-  (check-equal? (Ln (Expt x 3)) '(ln (expt x 3))))
+  (check-equal? (Ln (Expt x 3)) '(ln (expt x 3)))
+  (check-equal? (Ln (⊗ 7 x (Expt y 3))) '(+ (ln 7) (ln x) (ln (expt y 3)))))
 
 
 (define (fllog10 u [v #f])
@@ -982,7 +987,7 @@
   (check-equal? (diff (Cos (⊗ x x)) x) (⊗ (⊖ (Sin (⊗ x x))) 2 x))
   (check-equal? (diff (Sin x) x) (Cos x))
   (check-equal? (diff (Sin (⊗ x x)) x) (⊗ 2 (Cos (Expt x 2)) x))
-  ; TODO: ASE should rewrit the result to (* '(expt x x) (+ 1 (ln x)))
+  ; TODO: ASE should rewrite the result to (* '(expt x x) (+ 1 (ln x)))
   (check-equal? (diff (Expt x x) x) '(* (expt @e (* x (ln x))) (+ 1 (ln x))))
   )
 
@@ -1037,7 +1042,7 @@
 
 ;;; Substition
 
-(define (subst u v w) ; substitue w for v in u
+(define (subst u v w) ; substitute w for v in u
   (define (s u)
     (math-match u
       [u #:when (equal? u v) w]
@@ -1053,6 +1058,7 @@
   (check-equal? (let () (define (f x) '(expt (+ x 1) 3)) (subst (f x) x 1)) 8))
 
 (define (subst* u vs ws)
+  ; in u substitute each expression in vs with the corresponding expression in ws
   (for/fold ([u u]) ([v vs] [w ws])
     (subst u v w)))
 
@@ -1128,8 +1134,9 @@
     (N u)))
 
 
-
 (define (taylor u x a n)
+  ; Compute the first n+1 terms of the Taylor series of u
+  ; wrt x around x=a. I.e. (taylor ... n) has degree n.
   (define (fact n) (if (<= n 0) 1 (* n (fact (- n 1)))))
   (define (terms u i)
     (cond [(> i n) 0]
