@@ -883,6 +883,7 @@
     [0 0]
     [r.0 (sin r.0)]
     [@pi 0]
+    [(⊗ 1/3 @pi) (⊘ (Sqrt 3) 2)]
     [(⊗ (Integer _) @pi) 0]
     [(⊗ α     u) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) u)))]
     [(⊗ α   @pi) #:when (integer? (* 2 α)) (if (= (remainder (* 2 α) 4) 1) 1 -1)]
@@ -895,8 +896,11 @@
     [(⊕ (⊗ p (Integer v) @pi) u) #:when (Even? p) (Sin: u)]
     [(⊕ u (⊗ p (Integer v) @pi)) #:when (Odd? p) (⊖ (Sin: u))]
     [(⊕ (⊗ p (Integer v) @pi) u) #:when (Odd? p) (⊖ (Sin: u))]
-    #;[(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
-                 (⊗ 'sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi))))))] ; xxx find sign
+    [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
+               (let* ([θ      (* 2 α pi)]
+                      [sign.0 (sgn (+ (- (* 2 pi) θ) (* 4 pi (floor (/ θ (* 4 pi))))))]
+                      [sign   (if (> sign.0 0) 1 -1)])
+                 (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
     [_ `(sin ,u)]))
 
