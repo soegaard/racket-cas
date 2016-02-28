@@ -728,7 +728,8 @@
     [(r s.0)        (expt r s.0)]
     [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
     [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
-    [(Exp (Ln v))   v]    
+    [(u (Log u v))  v]                         ; xxx - is this only true for u real?
+    [(Exp (Ln v))   v]
     [(_ _)          `(expt ,u ,v)]))
 
 (define-match-expander Expt
@@ -802,7 +803,7 @@
     [(n m) `(log ,n ,m)]
     [(2 r)  (fllog2 r)]
     [(r s)  #:when (and (positive? r) (positive? s)) (fllog10 r s)]
-    
+
     [(10   r.bf) #:when (bfpositive? r.bf) (bflog10 r.bf)]
     [(2    r.bf) #:when (bfpositive? r.bf) (bflog2  r.bf)]
     [(r.bf s.bf) #:when (and (bfpositive? r.bf) (bfpositive? s.bf)) (bf/ (bflog r.bf) (bflog s.bf))]
@@ -811,6 +812,8 @@
     
     [(u u)          1]
     [(u (Expt u v)) v]
+
+    [(10 (⊗ u v))   (⊕ (Log: 10 u) (Log: 10 v))]
     
     ; [(n r.0) (log10 n r.0)]
     [(_ _)          `(log ,u ,v)]))
