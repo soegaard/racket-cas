@@ -106,6 +106,31 @@ Distribute applies the law to all sub expressions.
 @interaction[#:eval cas-eval
   (distribute '(+  (* 2 (+ a b))  (* (+ a b) 3)  (sin (* 4 (+ a b)))))]
 
+@defproc[(ln [u symbolic-expression]) symbolic-expression]{
+Return the natural logarithm of the expression @racket[u].
+The natural logarithm uses Euler's number @emph{e} as the base.
+                                                           
+@interaction[#:eval cas-eval
+             (normalize '(ln \@e))
+             (normalize '(ln (expt \@e 2)))
+             (normalize '(ln (* x (expt \@e 2))))]
+ }
+
+@defproc*[ ([(log                         [u symbolic-expression]) symbolic-expression]
+           [(log [v symbolic-expression] [u symbolic-expression]) symbolic-expression])]{
+The logarithm of the expression @racket[u]. The expression @racket[v] if present is used
+as the base. If the optional base is omitted, base 10 is assumed.
+
+@interaction[#:eval cas-eval
+             (normalize '(log 100))
+             (normalize '(log (expt 10 x)))
+             (normalize '(expt 10 (log x)))
+             (normalize '(log 2 8))
+             (normalize '(log (* (expt 10 3) z)))]
+ }
+
+           
+
 @defproc[(N [u symbolic-expression]) symbolic-expression]{
 Evaluate the expression @racket[u] numerically. Use standard Racket reals
 (i.e. double precision IEEE floating point numbers) to compute the value of the expression.
@@ -146,6 +171,13 @@ Note that @racket[x] need not be a variable, it can be an arbitrary expression.
                     (polynomial? (normalize '(+ (sin x) (expt (sin x) 3))) x)
                     (polynomial? (normalize '(+ (sin x) (expt (sin x) 3))) '(sin x))]
 }
+
+@defproc[(sqr [u symbolic-expression]) symbolic-expression]{
+Compute the square of the expression @racket[u].
+@interaction[#:eval cas-eval
+             (normalize '(sqr 3))
+             (normalize '(sqr (+ x 1)))]
+ }
 
 @defproc[(taylor [u symbolic-expression] [x symbol] [a number] [n natural]) symbolic-expression]{
 Compute the @racket[n]'th degree Taylor polynomial of the expression @racket[u] with respect
