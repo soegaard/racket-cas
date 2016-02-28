@@ -834,14 +834,16 @@
 (define (Cos: u)
   (math-match u
     [0 1]
-    ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [r.0 (cos r.0)]
+    ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [@pi -1]
+    [(⊗ 1/3 @pi) 1/2] 
     [(⊗ α u)   #:when (negative? α)      (Cos: (⊗ (- α) u))]  ; cos is even
     [(⊗ n @pi)                           (if (even? n) 1 -1)]    
     [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
-    #;[(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
-                 (⊗ 'sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi))))))] ; xxx find sign
+    [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
+               (let ([sign (expt -1 (floor (/ (+ α 1) 2)))])
+                 (⊗ sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx test sign
     [(⊗ p (Integer _) @pi) #:when (even? p) 1]
     
     [(⊕ u (k⊗ p @pi)) #:when (odd? p)  (⊖ (Cos: u))]
