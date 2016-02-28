@@ -96,6 +96,7 @@ module:
 
 
 
+
 @section[#:tag "racket-cas:ref"]{Function Reference}
 
 @defproc[(distribute [u symbolic-expression]) symbolic-expression]{
@@ -104,6 +105,27 @@ Distribute applies the law to all sub expressions.
 }
 @interaction[#:eval cas-eval
   (distribute '(+  (* 2 (+ a b))  (* (+ a b) 3)  (sin (* 4 (+ a b)))))]
+
+@defproc[(N [u symbolic-expression]) symbolic-expression]{
+Evaluate the expression @racket[u] numerically. Use standard Racket reals
+(i.e. double precision IEEE floating point numbers) to compute the value of the expression.
+@interaction[#:eval cas-eval
+             (N '(/ 2 3))
+             (N '\@pi)
+             (N (subst '(expt (+ x 1) 5) x \@pi))]
+}
+
+@defproc[(bf-N [u symbolic-expression] [prec #f]) symbolic-expression]{
+Like @racket[N] but use Racket big floats. If the optional argument @racket[prec]
+is present, the computation will be done with bigfloat precision @racket[prec].
+If omitted the precision will use the value of @racket[bf-precision] as the precision.
+Note: The bigfloat precision is (roughly) the number of bits used in the bigfloat representation.
+
+@interaction[#:eval cas-eval
+             (bf-N '\@pi 5)
+             (bf-N '\@pi 100)]             
+}
+
 
 @defproc[(normalize [u symbolic-expression]) ase]{
 Returns a normalized version of the symbolic expression @racket[u].
@@ -116,10 +138,20 @@ the expression @racket[u] and returns an expression in ASE form.
 @defproc[(polynomial [u symbolic-expression] [x symbolic-expression]) boolean]{
 Returns @racket[#t] if @racket[u] is a polynomial in @racket[x].
 Note that @racket[x] need not be a variable, it can be an arbitrary expression.
-}
+
 @interaction[#:eval cas-eval
                     (polynomial? (normalize '(+ (* 3 x x) (* 7 x) -2)) x)
                     (polynomial? (normalize '(/ x a)) x)
                     (polynomial? (normalize '(/ x a)) 'a)
                     (polynomial? (normalize '(+ (sin x) (expt (sin x) 3))) x)
                     (polynomial? (normalize '(+ (sin x) (expt (sin x) 3))) '(sin x))]
+}
+
+@defproc[(taylor [u symbolic-expression] [x symbol] [a number] [n natural]) symbolic-expression]{
+Compute the @racket[n]'th degree Taylor polynomial of the expression @racket[u] with respect
+to the variable @racket[x] around @tt{x=a}.
+@interaction[#:eval cas-eval
+             (taylor (normalize '(expt \@e x)) 'x 0 3)
+             (taylor (normalize '(/ (expt t 2) (+ t 1))) 't 0 5)]
+}
+
