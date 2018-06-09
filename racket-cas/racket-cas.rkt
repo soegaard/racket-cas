@@ -3,6 +3,7 @@
 (require (prefix-in % "bfracket.rkt"))
 
 ; Short term:
+;   - fix: (App (Compose Expt Sin) 0)
 ;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
 ;   - documentation
 ;   - simplify: rewrite fractions with square roots in the denominator
@@ -1576,7 +1577,7 @@
 (module+ test 
   (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3))))
 
-
+; Tuples (aka column vectors)
 (define-match-expander Up
   (λ (stx) (syntax-parse stx [(_ u ...) #'(list 'up u ...)]))
   (λ (stx) (syntax-parse stx [(_ u ...) #'(Up:      u ...)] [_ (identifier? stx) #'Up:])))
@@ -1587,6 +1588,33 @@
 (module+ test
   (check-equal? (Up 2 3) '(up 2 3)))
 
+; Tuple indices are zero based
+(define-match-expander Ref
+  (λ (stx) (syntax-parse stx [(_ u i) #'(list 'ref u i)]))
+  (λ (stx) (syntax-parse stx [(_ u i) #'(Ref:      u i)] [_ (identifier? stx) #'Ref:])))
+
+(define (Ref: u i)
+  (cond
+    [(natural? i) (match u
+                    [(Up us ...) (if (< i (length us)) (list-ref us i) `(ref ,u ,i))])]
+    [else `(ref ,u ,i)]))
+
+(module+ test
+  (check-equal? (Ref (Up 2 3) 0) 2)
+  (check-equal? (Ref (Up 2 3) 1) 3))
+
+; Tuple indices are zero based
+(define-match-expander Compose
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'compose u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Compose:      u v)] [_ (identifier? stx) #'Compose:])))
+
+(define (Compose: u v)
+  `(compose ,u ,v))
+
+(module+ test
+  (check-equal? (Compose 'f 'g) '(compose f g)))
+
+
 ; Application
 (define-match-expander App
   (λ (stx) (syntax-parse stx [(_ u ...) #'(list 'app u ...)]))
@@ -1595,6 +1623,9 @@
 (define (App: u . us)
   (match u
     [(list 'up coords ...) `(up ,@(for/list ([coord coords]) (apply App: coord us)))]
+    [(list 'compose u v)   (match us
+                             [(list w) (App u (App v w))]
+                             [_        `(app ,u ,@us)])]                              
     [_                     `(app ,u ,@us)]))
 
 
