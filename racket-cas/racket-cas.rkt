@@ -14,6 +14,10 @@
 ;   - split expand into expand-one and expand (-all)
 ;   - finish toghether
 ;   - examine automatic simplification of output of (diff '(expt x x) x)
+;   - (Sqrt -3) currently returns (expt -3 1/2)
+;     what is the correct error?
+;   - (expt -8 1/3) does not return -2. Instead the principal value is returned.
+;     NSpire for one returns -2. What is the best approach?
 ; Ideas:
 ;   - implement bfracket where big floats are numbers
 ;   - add arctan
@@ -1572,6 +1576,28 @@
 (module+ test 
   (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3))))
 
+
+(define-match-expander Up
+  (λ (stx) (syntax-parse stx [(_ u ...) #'(list 'up u ...)]))
+  (λ (stx) (syntax-parse stx [(_ u ...) #'(Up:      u ...)] [_ (identifier? stx) #'Up:])))
+
+(define (Up: . us)  
+  `(up ,@us))
+
+(module+ test
+  (check-equal? (Up 2 3) '(up 2 3)))
+
+; Application
+(define-match-expander App
+  (λ (stx) (syntax-parse stx [(_ u ...) #'(list 'app u ...)]))
+  (λ (stx) (syntax-parse stx [(_ u ...) #'(App:      u ...)] [_ (identifier? stx) #'App:])))
+
+(define (App: u . us)
+  (match u
+    [(list 'up coords ...) `(up ,@(for/list ([coord coords]) (apply App: coord us)))]
+    [_                     `(app ,u ,@us)]))
+
+
 #;(define (Positive?: u)
     (math-match u
       [r      (positive? r)]
@@ -1595,7 +1621,22 @@
           [(Equal (Expt @e u) s) #:when (> s 0)        (r (Equal u (Ln s)))]
           [(Equal (Expt @e u) s) (return #f)]
           [(Equal (Expt @e u) v) (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
-          [(Equal (Expt u n) v)  #:when (odd? n)  (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u n) v)  #:when (odd? n)   (r (Equal u (Expt v (⊘ 1 n))))]
+          [(Equal (Expt u n) α)  #:when (and (even? n) (< α 0)) #f]
+          [(Equal (Expt u n) α)  #:when (and (even? n) (= α 0))
+                                 (cond [(> n 0) (r (Equal u 0))]
+                                       [(< n 0) #f]
+                                       [(= n 0) #f])] ; NSpire signals warning due to 0^0
+          [(Equal (Expt u n) α)  #:when (and (even? n) (> n 2) (> α 0))
+                                 (let ([n/2 (/ n 2)] [sqrt-α (Sqrt α)] [u^n/2 (Expt u (/ n 2))])
+                                   (cond [(even? n/2)      (solve (Equal u^n/2    sqrt-α) x)]
+                                         [else (return (Or (solve (Equal u^n/2 (⊖ sqrt-α)) x)
+                                                           (solve (Equal u^n/2    sqrt-α)  x)))]))]
+          [(Equal (Expt u n) v)  #:when (and (even? n) (> n 2))
+                                 (let ([n/2 (/ n 2)] [sqrt-v (Sqrt v)] [u^n/2 (Expt u (/ n 2))])
+                                   (cond [(even? n/2)      (solve (Equal u^n/2    sqrt-v) x)]
+                                         [else (return (Or (solve (Equal u^n/2 (⊖ sqrt-v)) x)
+                                                           (solve (Equal u^n/2    sqrt-v)  x)))]))]
           [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
           [(Equal (Expt u α) v)  #:when (= (numerator α) 1)           (r (Equal u (Expt v (⊘ 1 α))))]
           [(Equal (Expt n u) m)  #:when (and (free-of n x) (free-of m x)) (r (Equal u (Log n m)))]
