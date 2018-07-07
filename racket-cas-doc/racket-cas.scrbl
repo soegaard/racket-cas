@@ -17,7 +17,7 @@ working with symbolic expressions.
 
 @section[#:tag "racket-cas:installation"]{Installation}
 
-Clone the racket-cas repository from Github:
+Clone the racket-cas repository from GitHub:
 
 @tt{git clone https://github.com/soegaard/racket-cas.git}
 
@@ -26,8 +26,16 @@ Open DrRacket and paste the path to racket-cas into the
 
 @section[#:tag "racket-cas:introduction"]{Introduction}
 RacketCAS is a computer algebra system written in Racket.
-The system allows you to manipulate and compute with symbolic expressions.
-The representation of symbolic expressions were chosen to be very simple:
+
+The system allows you to manipulate and compute with
+symbolic expressions from your own programs.
+
+Symbolic expresions are represented as plain s-expressions
+and the names of mathematical operations are the same as in Racket.
+An expression like @tt[3x+x^4] is thus represented as @racket[(+ (* 3 x) (expt x 4))],
+where @racket[+] and @racket[expt] are symbols.
+
+More formally the representation is defined as follows.
 
 @verbatim|{
 A SYMBOLIC EXPRESSION is :
@@ -40,16 +48,14 @@ Expressions of the form (<var> <sym> ...) will be called applications.
 
 The following symbols have special meanings:
 
-    @e   Euler's constant
-    @pi  pi
+    @e   Euler's constant (2.71828...)
+    @pi  pi               (3.14159...)
     @n   stands for an arbitrary natural number
     @p   stands for an arbitrary integer
 
 The symbols @e and @pi are recognized in input.
 The symbols @n and @p can occur in output.
-  }|
-
-The representation was chosen to make it easy to use RacketCAS as a library.
+}|
 
 A few examples:
 
@@ -70,8 +76,7 @@ As a simple example consider the mathematical expression @tt{y-x}.
 Some of the possibilities: @racket[(- y x)], @racket[(+ y (* -1 x))], and, @racket[(+ (* -1 x) y)].
 
 In a CAS it is important to have an unique way of representing an expression.
-For one comparing two symbolic expressions for equality is greatly simplified
-when an unique representation is used.
+For one comparing two symbolic expressions for equality is greatly simplified.
 
 The canonical representation of an expression is called a @emph{normal form}.
 The process of rewriting an expression into its normal form is called @emph{normalization}.
@@ -93,11 +98,48 @@ module:
   (require (submod racket-cas/racket-cas start))
   '(- y x)]
 
+The implementation of RacketCAS (see @racket["racket-cas.rkt"]) uses the convention
+that functions whose names begin with an upper-case letter expects an automatically
+simplified expression and outputs an automatically simplified expression. 
+
+Example: The function @racket[sqrt] is the standard Racket square root function
+and expects a numbers as an input. The function @racket[Sqrt] will given an
+automatically simplified expression @racket[u] output an automatically simplified
+expression representing @racket[sqrt(u)].
+
+@interaction[#:eval cas-eval                    
+  (sqrt 64)
+  (Sqrt 64)
+  (Sqrt 'x)
+  (Sqrt (Sqrt 'x))]
+
+Some functions such as @racket[+], @racket[-], @racket[*], and, @racket[/] are "capitalized"
+as @racket[⊗], @racket[⊖], @racket[⊗], and, @racket[⊘].
+
+
+
+
 
 
 
 
 @section[#:tag "racket-cas:ref"]{Function Reference}
+
+@defproc[(cos [u symbolic-expression]) symbolic-expression]{
+Cosine of @racket[u].
+ 
+                                                            
+@interaction[#:eval cas-eval
+             (Cos 0)
+             (Cos \@pi)
+             (Cos (⊗ 2 \@pi))
+             (Cos 0.5)
+             (for/list ([n 8]) (Cos (⊗ n 1/2 \@pi)))
+             (Cos (⊖ x))
+             (Cos (⊕ x (⊗ 2 \@pi)))
+             (Cos (⊗ 1/6 \@pi))]
+ }
+
 
 @defproc[(distribute [u symbolic-expression]) symbolic-expression]{
 Apply the distributive law to the symbolic expression @racket[u].

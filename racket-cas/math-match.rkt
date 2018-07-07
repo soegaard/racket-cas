@@ -113,7 +113,7 @@
   
   (define-syntax (math-match* stx)
     (syntax-case stx ()
-      [(_ (val-expr ...) [pats . more] ...)       
+      [(_ (val-expr ...) [pats . more] ...)
        (with-syntax ([((new-pat ...) ...) 
                       (for/list ([ps (in-list (syntax->list #'(pats ...)))])
                         (for/list ([pat (in-list (syntax->list ps))])
