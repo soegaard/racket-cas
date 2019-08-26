@@ -1964,6 +1964,13 @@
                        (define head ((output-format-function-symbol) f))
                        (~a head app-left arguments app-right))]
         [_  (wrap u)]))
+    (define (t1~ u) ; term 1 aka first term in a sum
+      (math-match u
+                  [(⊗ -1 u)                       (~a (~sym '-)         (v~ u))]
+                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (abs r) (v~ u))]
+                  [(⊗  r u) #:when (positive? r)  (~a           (abs r) (v~ u))]
+                  [u                                                    (v~ u) ]))
+             
     (math-match u
       [r           (~a r)]
       [r.bf        (bigfloat->string r.bf)]
@@ -1980,24 +1987,24 @@
       [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
       ; plus
       ;   two terms where second term is constant multiplication
-      [(⊕ u (⊗ -1 v))       (~a (v~ u)  (~sym '-) (v~ v))]                
+      [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]                
       [(⊕ u (⊗  r v))       #:when (negative? r)
-                            (~a (v~ u)  (~sym '-) (abs r) (v~ v))]
+                            (~a (t1~ u)  (~sym '-) (abs r) (v~ v))]
       [(⊕ u (⊗  r v))       #:when (positive? r)
-                            (~a (v~ u)  (~sym '+) (abs r) (v~ v))]
+                            (~a (t1~ u)  (~sym '+) (abs r) (v~ v))]
       ;   with more than two terms where second term is contant multiplication
-      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (v~ u)  (~sym '-) (v~ (argcons '+ v w)))] 
+      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))] 
       [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r)
-                            (~a (v~ u)  (~sym '-) (abs r) (v~ (argcons '+ v w)))]
+                            (~a (t1~ u)  (~sym '-) (abs r) (v~ (argcons '+ v w)))]
       [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)
-                            (~a (v~ u)  (~sym '+) (abs r) (v~ (argcons '+ v w)))]
-      ;   otherwise
-      [(⊕ u v)              (~a (v~ u)  (~sym '+) (v~ v))]
+                            (~a (t1~ u)  (~sym '+) (abs r) (v~ (argcons '+ v w)))]
+      ;   otherwise      
+      [(⊕ u v)              (~a (t1~ u)  (~sym '+) (v~ v))]
       
       ; other
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
-      [(Equal u v)          (~a (par u) " " (~sym '=)   " " (par v))]
+      [(Equal u v)          (~a (v~ u)  " " (~sym '=)   " " (v~ v))] ; xxx
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) ((output-format-sqrt) u)]
@@ -2104,10 +2111,10 @@
     [_ (with-syntax ([req (datum->syntax stx 'require)])
          (syntax/loc stx (req (submod "." start))))]))
 
-(require latex-pict pict)
-(define (render u)
-  (define (strip$ x) (substring x 1 (- (string-length x) 1)))
-  (pict->bitmap (scale (tex-math (strip$ (tex u))) 2)))
+;(require latex-pict pict)
+;(define (render u)
+;  (define (strip$ x) (substring x 1 (- (string-length x) 1)))
+;  (pict->bitmap (scale (tex-math (strip$ (tex u))) 2)))
 
 
 ;;; Example from the REPL.
