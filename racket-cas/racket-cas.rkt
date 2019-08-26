@@ -1930,7 +1930,6 @@
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (~a expt-left (v~ u) expt-right))
     (define (quotient-sub u) ; wraps numerator and denominator of quotient
-      (displayln (list 'quot-sub u))
       (~a quot-left (v~ u) quot-right))
     (define (exponent-wrap s)
       (~a expt-left s expt-right))    
@@ -1976,16 +1975,21 @@
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
       [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
-                      (displayln (list 'verbose~ 'quotient u v))
                       (define format/ 
                         (or (output-format-quotient)
                             (λ (u v) (~a u "/" v))))
-                      (displayln format/)
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       ; mult
-      [(⊗ -1 v)             (~a "-" (v~ v))]
+      [(⊗ -1 v)                                   (~a "-"         (v~ v))]
+      [(⊗ r v)              #:when (negative? r)  (~a "-" (abs r) (v~ v))]
+      [(⊗ r v)              #:when (positive? r)  (~a     (abs r) (v~ v))]
+      
       [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
       ; plus
+      ;    two terms
+      [(⊕ u r)              (if (negative? r)
+                                (~a (t1~ u)  (~sym '-) (abs r))
+                                (~a (t1~ u)  (~sym '+) (abs r)))]
       ;   two terms where second term is constant multiplication
       [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]                
       [(⊕ u (⊗  r v))       #:when (negative? r)
@@ -2042,6 +2046,7 @@
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "x/(1-y^2)")
   (use-tex-output-style)
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "$\\frac{x}{1-y^{2}}$")
+  (check-equal? (~ '(* -8 x )) "$-8x$")
   )
   
 
