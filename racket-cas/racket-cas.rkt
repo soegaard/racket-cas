@@ -1797,21 +1797,23 @@
   (cond [v    (~a "log_" (verbose~ u) l (verbose~ v) r)]
         [else (~a "log" l (verbose~ u) r)]))
 
-(define output-application-brackets   (make-parameter (list "(" ")")))
-(define output-format-function-symbol (make-parameter ~a))
-(define output-format-quotient        (make-parameter #f)) ; #f means default u/v
-(define output-sub-expression-parens  (make-parameter (list "(" ")")))
-(define output-wrapper                (make-parameter values))
-(define output-use-quotients?         (make-parameter #t))
-(define output-format-sqrt            (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
-(define output-format-log             (make-parameter default-output-log))
-(define output-sub-exponent-parens    (make-parameter (list "(" ")"))) ; for Tex it is { }
-(define output-sub-exponent-wrapper   (make-parameter values))         ; TeX needs extra {}
+(define output-application-brackets    (make-parameter (list "(" ")")))
+(define output-format-function-symbol  (make-parameter ~a))
+(define output-format-quotient         (make-parameter #f)) ; #f means default u/v
+(define output-format-quotient-parens  (make-parameter (list "(" ")"))) 
+(define output-sub-expression-parens   (make-parameter (list "(" ")")))
+(define output-wrapper                 (make-parameter values))
+(define output-use-quotients?          (make-parameter #t))
+(define output-format-sqrt             (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
+(define output-format-log              (make-parameter default-output-log))
+(define output-sub-exponent-parens     (make-parameter (list "(" ")"))) ; for Tex it is { }
+(define output-sub-exponent-wrapper    (make-parameter values))         ; TeX needs extra {}
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
   (output-format-quotient #f)
+  (output-format-quotient-parens (list "(" ")"))
   (output-sub-expression-parens (list "(" ")"))
   (output-wrapper values)
   (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]")))
@@ -1823,6 +1825,7 @@
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~a)
   (output-format-quotient #f)
+  (output-format-quotient-parens (list "(" ")"))
   (output-sub-expression-parens (list "(" ")"))
   (output-sub-exponent-parens (list "(" ")"))
   (output-wrapper values)
@@ -1842,6 +1845,7 @@
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~symbol)
   (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
+  (output-format-quotient-parens (list "" "")) ; not needed due to {} from \frac
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
   (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
@@ -1866,6 +1870,7 @@
   (parameterize ((output-application-brackets (list "(" ")"))
                  (output-format-function-symbol ~symbol)
                  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
+                 (output-format-quotient-parens (list "" ""))
                  (output-sub-expression-parens (list "{" "}"))
                  (output-wrapper (λ (s) (~a "$" s "$")))
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
@@ -1913,6 +1918,7 @@
   (match-define (list app-left  app-right)  (output-application-brackets))
   (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
+  (match-define (list quot-left quot-right) (output-format-quotient-parens))
   (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol))
   (define ~var symbol->tex)
@@ -1923,8 +1929,15 @@
       (~a sub-left (v~ u) sub-right))    
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (~a expt-left (v~ u) expt-right))
+    (define (quotient-sub u) ; wraps numerator and denominator of quotient
+      (displayln (list 'quot-sub u))
+      (~a quot-left (v~ u) quot-right))
     (define (exponent-wrap s)
-      (~a expt-left s expt-right))
+      (~a expt-left s expt-right))    
+    (define (argcons op x xs)
+      (match xs
+        [(list* (== op) args) (list* op x args)]
+        [args                 (list* op x (list args))]))
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       (math-match u
         [r    #:when (>= r 0)           (~a r)]
@@ -1932,7 +1945,7 @@
         [x                              (~a (~var x))]
         ; infix operators and relations
         [(⊗ u v)     (exponent-wrap (~a (par u) (~sym '*) (par v)))]
-        [(⊕ _ __)    (paren u)]
+        [(⊕ _ __)    (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
         [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
@@ -1946,7 +1959,8 @@
         [(Log u v)    ((output-format-log) u v)]
         ; applications
         [(app: f us) (let ()
-                       (define arguments (apply string-append (add-between (map v~ us) ",")))
+                       (define arguments
+                         (apply string-append (add-between (map v~ us) ",")))
                        (define head ((output-format-function-symbol) f))
                        (~a head app-left arguments app-right))]
         [_  (wrap u)]))
@@ -1955,24 +1969,46 @@
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
       [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
+                      (displayln (list 'verbose~ 'quotient u v))
                       (define format/ 
                         (or (output-format-quotient)
                             (λ (u v) (~a u "/" v))))
-                      (format/ (par u #:use sub) (par v #:use sub))]
-      [(⊗ u v)     (~a (par u) (~sym '*) (par v))]
-      [(⊕ u v)     (~a (v~ u)  (~sym '+) (v~ v))]
-      [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
-      [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
-      [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
+                      (displayln format/)
+                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+      ; mult
+      [(⊗ -1 v)             (~a "-" (v~ v))]
+      [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
+      ; plus
+      ;   two terms where second term is constant multiplication
+      [(⊕ u (⊗ -1 v))       (~a (v~ u)  (~sym '-) (v~ v))]                
+      [(⊕ u (⊗  r v))       #:when (negative? r)
+                            (~a (v~ u)  (~sym '-) (abs r) (v~ v))]
+      [(⊕ u (⊗  r v))       #:when (positive? r)
+                            (~a (v~ u)  (~sym '+) (abs r) (v~ v))]
+      ;   with more than two terms where second term is contant multiplication
+      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (v~ u)  (~sym '-) (v~ (argcons '+ v w)))] 
+      [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r)
+                            (~a (v~ u)  (~sym '-) (abs r) (v~ (argcons '+ v w)))]
+      [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)
+                            (~a (v~ u)  (~sym '+) (abs r) (v~ (argcons '+ v w)))]
+      ;   otherwise
+      [(⊕ u v)              (~a (v~ u)  (~sym '+) (v~ v))]
+      
+      ; other
+      [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
+      [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
+      [(Equal u v)          (~a (par u) " " (~sym '=)   " " (par v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) ((output-format-sqrt) u)]
-      [(Expt u v)  (~a (par u) (~sym '^) ((output-sub-exponent-wrapper) (par v #:use exponent-sub)))]
+      [(Expt u v)  (~a (par u) (~sym '^) ((output-sub-exponent-wrapper)
+                                          (par v #:use exponent-sub)))]
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
       [(app: f us) (let ()
-                     (define arguments (apply string-append (add-between (map v~ us) ",")))
+                     (define arguments
+                       (apply string-append (add-between (map v~ us) ",")))
                      (define head ((output-format-function-symbol) f))
                      (~a head app-left arguments app-right))]
       [_ (display u)
@@ -1982,17 +2018,25 @@
 (define ~ verbose~)
 
 (module+ test
-  (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+3*x+3*x^2+x^3")
+  (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+3x+3x^2+x^3")
   (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)")
-  (check-equal? (verbose~ (normalize '(* (sin (+ x -7)) (+ (cos (+ x -7)) (asin (+ x -7))))))
-                "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
+  (check-equal?
+   (verbose~ (normalize '(* (sin (+ x -7)) (+ (cos (+ x -7)) (asin (+ x -7))))))
+   "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
   (use-default-output-style)
-  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)"))
-
+  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)")
+  (check-equal? (verbose~ '(* -1 x)) "-x")
+  (check-equal? (verbose~ '(+ (* -1 x) 3)) "-x+3")
+  (check-equal? (verbose~ '(+ (expt x 2) (* -1 x) 3)) "x^2-x+3")
+  (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "x/(1-y^2)")
+  (use-tex-output-style)
+  (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "$\\frac{x}{1-y^{2}}$")
+  )
+  
 
 ;;;
 ;;; Examples
@@ -2060,9 +2104,10 @@
     [_ (with-syntax ([req (datum->syntax stx 'require)])
          (syntax/loc stx (req (submod "." start))))]))
 
-(require racket-poppler/render-tex pict)
+(require latex-pict pict)
 (define (render u)
-  (pict->bitmap (scale (latex->pict (tex u)) 4)))
+  (define (strip$ x) (substring x 1 (- (string-length x) 1)))
+  (pict->bitmap (scale (tex-math (strip$ (tex u))) 2)))
 
 
 ;;; Example from the REPL.

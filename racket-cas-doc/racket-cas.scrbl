@@ -32,7 +32,7 @@ symbolic expressions from your own programs.
 
 Symbolic expresions are represented as plain s-expressions
 and the names of mathematical operations are the same as in Racket.
-An expression like @tt[3x+x^4] is thus represented as @racket[(+ (* 3 x) (expt x 4))],
+An expression like @tt{3x+x^4} is thus represented as @racket[(+ (* 3 x) (expt x 4))],
 where @racket[+] and @racket[expt] are symbols.
 
 More formally the representation is defined as follows.
