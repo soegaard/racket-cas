@@ -3,6 +3,7 @@
 (require (prefix-in % "bfracket.rkt"))
 
 ; Short term:
+;   - fix: formatting of rational numbers 1/4 -> \frac{1}{4}
 ;   - fix: (App (Compose Expt Sin) 0)
 ;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
 ;   - documentation
@@ -613,7 +614,7 @@
     [(u v) (⊗ u (Expt v -1))]))
 
 (define-match-expander ⊘
-  ; Note: This matches kind of quotient only
+  ; Note: This matches one kind of quotient only
   (λ (stx) (syntax-parse stx [(_ u v) #'(or (list '* u (list 'expt v -1))
                                             (list '* (list 'expt v -1) u))]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
@@ -1669,10 +1670,10 @@
                                          [else (return (Or (solve (Equal u^n/2 (⊖ sqrt-v)) x)
                                                            (solve (Equal u^n/2    sqrt-v)  x)))]))]
           [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
-          [(Equal (Expt u α) v)  #:when (= (numerator α) 1)           (r (Equal u (Expt v (⊘ 1 α))))]
+          [(Equal (Expt u 1/2) v)     (solve (Equal u (Expt v 2))  x)] ; XXX 
+          [(Equal (Expt u α) v)  #:when (= (numerator α) 1) (r (Equal u (Expt v (⊘ 1 α))))]
           [(Equal (Expt n u) m)  #:when (and (free-of n x) (free-of m x)) (r (Equal u (Log n m)))]
-          [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) 
-                                 (r (Equal u (Log v w)))]          
+          [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) (r (Equal u (Log v w)))]          
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
           [(Equal (Acos u) v) (r (Equal u (Cos v)))]
           [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
@@ -1700,16 +1701,22 @@
         [(Equal u 0) 
          (match (coefficient-list u x) ; note: leading coef is non-zero
            [(list)       #t]
-           [(list a)     (Equal a 0)]             ; zero order
+           [(list a)     (Equal a 0)]            ; zero order
            [(list b a)   (Equal x (⊘ (⊖ b) a))]  ; first order
            ; second order
            [(list 0 0 a) (Equal x 0)]
            [(list 0 b a) (Or (Equal x 0) (Equal x (⊖ (⊘ b a))))]
            [(list c 0 a) (Or (Equal x (⊖ (Sqrt (⊘ (⊖ c) a))))
                              (Equal x    (Sqrt (⊘ (⊖ c) a))))]
-           [(list c b a) (define sqrt-d (Sqrt (⊖ (Sqr b) (⊗ 4 a c))))
-                         (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
-                             (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))]       
+           [(list c b a) (define d (⊖ (Sqr b) (⊗ 4 a c)))
+                         (math-match d 
+                           [0 (⊘ (⊖ b) (⊗ 2 a))]
+                           [r #:when (negative? r) #f] ; no solutions
+                           [_ (define sqrt-d (Sqrt d))
+                              ; Note: If d is symbolic, we can't know the sign
+                              ;       We assume we are in the positive case
+                              (Or (Equal x (distribute (⊘ (⊖ (⊖ b) sqrt-d) (⊗ 2 a))))
+                                  (Equal x (distribute (⊘ (⊕ (⊖ b) sqrt-d) (⊗ 2 a)))))])]
            ; try factoring
            [_ (match (polynomial-square-free-factor u x)
                 ; it helped!
@@ -1737,7 +1744,8 @@
   (check-equal? (solve (normalize '(= (* (- x 1) (- x 2) (- x 3)) 0)) x) 
                 '(or (= x 1) (= x 2) (= x 3)))
   (check-equal? (solve (normalize '(= 8.0 (expt 2.0 x))) x) '(= x 3.0))
-  (check-equal? (solve '(= 8 (expt 2 x)) x) '(= x 3)))
+  (check-equal? (solve '(= 8 (expt 2 x)) x) '(= x 3))
+  (check-equal? (solve (normalize '(= (- (- x) 6) 0)) 'x) '(= x -6)))
 
 
 (define (roots u x)
@@ -1808,6 +1816,8 @@
 (define output-format-log              (make-parameter default-output-log))
 (define output-sub-exponent-parens     (make-parameter (list "(" ")"))) ; for Tex it is { }
 (define output-sub-exponent-wrapper    (make-parameter values))         ; TeX needs extra {}
+(define output-terms-descending?       (make-parameter #f)) ; reverse terms before outputting?
+(define output-implicit-product?       (make-parameter #f)) ; useful for TeX
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -1819,7 +1829,8 @@
   (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]")))
   (output-format-log default-output-log)
   (output-sub-exponent-parens (list "(" ")"))
-  (output-sub-exponent-wrapper values))
+  (output-sub-exponent-wrapper values)
+  (output-implicit-product? #f))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
@@ -1831,7 +1842,8 @@
   (output-wrapper values)
   (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")")))
   (output-format-log default-output-log)
-  (output-sub-exponent-wrapper values))
+  (output-sub-exponent-wrapper values)
+  (output-implicit-product? #f))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan asin acos atan log ln))
@@ -1856,7 +1868,8 @@
        (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
              [else (~a "log(" (verbose~ u) ")")]))))
   (output-sub-exponent-parens (list "{" "}"))
-  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}"))))
+  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
+  (output-implicit-product? #t))
 
 (define (tex u)
   (define operators '(sin cos tan asin acos atan log ln))
@@ -1877,6 +1890,7 @@
                                              (~a "\\sqrt{" (verbose~ u) "}"))))
                  (output-sub-exponent-parens (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
+                 (output-implicit-product? #t)
                  (output-format-log
                   (parameterize ([output-wrapper values])
                     (λ (u [v #f])
@@ -1911,7 +1925,89 @@
     ['@n  "@n"]        ; an arbitrary natural number
     ['@p  "@p"]        ; an arbitrary integer
     [_ t]))
-          
+
+
+(define (prepare-unnormalized-for-formatting
+         u
+         #:zero-term   [zero-term   #f]  ; remove  0 in sums
+         #:one-factor  [one-factor  #f]  ; rewrite (* 1 u) to u
+         #:zero-factor [zero-factor #f]  ; rewrite (* 0 u) to 0
+         #:all         [all         #t])
+  ; the purpose of this function is to reuse the formatter for normalized
+  ; expressions, for formatting unnormalized expressions.
+  (when all
+    (set! zero-term   #t)
+    (set! one-factor  #t)
+    (set! zero-factor #t))
+
+
+  ;; Note: Differences and quotients does not appear in normalized expressions.
+  ;;       Therefore we need to handle these with care.
+
+  ;; The pattern ⊖ matches various differences
+  ;;  (⊖ x y) matches (- a b)       and binds x->a, y->b
+  ;;  (⊖ x y) matches (- a b c ...) and binds x->a, y->(+ b c ...)
+  (define-match-expander ⊖
+    (λ (stx)
+      (syntax-parse stx
+        [(_ u v) #'(or (list '- u v)
+                       (list-rest '- u (app (λ(ys) (cons '+ ys)) v)))]
+        [(_ u)       #'(list '- u)])))
+
+  ;; The pattern ⊘ matches quotient
+  ;;  (⊘ x y) matches (/ a b)       and binds x->a, y->b
+  (define-match-expander ⊘
+    (λ (stx)
+      (syntax-parse stx
+        [(_ u v) #'(list '/ u v)])))
+
+
+  (define (argcons op u v)
+    (match v
+      [(list* (== op) vs) (list* op u vs)]
+      [v                  (list  op u v)]))
+  
+  (define (p u)
+    ; (displayln (list 'p u))
+    (math-match u
+     ; rewrites
+     [(⊗ 1 v)         #:when one-factor (p v)]
+     [(⊘ u 1)         #:when one-factor (p u)]
+     [(⊗ 0 v)         #:when zero-factor 0]
+     [(⊗ v 0)         #:when zero-factor 0]
+     [(⊕ 0 v)         #:when zero-term  (p v)]
+     [(⊕ v 0)         #:when zero-term  (p v)]
+     [(⊕ (⊗ 0 u) v)   #:when zero-term  (p v)]
+     [(⊕ (⊗ u 0) v)   #:when zero-term  (p v)]
+     ; note: the above special cases a 0 as the second factor
+     ;       a zero as third fact results in a zero term
+     [(⊖ u 0)         #:when zero-term  (p u)]
+     ; no rewrites
+     [r               u]
+     [r.bf            u]
+     [x               u]
+     ; rewrite sub expressions
+     [(⊖ u)           (list     '- (p u)      )]
+     [(⊖ u v)         (argcons  '- (p u) (p v))] 
+     [(⊘ u v)         (list     '/ (p u) (p v))]  ; binary only     
+     [(⊗ u v)         (argcons  '* (p u) (p v))]
+     [(⊕ u v)         (argcons  '+ (p u) (p v))]
+     [(⊕ u)           (p u)]
+     
+     ; other
+     [(And   u v)     (argcons 'and (p u) (p v))]
+     [(Or    u v)     (argcons 'or  (p u) (p v))]
+     [(Equal u v)     (list    '=    (p u) (p v))]
+     [(Expt  u v)     (list    'expt (p u) (p v))]
+     [(Log   u)       (list    'log  (p u))]
+     [(Log   u v)     (list    'log  (p u) (p v))]
+     [(app: f us)     (cons f (map p us))]
+     [_ (display u)
+        (error 'prepare-unnormalized-for-formatting
+               (~a "internal error, got: " u))]))
+  (p u))
+
+(define prepare prepare-unnormalized-for-formatting)
 
 ; ~ converts an expression into a string
 (define (verbose~ u)
@@ -1923,6 +2019,7 @@
   (define ~sym (output-format-function-symbol))
   (define ~var symbol->tex)
   (define (v~ u)
+    ; (displayln (list 'v~ u))
     (define (paren u) ; always wrap in ( )
       (~a "(" (v~ u) ")"))
     (define (sub u) ; always wrap in sub-left and sub-right parentheses
@@ -1932,7 +2029,8 @@
     (define (quotient-sub u) ; wraps numerator and denominator of quotient
       (~a quot-left (v~ u) quot-right))
     (define (exponent-wrap s)
-      (~a expt-left s expt-right))    
+      (~a expt-left s expt-right))
+    (define implicit-mult (if (output-implicit-product?) "" (~sym '*)))
     (define (argcons op x xs)
       (match xs
         [(list* (== op) args) (list* op x args)]
@@ -1943,17 +2041,21 @@
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
         ; infix operators and relations
+        [(⊗ 1 v)     (exponent-wrap (par v))] ; xxx
         [(⊗ u v)     (exponent-wrap (~a (par u) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
+        [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
         [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) ((output-format-sqrt) u)]
-        [(Expt u p)   (~a (par u) (~sym '^) ((output-format-function-symbol)
-                                             (par p #:use exponent-sub)))]
-        [(Expt u v)   (~a (par u) (~sym '^) ((output-format-function-symbol)
-                                             (par v #:use exponent-sub)))]
+        [(Expt u p)   (~a (par u #:use exponent-sub)
+                          (~sym '^) ((output-format-function-symbol)
+                                     (par p #:use exponent-sub)))]
+        [(Expt u v)   (~a (par u #:use exponent-sub)
+                          (~sym '^) ((output-format-function-symbol)
+                                     (par v #:use exponent-sub)))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
         ; applications
@@ -1965,6 +2067,7 @@
         [_  (wrap u)]))
     (define (t1~ u) ; term 1 aka first term in a sum
       (math-match u
+                  [(⊗  1 u)                       (~a                   (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)         (v~ u))]
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (abs r) (v~ u))]
                   [(⊗  r u) #:when (positive? r)  (~a           (abs r) (v~ u))]
@@ -1980,31 +2083,38 @@
                             (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       ; mult
-      [(⊗ -1 v)                                   (~a "-"         (v~ v))]
-      [(⊗ r v)              #:when (negative? r)  (~a "-" (abs r) (v~ v))]
-      [(⊗ r v)              #:when (positive? r)  (~a     (abs r) (v~ v))]
+      [(⊗  1 v)                         (~a             (v~ v))]
+      [(⊗ -1 v)                         (~a "-"         (v~ v))]
+      ; An implicit multiplication can not be used for fractions 
+      [(⊗ p v)     #:when (negative? p) (~a "-" (abs p) implicit-mult (par v #:use paren))]
+      [(⊗ p v)     #:when (positive? p) (~a     (abs p) implicit-mult (par v #:use paren))]
+      ; Use explict multiplication for fractions
+      [(⊗ r v)     #:when (negative? r) (~a "-" (abs r) (~sym '*) (par v #:use paren))]
+      [(⊗ r v)     #:when (positive? r) (~a     (abs r) (~sym '*) (par v #:use paren))]
       
       [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
       ; plus
-      ;    two terms
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (abs r))
                                 (~a (t1~ u)  (~sym '+) (abs r)))]
-      ;   two terms where second term is constant multiplication
       [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]                
       [(⊕ u (⊗  r v))       #:when (negative? r)
                             (~a (t1~ u)  (~sym '-) (abs r) (v~ v))]
       [(⊕ u (⊗  r v))       #:when (positive? r)
                             (~a (t1~ u)  (~sym '+) (abs r) (v~ v))]
-      ;   with more than two terms where second term is contant multiplication
       [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))] 
       [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r)
                             (~a (t1~ u)  (~sym '-) (abs r) (v~ (argcons '+ v w)))]
       [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)
                             (~a (t1~ u)  (~sym '+) (abs r) (v~ (argcons '+ v w)))]
-      ;   otherwise      
       [(⊕ u v)              (~a (t1~ u)  (~sym '+) (v~ v))]
-      
+      ; minus (doesn't appear in normalized expressions)
+      [(list  '- u)          (~a (~sym '-) (par u #:use paren))]
+      [(list* '- u v)        (~a (t1~ u) (~sym '-)
+                                 (par (match v
+                                        [(list v)   v]
+                                        [(list* vs) (cons '+ vs)])
+                                      #:use paren))]
       ; other
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
@@ -2026,9 +2136,19 @@
          (error 'verbose~ (~a "internal error, got: " u))]))
   ((output-wrapper) (v~ u)))
 
-(define ~ verbose~)
+(define (~ u)
+  (define (reverse-plus u)
+    (define r reverse-plus)
+    (match u
+      [(list* '+ us) (list* '+ (reverse us))]
+      [(list* op us) (list* op (map r us))]
+      [u             u]))
+  (match (output-terms-descending?)
+    [#t (verbose~ (reverse-plus u))]
+    [#f (verbose~ u)]))
 
 (module+ test
+  (check-equal? (verbose~ '(- (- x 3))) "-(x-3)")
   (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+3x+3x^2+x^3")
   (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)")
   (check-equal?
@@ -2044,9 +2164,15 @@
   (check-equal? (verbose~ '(+ (* -1 x) 3)) "-x+3")
   (check-equal? (verbose~ '(+ (expt x 2) (* -1 x) 3)) "x^2-x+3")
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "x/(1-y^2)")
+  (check-equal? (~ '(* 2 x y)) "2*x*y")
+  ; —–- TeX
   (use-tex-output-style)
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "$\\frac{x}{1-y^{2}}$")
   (check-equal? (~ '(* -8 x )) "$-8x$")
+  (check-equal? (~ '(- 1 (+ 2 3))) "$1-(2+3)$")
+  (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "$4(-7-a)$")
+  (use-default-output-style)
+  (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
   )
   
 
