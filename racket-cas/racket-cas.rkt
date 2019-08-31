@@ -1585,15 +1585,36 @@
     (check-equal? (polynomial-square-free-factor u x) '(* (expt (+ 2 x) 3) (+ -2 (expt x 2))))))
 
 ;;;
-;;;
+;;; Relational Operators
 ;;;
 
 (define-match-expander Equal
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '= u v)]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Equal: u v)] [_ (identifier? stx) #'Equal:])))
 
-(define (Equal: u v)
-  `(= ,u ,v))
+(define-match-expander Less
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list '< u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Less: u v)] [_ (identifier? stx) #'Less:])))
+
+(define-match-expander LessEqual
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list '<= u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(LessEqual: u v)] [_ (identifier? stx) #'LessEqual:])))
+
+(define-match-expander Greater
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list '> u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(LessEqual: u v)] [_ (identifier? stx) #'Greater:])))
+
+(define-match-expander GreaterEqual
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list '>= u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(GreaterEqual: u v)] [_ (identifier? stx) #'GreaterEqual:])))
+
+
+(define (Equal:        u v) `(=  ,u ,v))
+(define (Less:         u v) `(<  ,u ,v))
+(define (LessEqual:    u v) `(<= ,u ,v))
+(define (Greater:      u v) `(>  ,u ,v))
+(define (GreaterEqual: u v) `(>= ,u ,v))
+
 
 (define-match-expander Or
   (λ (stx)
@@ -1905,6 +1926,8 @@
   (define (~symbol s) 
     (match s
       [_ #:when (member s operators) (~a "\\" s)]
+      ['<=  "\\leq "]
+      ['>=  "\\geq "]
       ['*   "\\cdot "]
       ['or  "\\vee "]
       ['and "\\wedge "]
@@ -1931,6 +1954,8 @@
   (define (~symbol s)
     (match s
       [_ #:when (member s operators) (~a "\\" s)]      
+      ['<=  "\\leq "]
+      ['>=  "\\geq "]
       ['*   "\\cdot "]   ; multiplication
       ['or  "\\vee "]    ; logical or
       ['and "\\wedge "]  ; logical and      
@@ -2073,7 +2098,7 @@
   (match-define (list quot-left quot-right) (output-format-quotient-parens))
   (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol))
-  (define ~var symbol->tex)
+  (define (~var x) (~sym (symbol->tex x)))
   (define (v~ u)
     ; (displayln (list 'v~ u))
     (define (paren u) ; always wrap in ( )
@@ -2114,6 +2139,8 @@
                                      (par v #:use exponent-sub)))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
+        [(app: f us) #:when (memq f '(< > <= >=))
+                     (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
         ; applications
         [(app: f us) (let ()
                        (define arguments
@@ -2172,6 +2199,15 @@
                                         [(list* vs) (cons '+ vs)])
                                       #:use paren))]
       ; other
+      [(And (Less u v) (Less u1 v1))
+       #:when (equal? v u1)  (~a (par u) " " (~sym '<) " " (par v) " " (~sym '<) " " (par v1))]
+      [(And (LessEqual u v) (Less u1 v1))
+       #:when (equal? v u1)  (~a (par u) " " (~sym '<=) " " (par v) " " (~sym '<) " " (par v1))]
+      [(And (LessEqual u v) (LessEqual u1 v1))
+       #:when (equal? v u1)  (~a (par u) " " (~sym '<=) " " (par v) " " (~sym '<=) " " (par v1))]
+      [(And (Less u v)      (LessEqual u1 v1))
+       #:when (equal? v u1)  (~a (par u) " " (~sym '<)  " " (par v) " " (~sym '<=) " " (par v1))]
+      
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
       [(Equal u v)          (~a (v~ u)  " " (~sym '=)   " " (v~ v))] ; xxx
@@ -2184,10 +2220,10 @@
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
       [(Piecewise us vs)    (string-append*
-                             (append (list "\\̱begin{cases}")
+                             (append (list "\\begin{cases}\n")
                                      (for/list ([u us] [v vs])
-                                       (~a (v~ u) " & " (v~ v) "\\\\"))
-                                     (list "\\̱end{cases}")))]
+                                       (~a (v~ u) " & " (v~ v) "\\\\\n"))
+                                     (list "\\end{cases}")))]
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
       [(app: f us) (let ()
