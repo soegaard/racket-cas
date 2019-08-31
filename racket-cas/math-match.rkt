@@ -53,6 +53,7 @@
           (convention (make-begins-with-pred "q") #'integer?)
           (convention (make-begins-with-pred "α") #'exact-number?)
           (convention (make-begins-with-pred "β") #'exact-number?)
+          (convention (make-begins-with-pred "b") #'boolean?)
           
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)))

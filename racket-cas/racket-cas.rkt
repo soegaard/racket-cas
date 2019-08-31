@@ -226,10 +226,14 @@
     [(r s) (< r s)]
     [(r _) #t]
     [(u r) #f]
-    ; Case: at leat one big float
+    ; Case: at least one big float
     [(r.bf s.bf) (bf< r.bf s.bf)]
     [(r.bf _) #t]
     [(u r.bf) #f]
+    ; Case: at least one boolean
+    [(b1 b2) (and b1 (not b2))]
+    [(b u)   #t]
+    [(u b)   #f]
     ; Case: At least one symbol
     [(x y) (symbol<? x y)] 
     [(u x) (not (<< x u))]
@@ -618,6 +622,22 @@
   (check-equal? (expand '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2))))
+
+(define (logical-expand u)
+  (define u0 u)
+  (define le logical-expand)
+  (math-match u
+    [(And #f u)          #f]
+    [(And #t u)          (le u)]
+    [(And u (Or v1 v2))  (Or (le (And v1 u)) (le (And v2 u)))]
+    [(Or u v)            (Or (le u) (le v))]
+
+    [(or (And (Equal x u) v)
+         (And v (Equal x u))) (match (simplify (subst v x u))
+                                [#t (Equal x u)]
+                                [#f #f]
+                                [_  (And (Equal x u) (le v))])]
+    [u                   u]))
 
 (define (simplify u) ; use when the automatic simplification isn't enough
   ; TODO: rewrite fractions with square roots in the denominator
@@ -1627,13 +1647,23 @@
   (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
 
 (define (Or: . us)
-  (define (flatten us)
-    (reverse 
-     (for/fold ([vs '()]) ([u (in-list us)])
-       (match u
-         [(list* 'or ws) (append vs (map flatten ws))]
-         [_              (cons u vs)]))))
-  `(or ,@(sort (flatten us) <<)))
+  (match us
+    ['() #f]
+    [_  (let/ec return
+          (define (flatten us)
+            (reverse 
+             (for/fold ([vs '()])
+                       ([u (in-list us)])
+               (match u
+                 [#t             (return #t)]
+                 [#f             vs]
+                 [(list* 'or ws) (append vs (map flatten ws))]
+                 [_              (cons u vs)]))))
+          (match (flatten us)
+            ['()        #f]
+            [(list v)   v]
+            [vs         `(or ,@(sort vs <<))]))]))
+      
 
 (module+ test 
   (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 1) (= x 2) (= x 3))))
@@ -1646,13 +1676,21 @@
   (λ(stx) (syntax-parse stx [(_ u ...) #'(And: u ...)] [_ (identifier? stx) #'And:])))
 
 (define (And: . us)
-  (define (flatten us)
-    (reverse 
-     (for/fold ([vs '()]) ([u (in-list us)])
-       (match u
-         [(list* 'and ws) (append vs (map flatten ws))]
-         [_               (cons u vs)]))))
-  `(and ,@(sort (flatten us) <<)))
+  (match us
+    ['() #t]
+    [_  (let/ec return
+          (define (flatten us)
+            (reverse 
+             (for/fold ([vs '()]) ([u (in-list us)])
+               (match u
+                 [#t              vs]
+                 [#f              (return #f)]
+                 [(list* 'and ws) (append vs (map flatten ws))]
+                 [_               (cons u vs)]))))
+          (match (flatten us)
+            ['()        #t]
+            [(list v)   v]
+            [vs         `(and ,@(sort vs <<))]))]))
 
 (module+ test 
   (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3))))
@@ -1777,6 +1815,10 @@
         ; rule of zero product
         [(Equal (⊗ u v) 0)    (Or (solve (Equal u 0) x) (solve1 (Equal v 0)))]
         [(Equal (Expt u r) 0) (solve1 (Equal u 0))]
+        [(Equal (⊕ u0 (Piecewise us vs)) 0)
+         (logical-expand (list* 'or (for/list ([u us] [v vs])
+                                      (define s (solve1 (Equal u (⊖ u0))))
+                                      (And s v))))]
         [(Equal u 0) 
          (match (coefficient-list u x) ; note: leading coef is non-zero
            [(list)       #t]
