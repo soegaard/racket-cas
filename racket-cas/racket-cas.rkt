@@ -3,6 +3,7 @@
 (require (prefix-in % "bfracket.rkt"))
 
 ; Short term:
+;   - introduce  cases
 ;   - fix: formatting of rational numbers 1/4 -> \frac{1}{4}
 ;   - fix: (App (Compose Expt Sin) 0)
 ;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
@@ -148,10 +149,29 @@
   (check-equal? (match '(* a b c) [(k⊗ x y) (list x y)]) '(1 (* a b c)))
   (check-equal? (match '(sin x)   [(k⊗ r u) (list r u)]) '(1 (sin x))))
 
-;;; The patterm (Sum us) matches a sum of the form (+ u ...) and binds us to (list u ...)
-(define-match-expander Sum  (λ (stx) (syntax-case stx () [(_ id) #'(list '+ id (... ...))])))
-;;; The patterm (Prod us) matches a product of the form (* u ...) and binds us to (list u ...)
-(define-match-expander Prod (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
+;;; The pattern (Sum us) matches a sum of the form (+ u ...) and binds us to (list u ...)
+(define-match-expander Sum
+  (λ (stx) (syntax-case stx () [(_ id) #'(list '+ id (... ...))])))
+;;; The pattern (Prod us) matches a product of the form (* u ...) and binds us to (list u ...)
+(define-match-expander Prod
+  (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
+
+;;; The patern (Piecewise us vs) matches a piecewise expression of
+;;; the form (piecewise [u v] ...) 
+;;; and binds us to (list u ...) 
+;;; and binds vs to (list v ...) 
+(define-match-expander Piecewise
+  (λ (stx)
+    (syntax-case stx ()
+      [(_ u c)
+       #'(list 'piecewise (list u c) (... ...))]))
+  (λ (stx)
+    (syntax-case stx ()
+      [(_ (u v) ...) #'(list 'piecewise (list u v) ...)]
+      [_ (identifier? stx) #'piecewise])))
+
+
+
 
 #|
 ;;; ASSUMPTIONS
@@ -469,6 +489,8 @@
   (math-match u
     [r r]
     [r.bf r.bf]
+    [#t #t]
+    [#f #f]
     [x x]
     [(⊕ u)             (n u)]
     [(⊕ u v)           (⊕ (n u) (n v))]
@@ -495,6 +517,7 @@
     [(Next-prime u)    (Next-prime (n u))]
     [(Prev-prime u)    (Prev-prime (n u))]
     [(Divisors u)      (Divisors (n u))]
+    [(Piecewise us vs) (list* 'piecewise (map list (map n us) (map n vs)))]
     [(app: f us) (match u
                    [(list '/ u v)  (⊘ (n u) (n v))]
                    [(list '- u)    (⊖ (n u))]
@@ -593,16 +616,24 @@
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2))))
 
-(define (simplify u)
+(define (simplify u) ; use when the automatic simplification isn't enough
   ; TODO: rewrite fractions with square roots in the denominator
   (define s simplify)
   (math-match u
-    [(Expt n 1/2) (Expt n 1/2)]
-    [(⊗ u v)      (⊗ (s u) (s v))]
-    [(⊕ u v)      (⊕ (s u) (s v))]
+    [(Expt n 1/2)    (Expt n 1/2)]
+    [(⊗ u v)         (⊗ (s u) (s v))]
+    [(⊕ u v)         (⊕ (s u) (s v))]
+    [(list (var: op) r1 r2) (case op
+                              [(=)  (=  r1 r2)]
+                              [(<)  (<  r1 r2)]
+                              [(>)  (>  r1 r2)]
+                              [(<=) (<= r1 r2)]
+                              [(>=) (>= r1 r2)]
+                              [else u])]
     [_ u]))
 
-(module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2)))) (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
+(module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
+                            (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 ; divide u by v
 (define (Oslash: u v)
@@ -1055,18 +1086,42 @@
 ; Note: (limit (⊘ (⊖ (Sqr x) 4) (⊖ x 2)) x 2) gives 0
 ; Cause: (⊗ 0 +inf.0) currently gives 0.
 
+;;; Piecewise 
+
+(define (Piecewise: us vs) ; assume us and vs are canonical
+  (define clauses
+    ; simplify and remove clauses where the conditional is false
+    (for/list ([u us] [v (map simplify vs)] #:when v)
+      (list u v))) 
+  ; if one of the conditional expressions v is true,
+  ; then the result is the corresponding u.
+  (define first-true    
+    ; wrapped in list to disguish non-true and first true v has false u
+    (let loop ([uvs clauses])
+      (match uvs
+        ['()                     #f]
+        [(list* (list u #t) uvs) (list u)]
+        [_                       (loop (rest uvs))])))
+  (match first-true
+    [(list u) u]
+    [_        (cons 'piecewise clauses)]))
+        
 ;;; Substition
 
 (define (subst u v w) ; substitute w for v in u
+  (define (n* us) (map normalize us))
   (define (s u)
     (math-match u
       [u #:when (equal? u v) w]
-      [(⊕ u1 u2)    (⊕ (s u1) (s u2))]
-      [(⊗ u1 u2)    (⊗ (s u1) (s u2))]
-      [(Expt u1 u2) (Expt (s u1) (s u2))]
-      [(app: f us)   `(,f ,@(map s us))]
+      [(⊕ u1 u2)         (⊕ (s u1) (s u2))]
+      [(⊗ u1 u2)         (⊗ (s u1) (s u2))]
+      [(Expt u1 u2)      (Expt (s u1) (s u2))]
+      [(Piecewise us vs) (Piecewise: (n* (map s us)) (n* (map s vs)))]
+      [(app: f us)       `(,f ,@(map s us))]
       [_ u]))
   (normalize (s u)))
+
+
 
 (module+ test
   (check-equal? (subst '(expt (+ (* x y) 1) 3) y 1) '(expt (+ 1 x) 3))
@@ -2001,6 +2056,7 @@
      [(Expt  u v)     (list    'expt (p u) (p v))]
      [(Log   u)       (list    'log  (p u))]
      [(Log   u v)     (list    'log  (p u) (p v))]
+     [(Piecewise us vs) (Piecewise: (map p us) (map p vs))]
      [(app: f us)     (cons f (map p us))]
      [_ (display u)
         (error 'prepare-unnormalized-for-formatting
@@ -2127,6 +2183,13 @@
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
+      [(Piecewise us vs)    (string-append*
+                             (append (list "\\̱begin{cases}")
+                                     (for/list ([u us] [v vs])
+                                       (~a (v~ u) " & " (v~ v) "\\\\"))
+                                     (list "\\̱end{cases}")))]
+      [(app: f us) #:when (memq f '(< > <= >=))
+                   (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
       [(app: f us) (let ()
                      (define arguments
                        (apply string-append (add-between (map v~ us) ",")))
