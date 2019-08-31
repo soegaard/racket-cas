@@ -156,7 +156,7 @@
 (define-match-expander Prod
   (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
 
-;;; The patern (Piecewise us vs) matches a piecewise expression of
+;;; The pattern (Piecewise us vs) matches a piecewise expression of
 ;;; the form (piecewise [u v] ...) 
 ;;; and binds us to (list u ...) 
 ;;; and binds vs to (list v ...) 
@@ -170,7 +170,10 @@
       [(_ (u v) ...) #'(list 'piecewise (list u v) ...)]
       [_ (identifier? stx) #'piecewise])))
 
-
+(define-syntax (piecewise stx)
+  (syntax-parse stx
+    [(_ [u:expr v:expr] ...)
+     (syntax/loc stx (cond [v u] ...))]))
 
 
 #|
