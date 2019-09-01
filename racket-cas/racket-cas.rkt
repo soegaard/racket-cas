@@ -3,7 +3,6 @@
 (require (prefix-in % "bfracket.rkt"))
 
 ; Short term:
-;   - introduce  cases
 ;   - fix: formatting of rational numbers 1/4 -> \frac{1}{4}
 ;   - fix: (App (Compose Expt Sin) 0)
 ;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
@@ -24,11 +23,9 @@
 ; Ideas:
 ;   - implement bfracket where big floats are numbers
 ;   - add arctan
-;   - detect linear equations in solve
 ;   - add factor
 ;   - use factor in solve
 ;   - unparse (for better presentation of results)
-;   - tex
 ;   - algorithms from the book A=B
 ;   - add Groebner bases
 ;   - use Groebner bases in solve
@@ -1120,7 +1117,7 @@
   ; then the result is the corresponding u.
   (define first-true    
     ; wrapped in list to disguish non-true and first true v has false u
-    (let loop ([uvs clauses])
+    (let loop ([uvs clauses])      
       (match uvs
         ['()                     #f]
         [(list* (list u #t) uvs) (list u)]
@@ -1132,14 +1129,23 @@
 ;;; Substition
 
 (define (subst u v w) ; substitute w for v in u
+  (define le logical-expand)
   (define (n* us) (map normalize us))
   (define (s u)
     (math-match u
       [u #:when (equal? u v) w]
-      [(⊕ u1 u2)         (⊕ (s u1) (s u2))]
-      [(⊗ u1 u2)         (⊗ (s u1) (s u2))]
-      [(Expt u1 u2)      (Expt (s u1) (s u2))]
-      [(Piecewise us vs) (Piecewise: (n* (map s us)) (n* (map s vs)))]
+      [(⊕ u1 u2)          (⊕ (s u1) (s u2))]
+      [(⊗ u1 u2)          (⊗ (s u1) (s u2))]
+      [(Expt u1 u2)       (Expt (s u1) (s u2))]
+      [(Piecewise us vs)  (Piecewise: (n* (map s us)) (n* (map s vs)))]
+      [(And u v)          (And (le (s u)) (le (s v)))] ; xxx is le needed?
+      [(Or  u v)          (Or  (le (s u)) (le (s v)))]
+      [(Equal u v)        (Equal u v)]
+      [(Less u v)         (Less (s u) (s v))]
+      [(LessEqual u v)    (LessEqual (s u) (s v))]
+      [(Greater u v)      (Greater (s u) (s v))]
+      [(GreaterEqual u v) (GreaterEqual (s u) (s v))]
+      
       [(app: f us)       `(,f ,@(map s us))]
       [_ u]))
   (normalize (s u)))
@@ -1165,6 +1171,9 @@
 (define (N u)
   (define (M  f F u)   (math-match (N u) [r (f r)] [v (F v)]))
   (define (M2 f F u v) (math-match* ((N u) (N v)) [(r s) (f r s)] [(v w) (F v w)]))
+  (define (logical-or . xs)  (for/or  ([x xs]) (equal? x #t)))
+  (define (logical-and . xs) (for/and ([x xs]) (equal? x #t)))
+
   (math-match u
     [r   r]
     [@pi pi]
@@ -1181,7 +1190,14 @@
     [(Asin u)    (M asin Asin u)]
     [(Acos u)    (M acos Acos u)]
     ; [(Atan u)    (M atan Atan u)]
-    [(Equal u v) (M2 = Equal u v)]
+    [(Equal u v)        (M2 =  Equal u v)]
+    [(Less u v)         (M2 <  Less u v)]
+    [(LessEqual u v)    (M2 <= LessEqual u v)]
+    [(Greater u v)      (M2 >  Greater u v)]
+    [(GreaterEqual u v) (M2 >= GreaterEqual u v)]
+    [(And u v)          (M2 logical-and And u v)]
+    [(Or u v)           (M2 logical-or Or u v)]
+
     [(app: f us) `(,f ,@(map N us))]
     [_ u]))
 
@@ -1632,11 +1648,11 @@
   (λ (stx) (syntax-parse stx [(_ u v) #'(GreaterEqual: u v)] [_ (identifier? stx) #'GreaterEqual:])))
 
 
-(define (Equal:        u v) `(=  ,u ,v))
-(define (Less:         u v) `(<  ,u ,v))
-(define (LessEqual:    u v) `(<= ,u ,v))
-(define (Greater:      u v) `(>  ,u ,v))
-(define (GreaterEqual: u v) `(>= ,u ,v))
+(define (Equal:        u v) (math-match* (u v) [(r s) (=  r s)] [(_ __) `(=  ,u ,v)]))
+(define (Less:         u v) (math-match* (u v) [(r s) (<  r s)] [(_ __) `(<  ,u ,v)]))
+(define (LessEqual:    u v) (math-match* (u v) [(r s) (<= r s)] [(_ __) `(<= ,u ,v)]))
+(define (Greater:      u v) (math-match* (u v) [(r s) (>  r s)] [(_ __) `(>  ,u ,v)]))
+(define (GreaterEqual: u v) (math-match* (u v) [(r s) (>= r s)] [(_ __) `(>= ,u ,v)]))
 
 
 (define-match-expander Or
@@ -1645,6 +1661,7 @@
       [(_ u v) #'(or (list 'or u v) (list-rest 'or u (app (λ(ys) (cons 'or ys)) v)))]
       [(_ u)       #'(list 'or u)]))
   (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
+
 
 (define (Or: . us)
   (match us
@@ -1816,7 +1833,7 @@
         [(Equal (⊗ u v) 0)    (Or (solve (Equal u 0) x) (solve1 (Equal v 0)))]
         [(Equal (Expt u r) 0) (solve1 (Equal u 0))]
         [(Equal (⊕ u0 (Piecewise us vs)) 0)
-         (logical-expand (list* 'or (for/list ([u us] [v vs])
+         (logical-expand (apply Or: (for/list ([u us] [v vs])
                                       (define s (solve1 (Equal u (⊖ u0))))
                                       (And s v))))]
         [(Equal u 0) 
