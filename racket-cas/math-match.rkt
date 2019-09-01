@@ -53,8 +53,9 @@
           (convention (make-begins-with-pred "q") #'integer?)
           (convention (make-begins-with-pred "α") #'exact-number?)
           (convention (make-begins-with-pred "β") #'exact-number?)
-          (convention (make-begins-with-pred "b") #'boolean?)
-          
+          ; note: a and b are used to match general expressions,
+          ;       so we need to pick something else to match booleans
+          (convention (make-begins-with-pred "bool") #'boolean?)
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)))
   

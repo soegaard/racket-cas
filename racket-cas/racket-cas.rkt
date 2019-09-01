@@ -231,9 +231,9 @@
     [(r.bf _) #t]
     [(u r.bf) #f]
     ; Case: at least one boolean
-    [(b1 b2) (and b1 (not b2))]
-    [(b u)   #t]
-    [(u b)   #f]
+    [(bool1 bool2) (and bool1 (not bool2))] ; #t < #f
+    [(bool u)      #t]
+    [(u bool)      #f]
     ; Case: At least one symbol
     [(x y) (symbol<? x y)] 
     [(u x) (not (<< x u))]
@@ -1625,7 +1625,7 @@
 
 (define-match-expander Greater
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '> u v)]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(LessEqual: u v)] [_ (identifier? stx) #'Greater:])))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Greater: u v)] [_ (identifier? stx) #'Greater:])))
 
 (define-match-expander GreaterEqual
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '>= u v)]))
@@ -1939,6 +1939,7 @@
 (define output-sub-exponent-wrapper    (make-parameter values))         ; TeX needs extra {}
 (define output-terms-descending?       (make-parameter #f)) ; reverse terms before outputting?
 (define output-implicit-product?       (make-parameter #f)) ; useful for TeX
+(define output-relational-operator     (make-parameter #f)) ; useful for TeX
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -1951,7 +1952,8 @@
   (output-format-log default-output-log)
   (output-sub-exponent-parens (list "(" ")"))
   (output-sub-exponent-wrapper values)
-  (output-implicit-product? #f))
+  (output-implicit-product? #f)
+  (output-relational-operator ~a))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
@@ -1964,10 +1966,16 @@
   (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")")))
   (output-format-log default-output-log)
   (output-sub-exponent-wrapper values)
-  (output-implicit-product? #f))
+  (output-implicit-product? #f)
+  (output-relational-operator ~a))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan asin acos atan log ln))
+  (define (~relop u)
+    (match u
+      ['<=  "≤ "]
+      ['>=  "≥ "]
+      [_    (~a u)]))
   (define (~symbol s) 
     (match s
       [_ #:when (member s operators) (~a "\\" s)]
@@ -1992,10 +2000,17 @@
              [else (~a "log(" (verbose~ u) ")")]))))
   (output-sub-exponent-parens (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
-  (output-implicit-product? #t))
+  (output-implicit-product? #t)
+  (output-relational-operator ~relop))
 
 (define (tex u)
   (define operators '(sin cos tan asin acos atan log ln))
+  (define relational-operators '(= < <= > >=))
+  (define (~relop u)
+    (match u
+      ['<=  "≤ "]
+      ['>=  "≥ "]
+      [_    (~a u)]))
   (define (~symbol s)
     (match s
       [_ #:when (member s operators) (~a "\\" s)]      
@@ -2016,6 +2031,7 @@
                  (output-sub-exponent-parens (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
                  (output-implicit-product? #t)
+                 (output-relational-operator ~relop)
                  (output-format-log
                   (parameterize ([output-wrapper values])
                     (λ (u [v #f])
@@ -2142,8 +2158,9 @@
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
   (match-define (list quot-left quot-right) (output-format-quotient-parens))
   (define use-quotients? (output-use-quotients?))
-  (define ~sym (output-format-function-symbol))
-  (define (~var x) (~sym (symbol->tex x)))
+  (define ~sym (output-format-function-symbol)) ; function names
+  (define (~var x) (symbol->tex x))             ; variable names
+  (define (~relop x) ((output-relational-operator) x))
   (define (v~ u)
     ; (displayln (list 'v~ u))
     (define (paren u) ; always wrap in ( )
@@ -2185,7 +2202,7 @@
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
         [(app: f us) #:when (memq f '(< > <= >=))
-                     (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
+                     (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
         ; applications
         [(app: f us) (let ()
                        (define arguments
@@ -2244,18 +2261,18 @@
                                         [(list* vs) (cons '+ vs)])
                                       #:use paren))]
       ; other
-      [(And (Less u v) (Less u1 v1))
-       #:when (equal? v u1)  (~a (par u) " " (~sym '<) " " (par v) " " (~sym '<) " " (par v1))]
-      [(And (LessEqual u v) (Less u1 v1))
-       #:when (equal? v u1)  (~a (par u) " " (~sym '<=) " " (par v) " " (~sym '<) " " (par v1))]
-      [(And (LessEqual u v) (LessEqual u1 v1))
-       #:when (equal? v u1)  (~a (par u) " " (~sym '<=) " " (par v) " " (~sym '<=) " " (par v1))]
-      [(And (Less u v)      (LessEqual u1 v1))
-       #:when (equal? v u1)  (~a (par u) " " (~sym '<)  " " (par v) " " (~sym '<=) " " (par v1))]
+      [(And (Less u v) (Less u1 v1))           #:when (equal? v u1)
+       (~a (par u) " " (~sym '<) " " (par v) " " (~relop '<) " " (par v1))]
+      [(And (LessEqual u v) (Less u1 v1))      #:when (equal? v u1)
+       (~a (par u) " " (~sym '<=) " " (par v) " " (~relop '<) " " (par v1))]
+      [(And (LessEqual u v) (LessEqual u1 v1)) #:when (equal? v u1)
+       (~a (par u) " " (~sym '<=) " " (par v) " " (~relop '<=) " " (par v1))]
+      [(And (Less u v)      (LessEqual u1 v1)) #:when (equal? v u1)
+       (~a (par u) " " (~sym '<)  " " (par v) " " (~relop '<=) " " (par v1))]
       
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
-      [(Equal u v)          (~a (v~ u)  " " (~sym '=)   " " (v~ v))] ; xxx
+      [(Equal u v)          (~a (v~ u)  " " (~relop '=) " " (v~ v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) ((output-format-sqrt) u)]
