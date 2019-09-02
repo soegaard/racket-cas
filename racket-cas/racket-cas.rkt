@@ -1943,20 +1943,21 @@
   (cond [v    (~a "log_" (verbose~ u) l (verbose~ v) r)]
         [else (~a "log" l (verbose~ u) r)]))
 
-(define output-application-brackets    (make-parameter (list "(" ")")))
-(define output-format-function-symbol  (make-parameter ~a))
-(define output-format-quotient         (make-parameter #f)) ; #f means default u/v
-(define output-format-quotient-parens  (make-parameter (list "(" ")"))) 
-(define output-sub-expression-parens   (make-parameter (list "(" ")")))
-(define output-wrapper                 (make-parameter values))
-(define output-use-quotients?          (make-parameter #t))
-(define output-format-sqrt             (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
-(define output-format-log              (make-parameter default-output-log))
-(define output-sub-exponent-parens     (make-parameter (list "(" ")"))) ; for Tex it is { }
-(define output-sub-exponent-wrapper    (make-parameter values))         ; TeX needs extra {}
-(define output-terms-descending?       (make-parameter #f)) ; reverse terms before outputting?
-(define output-implicit-product?       (make-parameter #f)) ; useful for TeX
-(define output-relational-operator     (make-parameter #f)) ; useful for TeX
+(define output-application-brackets      (make-parameter (list "(" ")")))
+(define output-format-function-symbol    (make-parameter ~a))
+(define output-format-quotient           (make-parameter #f)) ; #f means default u/v
+(define output-format-quotient-parens    (make-parameter (list "(" ")"))) 
+(define output-sub-expression-parens     (make-parameter (list "(" ")")))
+(define output-wrapper                   (make-parameter values))
+(define output-use-quotients?            (make-parameter #t))
+(define output-format-sqrt               (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
+(define output-format-log                (make-parameter default-output-log))
+(define output-sub-exponent-parens       (make-parameter (list "(" ")"))) ; for Tex it is { }
+(define output-sub-exponent-wrapper      (make-parameter values))         ; TeX needs extra {}
+(define output-terms-descending?         (make-parameter #f)) ; reverse terms before outputting?
+(define output-implicit-product?         (make-parameter #f)) ; useful for TeX
+(define output-relational-operator       (make-parameter #f)) ; useful for TeX
+(define output-floating-point-precision  (make-parameter 4))  ; 
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -2180,6 +2181,11 @@
   (define (~relop x) ((output-relational-operator) x))
   (define (v~ u)
     ; (displayln (list 'v~ u))
+    (define (~num r)
+      (define precision (output-floating-point-precision))
+      (cond [(exact? r) (~a r)]
+            [precision  (~r r #:precision precision)]
+            [else       (~a r)]))
     (define (paren u) ; always wrap in ( )
       (~a "(" (v~ u) ")"))
     (define (sub u) ; always wrap in sub-left and sub-right parentheses
@@ -2197,7 +2203,7 @@
         [args                 (list* op x (list args))]))
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       (math-match u
-        [r    #:when (>= r 0)           (~a r)]
+        [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
         ; infix operators and relations
@@ -2229,14 +2235,14 @@
         [_  (wrap u)]))
     (define (t1~ u) ; term 1 aka first term in a sum
       (math-match u
-                  [(⊗  1 u)                       (~a                   (v~ u))]
-                  [(⊗ -1 u)                       (~a (~sym '-)         (v~ u))]
-                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (abs r) (v~ u))]
-                  [(⊗  r u) #:when (positive? r)  (~a           (abs r) (v~ u))]
-                  [u                                                    (v~ u) ]))
+                  [(⊗  1 u)                       (~a                          (v~ u))]
+                  [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
+                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (v~ u))]
+                  [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (v~ u))]
+                  [u                                                           (v~ u) ]))
              
     (math-match u
-      [r           (~a r)]
+      [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
       [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
@@ -2251,24 +2257,24 @@
       [(⊗ p v)     #:when (negative? p) (~a "-" (abs p) implicit-mult (par v #:use paren))]
       [(⊗ p v)     #:when (positive? p) (~a     (abs p) implicit-mult (par v #:use paren))]
       ; Use explict multiplication for fractions
-      [(⊗ r v)     #:when (negative? r) (~a "-" (abs r) (~sym '*) (par v #:use paren))]
-      [(⊗ r v)     #:when (positive? r) (~a     (abs r) (~sym '*) (par v #:use paren))]
+      [(⊗ r v)     #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
+      [(⊗ r v)     #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (par v #:use paren))]
       
       [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
       ; plus
       [(⊕ u r)              (if (negative? r)
-                                (~a (t1~ u)  (~sym '-) (abs r))
-                                (~a (t1~ u)  (~sym '+) (abs r)))]
+                                (~a (t1~ u)  (~sym '-) (~num (abs r)))
+                                (~a (t1~ u)  (~sym '+) (~num (abs r))))]
       [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]                
       [(⊕ u (⊗  r v))       #:when (negative? r)
-                            (~a (t1~ u)  (~sym '-) (abs r) (v~ v))]
+                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (v~ v))]
       [(⊕ u (⊗  r v))       #:when (positive? r)
-                            (~a (t1~ u)  (~sym '+) (abs r) (v~ v))]
+                            (~a (t1~ u)  (~sym '+) (~num (abs r)) (v~ v))]
       [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))] 
       [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r)
-                            (~a (t1~ u)  (~sym '-) (abs r) (v~ (argcons '+ v w)))]
+                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (v~ (argcons '+ v w)))]
       [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)
-                            (~a (t1~ u)  (~sym '+) (abs r) (v~ (argcons '+ v w)))]
+                            (~a (t1~ u)  (~sym '+) (~num (abs r)) (v~ (argcons '+ v w)))]
       [(⊕ u v)              (~a (t1~ u)  (~sym '+) (v~ v))]
       ; minus (doesn't appear in normalized expressions)
       [(list  '- u)          (~a (~sym '-) (par u #:use paren))]
