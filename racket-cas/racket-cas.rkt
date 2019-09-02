@@ -2060,7 +2060,7 @@
 (define char->tex
   (let ()
     (define dict
-      (hash
+      ( hash
        ; symbolic constants
        'α "\\alpha"   'β "\\beta"    'γ "\\gamma"   'Γ "\\Gamma" 'δ "\\delta" 'Δ "\\Delta"
        'ε "\\epsilon" 'ζ "\\zeta"    'η "\\eta"     'θ "\\theta" 'Θ "\\Theta" 'ι "\\iota"
@@ -2070,7 +2070,9 @@
        'ψ "\\psi"     'Ψ "\\Psi"     'ω "\\omega"   'Ω "\\Omega" ))
     (λ (c)
       (define s (string->symbol (string c)))
-      (hash-ref dict s (string c)))))
+      (match (hash-ref dict s #f)
+        [#f (string c)]
+        [s  (~a s " ")]))))
 
 (define (string->tex s)
   (define s1 (string-append* (map char->tex (string->list s))))
@@ -2254,6 +2256,8 @@
       ; mult
       [(⊗  1 v)                         (~a             (v~ v))]
       [(⊗ -1 v)                         (~a "-"         (v~ v))]
+      ; Explicit multiplication between integers
+      [(⊗ p q)                          (~a (~num p) (~sym '*) (~num q))]
       ; An implicit multiplication can not be used for fractions 
       [(⊗ p v)     #:when (negative? p) (~a "-" (abs p) implicit-mult (par v #:use paren))]
       [(⊗ p v)     #:when (positive? p) (~a     (abs p) implicit-mult (par v #:use paren))]
@@ -2296,6 +2300,8 @@
       
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
+      [(list* '= us) ; handle illegal = with multiple terms
+       (string-append* (add-between (map v~ us) (~a " " (~relop '=) " ")))]
       [(Equal u v)          (~a (v~ u)  " " (~relop '=) " " (v~ v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
@@ -2356,6 +2362,7 @@
   (check-equal? (~ '(* -8 x )) "$-8x$")
   (check-equal? (~ '(- 1 (+ 2 3))) "$1-(2+3)$")
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "$4(-7-a)$")
+  (check-equal? (~ '(* 3 6)) "$3\\cdot 6$")
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
   )
