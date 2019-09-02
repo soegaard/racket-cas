@@ -2245,10 +2245,11 @@
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
+      ; unnormalized and normalized quotients
+      [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                     (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
-                      (define format/ 
-                        (or (output-format-quotient)
-                            (λ (u v) (~a u "/" v))))
+                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       ; mult
       [(⊗  1 v)                         (~a             (v~ v))]
