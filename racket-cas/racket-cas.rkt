@@ -1988,7 +1988,7 @@
   (output-relational-operator ~a))
 
 (define (use-tex-output-style)
-  (define operators '(sin cos tan asin acos atan log ln))
+  (define operators '(sin cos tan asin acos atan log ln sqrt))
   (define (~relop u)
     (match u
       ['<=  "≤ "]
@@ -2014,15 +2014,15 @@
   (output-format-log 
    (λ (u [v #f])
      (parameterize ([output-wrapper values])
-       (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
-             [else (~a "log(" (verbose~ u) ")")]))))
+       (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
+             [else (~a "\\log(" (verbose~ u) ")")]))))
   (output-sub-exponent-parens (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
   (output-implicit-product? #t)
   (output-relational-operator ~relop))
 
 (define (tex u)
-  (define operators '(sin cos tan asin acos atan log ln))
+  (define operators '(sin cos tan asin acos atan log ln sqrt)) ; needs \\ in output
   (define relational-operators '(= < <= > >=))
   (define (~relop u)
     (match u
@@ -2053,8 +2053,8 @@
                  (output-format-log
                   (parameterize ([output-wrapper values])
                     (λ (u [v #f])
-                      (cond [v    (~a "log_{" (verbose~ u) "}(" (verbose~ v) ")")]
-                            [else (~a "log(" (verbose~ u) ")")])))))
+                      (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
+                            [else (~a "\\log(" (verbose~ u) ")")])))))
     (verbose~ u)))
 
 (define char->tex
@@ -2225,7 +2225,7 @@
                           (~sym '^) ((output-format-function-symbol)
                                      (par v #:use exponent-sub)))]
         [(Log u)      ((output-format-log) u)]
-        [(Log u v)    ((output-format-log) u v)]
+        [(Log u v)    ((output-format-log) u v)]        
         [(app: f us) #:when (memq f '(< > <= >=))
                      (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
         ; applications
@@ -2259,8 +2259,8 @@
       ; Explicit multiplication between integers
       [(⊗ p q)                          (~a (~num p) (~sym '*) (~num q))]
       ; An implicit multiplication can not be used for fractions 
-      [(⊗ p v)     #:when (negative? p) (~a "-" (abs p) implicit-mult (par v #:use paren))]
-      [(⊗ p v)     #:when (positive? p) (~a     (abs p) implicit-mult (par v #:use paren))]
+      [(⊗ p v)     #:when (negative? p) (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
+      [(⊗ p v)     #:when (positive? p) (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
       ; Use explict multiplication for fractions
       [(⊗ r v)     #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
       [(⊗ r v)     #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (par v #:use paren))]
@@ -2316,6 +2316,8 @@
                                      (for/list ([u us] [v vs])
                                        (~a (v~ u) " & " (v~ v) "\\\\\n"))
                                      (list "\\end{cases}")))]
+      [(list 'sqrt u) (~a ((output-format-function-symbol) 'sqrt)
+                          (sub u))]
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
       [(app: f us) (let ()
