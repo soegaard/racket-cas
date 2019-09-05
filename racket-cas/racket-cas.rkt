@@ -2239,6 +2239,7 @@
       (math-match u
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
+                  [(⊗  r s)                       (~a     (~num r) (~sym '*) (~num s))]
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (v~ u))]
                   [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (v~ u))]
                   [u                                                           (v~ u) ]))
