@@ -2231,7 +2231,8 @@
         ; unnormalized quotient
         [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                        (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
-
+        ; unormalized sqrt
+        [(list 'sqrt u) ((output-format-sqrt) u)]
         ; applications
         [(app: f us) (let ()
                        (define arguments
@@ -2321,8 +2322,7 @@
                                      (for/list ([u us] [v vs])
                                        (~a (v~ u) " & " (v~ v) "\\\\\n"))
                                      (list "\\end{cases}")))]
-      [(list 'sqrt u) (~a ((output-format-function-symbol) 'sqrt)
-                          (sub u))]
+      [(list 'sqrt u) ((output-format-sqrt) u)] ; XXX
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
       [(app: f us) (let ()
@@ -2370,6 +2370,8 @@
   (check-equal? (~ '(- 1 (+ 2 3))) "$1-(2+3)$")
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "$4(-7-a)$")
   (check-equal? (~ '(* 3 6)) "$3\\cdot 6$")
+  (check-equal? (~ '(sqrt d)) "$\\sqrt{d}$")
+  (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}\\cdot a$")
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
   )
