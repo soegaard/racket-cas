@@ -2228,6 +2228,10 @@
         [(Log u v)    ((output-format-log) u v)]        
         [(app: f us) #:when (memq f '(< > <= >=))
                      (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
+        ; unnormalized quotient
+        [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+
         ; applications
         [(app: f us) (let ()
                        (define arguments
