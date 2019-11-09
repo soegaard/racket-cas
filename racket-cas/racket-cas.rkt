@@ -2292,8 +2292,7 @@
       ;[(⊗ α u)  #:when (= (numerator α) -1) (~a   "\\frac{" (v~ u) "}{" "-" (~num (/ (abs α))) "}")]
       ; Implicit multiplication only if we have a symbols as base
       [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) implicit-mult (v~ v))]
-      [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (displayln (list r x u v))
-                                                            (~a     (~num (abs r)) implicit-mult (v~ v))]
+      [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a     (~num (abs r)) implicit-mult (v~ v))]
 
       ; Use explicit multiplication for fractions
       [(⊗ r v)  #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
