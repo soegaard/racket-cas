@@ -1961,7 +1961,7 @@
 (define output-sub-exponent-wrapper      (make-parameter values))         ; TeX needs extra {}
 (define output-terms-descending?         (make-parameter #f)) ; reverse terms before outputting?
 (define output-implicit-product?         (make-parameter #f)) ; useful for TeX
-(define output-relational-operator       (make-parameter #f)) ; useful for TeX
+(define output-relational-operator       (make-parameter ~a)) ; useful for TeX
 (define output-floating-point-precision  (make-parameter 4))  ; 
 
 (define (use-mma-output-style)
@@ -2177,6 +2177,10 @@
 (define prepare prepare-unnormalized-for-formatting)
 
 ; ~ converts an expression into a string
+;  Originally it only formatted normalized expressions, but
+;  now unnormalized expressions are supported too.
+;  The output format is configured using parameters.
+;  The three builtin styles are default, mma and tex.
 (define (verbose~ u)
   (match-define (list app-left  app-right)  (output-application-brackets))
   (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
@@ -2199,7 +2203,7 @@
       (~a sub-left (v~ u) sub-right))    
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (~a expt-left (v~ u) expt-right))
-    (define (quotient-sub u) ; wraps numerator and denominator of quotient
+    (define (quotient-sub u) ; wraps numerator or denominator of quotient
       (~a quot-left (v~ u) quot-right))
     (define (exponent-wrap s)
       (~a expt-left s expt-right))
@@ -2250,11 +2254,16 @@
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
                   ; integer
+                  ; Explicit multiplication between integers
+                  [(⊗  p q)                       (~a (~num p) (~sym '*) (~num q))]
                   [(⊗  p u) #:when (negative? p)  (~a (~sym '-) (~num (abs p)) (v~ u))]
                   [(⊗  p u) #:when (positive? p)  (~a           (~num (abs p)) (v~ u))]
                   ; rationals (non-integer)
-                  [(⊗  α u) #:when (negative? α)  (~a (~sym '-) (~num (abs α)) (v~ u))] 
-                  [(⊗  α u) #:when (positive? α)  (~a           (~num (abs α)) (v~ u))]
+                  ; Explicit multiplication between rationals
+                  [(⊗  α β)                       (~a (~num α) (~sym '*) (~num β))]                  
+                  ; problem: if u is a number we need an explicit *
+                  ; [(⊗  α u) #:when (negative? α)  (~a (~sym '-) (~num (abs α)) (v~ u))] 
+                  ; [(⊗  α u) #:when (positive? α)  (~a           (~num (abs α)) (v~ u))]
                   ; other reals
                   [(⊗  r s)                       (~a     (~num r) (~sym '*) (~num s))]
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (v~ u))]
@@ -2277,10 +2286,15 @@
       ; Explicit multiplication between integers
       [(⊗ p q)                          (~a (~num p) (~sym '*) (~num q))]
       ; An implicit multiplication can not be used for fractions 
-      [(⊗ p v)  #:when (negative? p)        (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
-      [(⊗ p v)  #:when (positive? p)        (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
-      [(⊗ α u)  #:when (= (numerator α)  1) (~a   "\\frac{" (v~ u) "}{"     (~num (/      α))  "}")]
-      [(⊗ α u)  #:when (= (numerator α) -1) (~a   "\\frac{" (v~ u) "}{" "-" (~num (/ (abs α))) "}")]
+      ;[(⊗ p v)  #:when (negative? p)        (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
+      ;[(⊗ p v)  #:when (positive? p)        (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
+      ;[(⊗ α u)  #:when (= (numerator α)  1) (~a   "\\frac{" (v~ u) "}{"     (~num (/      α))  "}")]
+      ;[(⊗ α u)  #:when (= (numerator α) -1) (~a   "\\frac{" (v~ u) "}{" "-" (~num (/ (abs α))) "}")]
+      ; Implicit multiplication only if we have a symbols as base
+      [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) implicit-mult (v~ v))]
+      [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (displayln (list r x u v))
+                                                            (~a     (~num (abs r)) implicit-mult (v~ v))]
+
       ; Use explicit multiplication for fractions
       [(⊗ r v)  #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
       [(⊗ r v)  #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (par v #:use paren))]
