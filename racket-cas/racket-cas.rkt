@@ -1140,7 +1140,7 @@
       [(Piecewise us vs)  (Piecewise: (n* (map s us)) (n* (map s vs)))]
       [(And u v)          (And (le (s u)) (le (s v)))] ; xxx is le needed?
       [(Or  u v)          (Or  (le (s u)) (le (s v)))]
-      [(Equal u v)        (Equal u v)]
+      [(Equal u v)        (Equal (s u) (s v))]         ; xxx
       [(Less u v)         (Less (s u) (s v))]
       [(LessEqual u v)    (LessEqual (s u) (s v))]
       [(Greater u v)      (Greater (s u) (s v))]
@@ -2244,6 +2244,13 @@
       (math-match u
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
+                  ; integer
+                  [(⊗  p u) #:when (negative? p)  (~a (~sym '-) (~num (abs p)) (v~ u))]
+                  [(⊗  p u) #:when (positive? p)  (~a           (~num (abs p)) (v~ u))]
+                  ; rationals (non-integer)
+                  [(⊗  α u) #:when (negative? α)  (~a (~sym '-) (~num (abs α)) (v~ u))] 
+                  [(⊗  α u) #:when (positive? α)  (~a           (~num (abs α)) (v~ u))]
+                  ; other reals
                   [(⊗  r s)                       (~a     (~num r) (~sym '*) (~num s))]
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (v~ u))]
                   [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (v~ u))]
@@ -2265,11 +2272,13 @@
       ; Explicit multiplication between integers
       [(⊗ p q)                          (~a (~num p) (~sym '*) (~num q))]
       ; An implicit multiplication can not be used for fractions 
-      [(⊗ p v)     #:when (negative? p) (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
-      [(⊗ p v)     #:when (positive? p) (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
-      ; Use explict multiplication for fractions
-      [(⊗ r v)     #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
-      [(⊗ r v)     #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (par v #:use paren))]
+      [(⊗ p v)  #:when (negative? p)        (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
+      [(⊗ p v)  #:when (positive? p)        (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
+      [(⊗ α u)  #:when (= (numerator α)  1) (~a   "\\frac{" (v~ u) "}{"     (~num (/      α))  "}")]
+      [(⊗ α u)  #:when (= (numerator α) -1) (~a   "\\frac{" (v~ u) "}{" "-" (~num (/ (abs α))) "}")]
+      ; Use explicit multiplication for fractions
+      [(⊗ r v)  #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
+      [(⊗ r v)  #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (par v #:use paren))]
       
       [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
       ; plus
