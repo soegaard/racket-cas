@@ -2212,7 +2212,18 @@
       (match xs
         [(list* (== op) args) (list* op x args)]
         [args                 (list* op x (list args))]))
+    (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
+      (math-match u
+        [r (math-match v
+             [s           (~sym '*)]
+             [x           implicit-mult]
+             [(Expt s w)  (~sym '*)]
+             [(Expt x w)  implicit-mult]
+             [(Expt u1 w) (~sym '*)])]
+        [_ (~sym '*)]))
+             
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
+      ; (displayln (list 'par u))
       (math-match u
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
@@ -2250,26 +2261,31 @@
                        (~a head app-left arguments app-right))]
         [_  (wrap u)]))
     (define (t1~ u) ; term 1 aka first term in a sum
+      ; (displayln (list 't1 u))
       (math-match u
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
                   ; integer
                   ; Explicit multiplication between integers
-                  [(⊗  p q)                       (~a (~num p) (~sym '*) (~num q))]
-                  [(⊗  p u) #:when (negative? p)  (~a (~sym '-) (~num (abs p)) (v~ u))]
-                  [(⊗  p u) #:when (positive? p)  (~a           (~num (abs p)) (v~ u))]
+                  [(⊗  p q)                       (~a (~num p)  (~sym '*) (par q))]
+                  ; [(⊗  p u) #:when (negative? p)  (~a (~sym '-) (~num (abs p)) (v~ u))] ; 
+                  ; [(⊗  p u) #:when (positive? p)  (~a           (~num (abs p)) (v~ u))]
                   ; rationals (non-integer)
                   ; Explicit multiplication between rationals
-                  [(⊗  α β)                       (~a (~num α) (~sym '*) (~num β))]                  
+                  [(⊗  α β)                       (~a (~num α) (~sym '*) (par β))]                  
                   ; problem: if u is a number we need an explicit *
                   ; [(⊗  α u) #:when (negative? α)  (~a (~sym '-) (~num (abs α)) (v~ u))] 
                   ; [(⊗  α u) #:when (positive? α)  (~a           (~num (abs α)) (v~ u))]
                   ; other reals
-                  [(⊗  r s)                       (~a     (~num r) (~sym '*) (~num s))]
+                  [(⊗  r s)                       (~a     (~num r) (~sym '*) (par s))]
+                  ; explicit multiplication for powers with numbers as base
+                  [(⊗ r (and (Expt (num: s) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (v~ v))] ; XXX
+                  [(⊗ r (and (Expt (num: s) u) v)) #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (v~ v))]
+                  
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (v~ u))]
                   [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (v~ u))]
                   [u                                                           (v~ u) ]))
-             
+    ; (displayln (list 'v~ u))             
     (math-match u
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
@@ -2284,15 +2300,17 @@
       [(⊗  1 v)                         (~a             (v~ v))]
       [(⊗ -1 v)                         (~a "-"         (v~ v))]
       ; Explicit multiplication between integers
-      [(⊗ p q)                          (~a (~num p) (~sym '*) (~num q))]
+      [(⊗ p q)                          (~a (~num p) (~sym '*) (par q))]
       ; An implicit multiplication can not be used for fractions 
       ;[(⊗ p v)  #:when (negative? p)        (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
       ;[(⊗ p v)  #:when (positive? p)        (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
       ;[(⊗ α u)  #:when (= (numerator α)  1) (~a   "\\frac{" (v~ u) "}{"     (~num (/      α))  "}")]
       ;[(⊗ α u)  #:when (= (numerator α) -1) (~a   "\\frac{" (v~ u) "}{" "-" (~num (/ (abs α))) "}")]
       ; Implicit multiplication only if we have a symbols as base
-      [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) implicit-mult (v~ v))]
+      [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) implicit-mult (v~ v))] ; XXXXX *
       [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a     (~num (abs r)) implicit-mult (v~ v))]
+      ; Implicit multiplication between numbers and variables
+      [(⊗ r x) (~a (~num r) (~var x))] ; XXXX
 
       ; Use explicit multiplication for fractions
       [(⊗ r v)  #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
@@ -2303,16 +2321,27 @@
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (~num (abs r)))
                                 (~a (t1~ u)  (~sym '+) (~num (abs r))))]
-      [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]                
+      [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]
+      ; Unnormalized (in a normalized expression only the first factor can be a number)
+      [(⊕ u (⊗  r s))        #:when (negative? r) (~a (t1~ u)  (~sym '-) (~num (abs r)) (~sym '*) (par s))]
+      [(⊕ u (⊗  r s))        #:when (positive? r) (~a (t1~ u)  (~sym '+) (~num (abs r)) (~sym '*) (par s))]
+      ; previous two rules ensure that v is non-empty
+      [(⊕ u (⊗  r (⊗ s v)))  #:when (negative? r) 
+                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (~sym '*) (par s) (~sym '*) (v~ v))]
+      [(⊕ u (⊗  r (⊗ s v)))  #:when (positive? r) 
+                             (~a (t1~ u) (~sym '+) (~num (abs r)) (~sym '*) (par s) (~sym '*) (v~ v))]
+      ; 
       [(⊕ u (⊗  r v))       #:when (negative? r)
                             (~a (t1~ u)  (~sym '-) (~num (abs r)) (v~ v))]
-      [(⊕ u (⊗  r v))       #:when (positive? r)
+      [(⊕ u (⊗  r v))       #:when (positive? r) 
                             (~a (t1~ u)  (~sym '+) (~num (abs r)) (v~ v))]
-      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))] 
+      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))]
+      ; TODO: The following two rules need to consider an implicit multiplication
+      ; TODO: between  v and w 
       [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r)
-                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (v~ (argcons '+ v w)))]
-      [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)
-                            (~a (t1~ u)  (~sym '+) (~num (abs r)) (v~ (argcons '+ v w)))]
+                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
+      [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)  
+                            (~a (t1~ u)  (~sym '+) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
       [(⊕ u v)              (~a (t1~ u)  (~sym '+) (v~ v))]
       ; minus (doesn't appear in normalized expressions)
       [(list  '- u)          (~a (~sym '-) (par u #:use paren))]
@@ -2374,7 +2403,8 @@
 
 (module+ test
   (check-equal? (verbose~ '(- (- x 3))) "-(x-3)")
-  (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+3x+3x^2+x^3")
+  (parameterize ([output-implicit-product? #t])
+    (check-equal? (verbose~ (expand (Expt (⊕ x 1) 3))) "1+3x+3x^2+x^3"))
   (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)")
   (check-equal?
    (verbose~ (normalize '(* (sin (+ x -7)) (+ (cos (+ x -7)) (asin (+ x -7))))))
@@ -2401,6 +2431,7 @@
   (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}\\cdot a$")
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
+  (check-equal? (~ `(+ (expt 2 3) (* 5 2) -3)) "2^3+5*2-3")
   )
   
 
