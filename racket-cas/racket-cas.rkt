@@ -2367,10 +2367,12 @@
       ;; ; TODO: Problem: If v is a negative number, we need a paren around v.
       ;; [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)  (displayln (list 'FFF r v))
       ;;                       (~a (t1~ u)  (~sym '+) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
-      [(⊕ u v)              (if (or (and (number? v) (negative? v))
-                                    (and (list? v) (number? (second v)) (negative? (second v))))
-                                (~a (t1~ u)            (v~ v))
-                                (~a (t1~ u)  (~sym '+) (v~ v)))]
+      [(⊕ u v)              (match v
+                              [(? number? r)               #:when (negative? r)  (~a (t1~ u) (v~ v))]
+                              [(list* '* (? number? r) _)  #:when (negative? r)  (~a (t1~ u) (v~ v))]
+                              [(list* '+ (? number? r) _)  #:when (negative? r)  (~a (t1~ u) (v~ v))]
+                              [(list* '+ (list* '* (? number? r) _) _)  #:when (negative? r)  (~a (t1~ u) (v~ v))]
+                              [_                                                 (~a (t1~ u)  (~sym '+) (v~ v))])]
       ; minus (doesn't appear in normalized expressions)
       [(list  '- u)          (~a (~sym '-) (par u #:use paren))]
       [(list* '- u v)        (~a (t1~ u) (~sym '-)
@@ -2465,6 +2467,7 @@
   (check-equal? (~ `(+ (expt 2 3) (* 5 2) -3)) "2^3+5*2-3")
   (check-equal? (~ '(+ (expt -1 2) (* 3 -1) -2)) "(-1)^2+3*(-1)-2")
   (check-equal? (~ '(+ 1 -2 3)) "1-2+3")
+  (check-equal? (~ '(+ 1 (* -2 x) 3)) "1-2*x+3")
   )
   
 
