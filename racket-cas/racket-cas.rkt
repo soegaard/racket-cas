@@ -2135,6 +2135,7 @@
   
   (define (p u)
     ; (displayln (list 'p u))
+    (define (non-zero? u) (not (equal? 0 u)))
     (math-match u
      ; rewrites
      [(⊗ 1 v)         #:when one-factor (p v)]
@@ -2157,7 +2158,11 @@
      [(⊖ u v)         (argcons  '- (p u) (p v))] 
      [(⊘ u v)         (list     '/ (p u) (p v))]  ; binary only     
      [(⊗ u v)         (argcons  '* (p u) (p v))]
-     [(⊕ u v)         (argcons  '+ (p u) (p v))]
+     [(⊕ u v)         (match (list (p u) (p v))
+                        [(list 0 0) 0]
+                        [(list 0 u) u]
+                        [(list u 0) u]
+                        [(list u v) (argcons  '+ u v)])]
      [(⊕ u)           (p u)]
      
      ; other
@@ -2182,6 +2187,7 @@
 ;  The output format is configured using parameters.
 ;  The three builtin styles are default, mma and tex.
 (define (verbose~ u)
+  ; (displayln u)
   (match-define (list app-left  app-right)  (output-application-brackets))
   (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
@@ -2203,6 +2209,13 @@
       (~a sub-left (v~ u) sub-right))    
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (~a expt-left (v~ u) expt-right))
+    (define (base-sub u) ; wraps the base of an expt-expression      
+      (if (and (number? u) (negative? u))
+          ; we only need to add real parens, if expt-left aren't (
+          (if (equal? expt-left "(")
+              (~a expt-left (v~ u) expt-right)
+              (~a expt-left (paren u) expt-right))
+          (~a expt-left (v~ u) expt-right)))
     (define (quotient-sub u) ; wraps numerator or denominator of quotient
       (~a quot-left (v~ u) quot-right))
     (define (exponent-wrap s)
@@ -2215,15 +2228,16 @@
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
       (math-match u
         [r (math-match v
-             [s           (~sym '*)]
-             [x           implicit-mult]
-             [(Expt s w)  (~sym '*)]
-             [(Expt x w)  implicit-mult]
-             [(Expt u1 w) (~sym '*)])]
+             [s                   (~sym '*)]
+             [x                   implicit-mult]
+             [(⊗ u1 u2)           (implicit* r u1)]
+             [(Expt u1 u2)        (implicit* r u1)]
+             [(list '+ u1 u2 ...) implicit-mult]
+             [_                   (~sym '*)])]        
         [_ (~sym '*)]))
              
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
-      ; (displayln (list 'par u))
+      ;(displayln (list 'par u))
       (math-match u
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
@@ -2237,11 +2251,11 @@
         [(Or u v)    (~a (par u) " " (~sym 'or)  " " (par v))]
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
-        [(Expt u 1/2) ((output-format-sqrt) u)]
-        [(Expt u p)   (~a (par u #:use exponent-sub)
+        [(Expt u 1/2) ((output-format-sqrt) u)]        
+        [(Expt u p)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-format-function-symbol)
                                      (par p #:use exponent-sub)))]
-        [(Expt u v)   (~a (par u #:use exponent-sub)
+        [(Expt u v)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-format-function-symbol)
                                      (par v #:use exponent-sub)))]
         [(Log u)      ((output-format-log) u)]
@@ -2282,8 +2296,8 @@
                   [(⊗ r (and (Expt (num: s) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (v~ v))] ; XXX
                   [(⊗ r (and (Expt (num: s) u) v)) #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (v~ v))]
                   
-                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (v~ u))]
-                  [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (v~ u))]
+                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
+                  [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
                   [u                                                           (v~ u) ]))
     ; (displayln (list 'v~ u))             
     (math-match u
@@ -2310,13 +2324,19 @@
       [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) implicit-mult (v~ v))] ; XXXXX *
       [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a     (~num (abs r)) implicit-mult (v~ v))]
       ; Implicit multiplication between numbers and variables
-      [(⊗ r x) (~a (~num r) (~var x))] ; XXXX
+      [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
 
       ; Use explicit multiplication for fractions
-      [(⊗ r v)  #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (par v #:use paren))]
-      [(⊗ r v)  #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (par v #:use paren))]
+      [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v)))
+                      (~a "-" (~num (abs r)) (implicit* r u) (v~ (argcons '* u v)))]
+      [(⊗ r (⊗ u v))  #:when (and (positive? r) (not (equal? '(*) v))) 
+                      (~a    (~num (abs r))  (implicit* r u) (v~ (argcons '* u v)))] ; XXX
+      [(⊗ r v)        #:when (negative? r)
+                      (~a "-" (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
+      [(⊗ r v)        #:when (positive? r)
+                      (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
       
-      [(⊗ u v)              (~a (par u) (~sym '*) (par v))]
+      [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
       ; plus
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (~num (abs r)))
@@ -2336,12 +2356,17 @@
       [(⊕ u (⊗  r v))       #:when (positive? r) 
                             (~a (t1~ u)  (~sym '+) (~num (abs r)) (v~ v))]
       [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))]
-      ; TODO: The following two rules need to consider an implicit multiplication
-      ; TODO: between  v and w 
-      [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r)
-                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
-      [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)  
-                            (~a (t1~ u)  (~sym '+) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
+;      [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r) (displayln (list 'EEE r v))
+;                            (~a (t1~ u)  (~sym '-) (v~ (argcons '+ (list '* (abs r) v) w)))]
+;      [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r) (displayln (list 'FFF r v))
+;                            (~a (t1~ u)  (~sym '+) (v~ (argcons '+ (list '* (abs r) v) w)))]
+
+      ; TODO: Problem: If v is a negative number, we need a paren around v.
+      ;; [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r) (displayln (list 'EEE r v))
+      ;;                       (~a (t1~ u)  (~sym '-) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
+      ;; ; TODO: Problem: If v is a negative number, we need a paren around v.
+      ;; [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r)  (displayln (list 'FFF r v))
+      ;;                       (~a (t1~ u)  (~sym '+) (~num (abs r)) (implicit* r v) (v~ (argcons '+ v w)))]
       [(⊕ u v)              (~a (t1~ u)  (~sym '+) (v~ v))]
       ; minus (doesn't appear in normalized expressions)
       [(list  '- u)          (~a (~sym '-) (par u #:use paren))]
@@ -2411,6 +2436,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
+  ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
   (use-default-output-style)
@@ -2429,9 +2455,12 @@
   (check-equal? (~ '(* 3 6)) "$3\\cdot 6$")
   (check-equal? (~ '(sqrt d)) "$\\sqrt{d}$")
   (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}\\cdot a$")
+  (check-equal? (~ '(* -4 (expt -1 3))) "$-4\\cdot {(-1)}^3$")
+  ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
   (check-equal? (~ `(+ (expt 2 3) (* 5 2) -3)) "2^3+5*2-3")
+  (check-equal? (~ '(+ (expt -1 2) (* 3 -1) -2)) "(-1)^2+3*(-1)-2")
   )
   
 
