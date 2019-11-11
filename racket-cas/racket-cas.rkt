@@ -1964,6 +1964,7 @@
 (define output-relational-operator       (make-parameter ~a)) ; useful for TeX
 (define output-floating-point-precision  (make-parameter 4))  ; 
 
+
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
@@ -2012,6 +2013,7 @@
   (output-format-function-symbol ~symbol)
   (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
   (output-format-quotient-parens (list "" "")) ; not needed due to {} from \frac
+  (output-use-quotients? #t)
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
   (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
@@ -2047,6 +2049,7 @@
                  (output-format-function-symbol ~symbol)
                  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
                  (output-format-quotient-parens (list "" ""))
+                 (output-use-quotients? #t)
                  (output-sub-expression-parens (list "{" "}"))
                  (output-wrapper (λ (s) (~a "$" s "$")))
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
@@ -2196,11 +2199,13 @@
   (define ~sym (output-format-function-symbol)) ; function names
   (define (~var x) (symbol->tex x))             ; variable names
   (define (~relop x) ((output-relational-operator) x))
+  (define (~red u)   (~a "{\\color{red}" (v~ u ) "\\color{black}}"))
   (define (v~ u)
     ; (displayln (list 'v~ u))
     (define (~num r)
       (define precision (output-floating-point-precision))
       (cond [(exact? r) (~a r)]
+            [(nan? r)   (~a r)]
             [precision  (~r r #:precision precision)]
             [else       (~a r)]))
     (define (paren u) ; always wrap in ( )
@@ -2239,6 +2244,7 @@
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       ;(displayln (list 'par u))
       (math-match u
+        [(list 'red  u) (~red u)]
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2277,6 +2283,7 @@
     (define (t1~ u) ; term 1 aka first term in a sum
       ; (displayln (list 't1 u))
       (math-match u
+                  [(list 'red  u) (~red u)]
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
                   ; integer
@@ -2301,6 +2308,7 @@
                   [u                                                           (v~ u) ]))
     ; (displayln (list 'v~ u))             
     (math-match u
+      [(list 'red  u) (~red u)]
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
@@ -2420,13 +2428,14 @@
          (error 'verbose~ (~a "internal error, got: " u))]))
   ((output-wrapper) (v~ u)))
 
+(define (reverse-plus u)
+  (define r reverse-plus)
+  (match u
+    [(list* '+ us) (list* '+ (reverse us))]
+    [(list* op us) (list* op (map r us))]
+    [u             u]))
+
 (define (~ u)
-  (define (reverse-plus u)
-    (define r reverse-plus)
-    (match u
-      [(list* '+ us) (list* '+ (reverse us))]
-      [(list* op us) (list* op (map r us))]
-      [u             u]))
   (match (output-terms-descending?)
     [#t (verbose~ (reverse-plus u))]
     [#f (verbose~ u)]))
