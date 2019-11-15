@@ -528,15 +528,16 @@
     [(Divisors u)       (Divisors (n u))]
     [(Piecewise us vs)  (list* 'piecewise (map list (map n us) (map n vs)))]
     [(app: f us) (match u
-                   [(list '/ u v)  (⊘ (n u) (n v))]
-                   [(list '- u)    (⊖ (n u))]
-                   [(list '- u v)  (⊖ (n u) (n v))]
-                   [(list 'tan v)  (Tan  (n v))]
-                   [(list 'sqr u)  (Sqr  (n u))]
-                   [(list 'sqrt u) (Sqrt (n u))]
-                   [(list 'exp u)  (Exp  (n u))]  
-                   [(list 'bf u) (number? u) (bf u)]
-                   [(list* 'or us) (apply Or: us)]
+                   [(list  '/ u v)    (⊘ (n u) (n v))]
+                   [(list  '- u)      (⊖ (n u))]
+                   [(list  '- u v)    (⊖ (n u) (n v))]
+                   [(list  'tan v)    (Tan  (n v))]
+                   [(list  'sqr u)    (Sqr  (n u))]
+                   [(list  'sqrt u)   (Sqrt (n u))]
+                   [(list  'root u m) (Root (n u) (n m))]
+                   [(list  'exp u)    (Exp  (n u))]  
+                   [(list  'bf u)     (number? u) (bf u)]
+                   [(list* 'or us)    (apply Or: us)]
                    [_ (let ([nus (map n us)])
                         (if (equal? us nus)
                             u
@@ -860,11 +861,12 @@
     [(@e v)    (Ln: v)]     ; special case the natural logarithm
     [(_ 1)     0]
     ; [(_ 0)     +nan.0] ; TODO: error?
+    [(1 u)     '<undefined:log-with-base-1-is-undefined>] ; TODO: error?
     [(n m) #:when (divides? n m) (let ([k (max-dividing-power n m)])
                                    (⊕ k (Log n (⊘ m (Expt n k)))))]
     [(n m) `(log ,n ,m)]
-    [(2 r)  (fllog2 r)]
-    [(r s)  #:when (and (positive? r) (positive? s)) (fllog10 r s)]
+    [(2 r.0) #:when      (positive? r.0)              (fllog2 r.0)]
+    [(r s)   #:when (and (positive? r) (positive? s)) (fllog10 r s)]
 
     [(10   r.bf) #:when (bfpositive? r.bf) (bflog10 r.bf)]
     [(2    r.bf) #:when (bfpositive? r.bf) (bflog2  r.bf)]
@@ -1015,6 +1017,9 @@
 
 (define (Sqrt u)
   (Expt u 1/2))
+
+(define (Root u n)
+  (Expt u (⊘ 1 n)))
 
 (module+ test (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
 
@@ -1956,6 +1961,7 @@
 (define output-wrapper                   (make-parameter values))
 (define output-use-quotients?            (make-parameter #t))
 (define output-format-sqrt               (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
+(define output-format-root               (make-parameter (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")"))))
 (define output-format-log                (make-parameter default-output-log))
 (define output-sub-exponent-parens       (make-parameter (list "(" ")"))) ; for Tex it is { }
 (define output-sub-exponent-wrapper      (make-parameter values))         ; TeX needs extra {}
@@ -1970,9 +1976,10 @@
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
   (output-format-quotient #f)
   (output-format-quotient-parens (list "(" ")"))
-  (output-sub-expression-parens (list "(" ")"))
+  (output-sub-expression-parens  (list "(" ")"))
   (output-wrapper values)
-  (output-format-sqrt (λ(u) (~a "Sqrt[" (verbose~ u) "]")))
+  (output-format-sqrt (λ(u)   (~a "Sqrt[" (verbose~ u) "]")))
+  (output-format-root (λ(u n) (~a "Root[" (verbose~ u) "," (verbose~ n) "]")))
   (output-format-log default-output-log)
   (output-sub-exponent-parens (list "(" ")"))
   (output-sub-exponent-wrapper values)
@@ -1984,12 +1991,13 @@
   (output-format-function-symbol ~a)
   (output-format-quotient #f)
   (output-format-quotient-parens (list "(" ")"))
-  (output-sub-expression-parens (list "(" ")"))
-  (output-sub-exponent-parens (list "(" ")"))
+  (output-sub-expression-parens  (list "(" ")"))
+  (output-sub-exponent-parens    (list "(" ")"))
+  (output-sub-exponent-wrapper   values)
   (output-wrapper values)
-  (output-format-sqrt (λ(u) (~a "sqrt(" (verbose~ u) ")")))
+  (output-format-sqrt (λ(u)   (~a "sqrt(" (verbose~ u) ")")))
+  (output-format-root (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")")))
   (output-format-log default-output-log)
-  (output-sub-exponent-wrapper values)
   (output-implicit-product? #f)
   (output-relational-operator ~a))
 
@@ -2016,14 +2024,16 @@
   ; (output-use-quotients? #t)
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
-  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
-                              (~a "\\sqrt{" (verbose~ u) "}"))))  
+  (output-format-sqrt (λ(u)   (parameterize ([output-wrapper values])
+                                (~a "\\sqrt{"  (verbose~ u) "}"))))  
+  (output-format-root (λ(u n) (parameterize ([output-wrapper values])
+                                (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
   (output-format-log 
    (λ (u [v #f])
      (parameterize ([output-wrapper values])
        (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
              [else (~a "\\log(" (verbose~ u) ")")]))))
-  (output-sub-exponent-parens (list "{" "}"))
+  (output-sub-exponent-parens  (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
   (output-implicit-product? #t)
   (output-relational-operator ~relop))
@@ -2054,7 +2064,9 @@
                  (output-wrapper (λ (s) (~a "$" s "$")))
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
                                              (~a "\\sqrt{" (verbose~ u) "}"))))
-                 (output-sub-exponent-parens (list "{" "}"))
+                 (output-format-root (λ(u n) (parameterize ([output-wrapper values])
+                                               (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
+                 (output-sub-exponent-parens  (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
                  (output-implicit-product? #t)
                  (output-relational-operator ~relop)
@@ -2241,10 +2253,11 @@
              [_                   (~sym '*)])]        
         [_ (~sym '*)]))
              
-    (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
+    (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]) ; wrap if (locally) necessary
       ;(displayln (list 'par u))
       (math-match u
         [(list 'red  u) (~red (par u))]
+        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2263,7 +2276,7 @@
                                      (par p #:use exponent-sub)))]
         [(Expt u v)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-format-function-symbol)
-                                     (par v #:use exponent-sub)))]
+                                     (par v #:use exponent-sub #:wrap-fractions? #t)))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]        
         [(app: f us) #:when (memq f '(< > <= >=))
@@ -2272,7 +2285,9 @@
         [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                        (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
         ; unormalized sqrt
-        [(list 'sqrt u) ((output-format-sqrt) u)]
+        [(list 'sqrt u)   ((output-format-sqrt) u)]
+        ; unnormalized root
+        [(list 'root u v) ((output-format-root) u v)]
         ; applications
         [(app: f us) (let ()
                        (define arguments
@@ -2407,7 +2422,8 @@
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) ((output-format-sqrt) u)]
       [(Expt u v)  (~a (par u) (~sym '^) ((output-sub-exponent-wrapper)
-                                          (par v #:use exponent-sub)))]
+                                          (par v #:use exponent-sub
+                                               #:wrap-fractions? #t)))]
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
@@ -2416,7 +2432,9 @@
                                      (for/list ([u us] [v vs])
                                        (~a (v~ u) " & " (v~ v) "\\\\\n"))
                                      (list "\\end{cases}")))]
-      [(list 'sqrt u) ((output-format-sqrt) u)] ; XXX
+      [(list 'sqrt u)   ((output-format-sqrt) u)]   ; unnormalized sqrt
+      [(list 'root u v) ((output-format-root) u v)] ; unnormalized root
+
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
       [(app: f us) (let ()
