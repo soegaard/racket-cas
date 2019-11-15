@@ -2013,7 +2013,7 @@
   (output-format-function-symbol ~symbol)
   (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
   (output-format-quotient-parens (list "" "")) ; not needed due to {} from \frac
-  (output-use-quotients? #t)
+  ; (output-use-quotients? #t)
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
   (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
@@ -2049,7 +2049,7 @@
                  (output-format-function-symbol ~symbol)
                  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
                  (output-format-quotient-parens (list "" ""))
-                 (output-use-quotients? #t)
+                 ; (output-use-quotients? #t)
                  (output-sub-expression-parens (list "{" "}"))
                  (output-wrapper (λ (s) (~a "$" s "$")))
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
@@ -2059,10 +2059,10 @@
                  (output-implicit-product? #t)
                  (output-relational-operator ~relop)
                  (output-format-log
-                  (parameterize ([output-wrapper values])
                     (λ (u [v #f])
-                      (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
-                            [else (~a "\\log(" (verbose~ u) ")")])))))
+                      (parameterize ([output-wrapper values])
+                        (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
+                              [else (~a "\\log(" (verbose~ u) ")")])))))
     (verbose~ u)))
 
 (define char->tex
@@ -2199,7 +2199,7 @@
   (define ~sym (output-format-function-symbol)) ; function names
   (define (~var x) (symbol->tex x))             ; variable names
   (define (~relop x) ((output-relational-operator) x))
-  (define (~red u)   (~a "{\\color{red}" (v~ u ) "\\color{black}}"))
+  (define (~red str)   (~a "{\\color{red}" str "\\color{black}}"))
   (define (v~ u)
     ; (displayln (list 'v~ u))
     (define (~num r)
@@ -2244,7 +2244,7 @@
     (define (par u #:use [wrap paren]) ; wrap if (locally) necessary
       ;(displayln (list 'par u))
       (math-match u
-        [(list 'red  u) (~red u)]
+        [(list 'red  u) (~red (par u))]
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2283,7 +2283,7 @@
     (define (t1~ u) ; term 1 aka first term in a sum
       ; (displayln (list 't1 u))
       (math-match u
-                  [(list 'red  u) (~red u)]
+                  [(list 'red  u) (~red (t1~ u))]
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
                   ; integer
@@ -2308,7 +2308,7 @@
                   [u                                                           (v~ u) ]))
     ; (displayln (list 'v~ u))             
     (math-match u
-      [(list 'red  u) (~red u)]
+      [(list 'red  u) (~red (v~ u))]
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
