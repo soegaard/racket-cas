@@ -1018,6 +1018,7 @@
 (define (Sqrt u)
   (Expt u 1/2))
 
+
 (define (Root u n)
   (Expt u (⊘ 1 n)))
 
@@ -1333,6 +1334,8 @@
     (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
     (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
     (check-equal? (trig-expand '(expt (sin (* 2 x)) 2)) '(* 4 (expt (cos x) 2) (expt (sin x) 2)))))
+
+
 
 (define-syntax (for/⊕ stx)
   (syntax-case stx ()
@@ -2066,7 +2069,7 @@
                  ; (output-use-quotients? #t)
                  (output-sub-expression-parens (list "{" "}"))
                  (output-wrapper (λ (s) (~a "$" s "$")))
-                 (output-sqrt? #t)
+                 ; (output-sqrt? #t) ; uncommented!! otherwise the user can't control it
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
                                              (~a "\\sqrt{" (verbose~ u) "}"))))
                  (output-format-root (λ(u n) (parameterize ([output-wrapper values])
@@ -2197,7 +2200,9 @@
      [_ (display u)
         (error 'prepare-unnormalized-for-formatting
                (~a "internal error, got: " u))]))
-  (p u))
+  (if (string? u)
+      u
+      (p u)))
 
 (define prepare prepare-unnormalized-for-formatting)
 
@@ -2214,9 +2219,9 @@
   (match-define (list quot-left quot-right) (output-format-quotient-parens))
   (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol)) ; function names
-  (define (~var x) (symbol->tex x))             ; variable names
+  (define (~var x)   (symbol->tex x))             ; variable names
   (define (~relop x) ((output-relational-operator) x))
-  (define (~red str)   (~a "{\\color{red}" str "\\color{black}}"))
+  (define (~red str) (~a "{\\color{red}" str "\\color{black}}"))
   (define (v~ u)
     ; (displayln (list 'v~ u))
     (define (~num r)
@@ -2231,13 +2236,15 @@
       (~a sub-left (v~ u) sub-right))    
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (~a expt-left (v~ u) expt-right))
-    (define (base-sub u) ; wraps the base of an expt-expression      
+    (define (base-sub u) ; wraps the base of an expt-expression
       (if (and (number? u) (negative? u))
           ; we only need to add real parens, if expt-left aren't (
           (if (equal? expt-left "(")
               (~a expt-left (v~ u) expt-right)
               (~a expt-left (paren u) expt-right))
-          (~a expt-left (v~ u) expt-right)))
+          (if (equal? expt-left "(")
+              (~a expt-left (v~ u) expt-right)
+              (~a expt-left (paren u) expt-right))))
     (define (quotient-sub u) ; wraps numerator or denominator of quotient
       (~a quot-left (v~ u) quot-right))
     (define (exponent-wrap s)
@@ -2259,7 +2266,7 @@
         [_ (~sym '*)]))
              
     (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]) ; wrap if (locally) necessary
-      ;(displayln (list 'par u))
+      ; (displayln (list 'par u))
       (math-match u
         [(list 'red  u) (~red (par u))]
         [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
@@ -2276,6 +2283,12 @@
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
+        ; unnormalized power of a power
+        [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper)
+                                           (v~ w)) 
+                                          (~sym '^) ((output-sub-exponent-wrapper)
+                                                     (par v #:use exponent-sub
+                                                          #:wrap-fractions? #t)))]
         [(Expt u p)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-format-function-symbol)
                                      (par p #:use exponent-sub)))]
@@ -2328,6 +2341,7 @@
                   [u                                                           (v~ u) ]))
     ; (displayln (list 'v~ u))             
     (math-match u
+      [(? string? u) u]
       [(list 'red  u) (~red (v~ u))]
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
@@ -2419,16 +2433,25 @@
        (~a (par u) " " (~sym '<)  " " (par v) " " (~relop '<=) " " (par v1))]
       
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
-      [(Or u v)             (~a (par u) " " (~sym 'or)  " " (par v))]
+      ; todo: if u or v contains And or Or in u or v then we need parentheses as in the And line
+      [(Or u v)             (~a (v~ u) " " (~sym 'or) " " (v~ v))]
+      [(list  '= v) (~a (~sym '=) (v~ v))]
       [(list* '= us) ; handle illegal = with multiple terms
        (string-append* (add-between (map v~ us) (~a " " (~relop '=) " ")))]
       [(Equal u v)          (~a (v~ u)  " " (~relop '=) " " (v~ v))]
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
+      ; unnormalized power of a power
+      [(Expt (and (Expt u v) w) w1)   (~a ((output-sub-exponent-wrapper)
+                                          (v~ w)) 
+                                         (~sym '^) ((output-sub-exponent-wrapper)
+                                                   (par v #:use exponent-sub
+                                                        #:wrap-fractions? #t)))]
       [(Expt u v)  (~a (par u) (~sym '^) ((output-sub-exponent-wrapper)
                                           (par v #:use exponent-sub
                                                #:wrap-fractions? #t)))]
+      ; unnormalized
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
