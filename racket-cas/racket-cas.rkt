@@ -656,6 +656,7 @@
                               [(<=) (<= r1 r2)]
                               [(>=) (>= r1 r2)]
                               [else u])]
+    [(Equal u1 u2)   (Equal (s u1) (s u2))]
     [(Diff u x)      (diff u x)]
     [_ u]))
 
@@ -1040,10 +1041,11 @@
     [(Ln u)    (⊗ (⊘ 1 u) (d u))]
     [(Cos u)   (⊗ (⊖ 0 (Sin u)) (d u))]
     [(Sin u)   (⊗ (Cos u) (d u))]
-    [(app: f us)  #:when (symbol? f) 
+    [(app: f us)  #:when (symbol? f)
                   (match us
-                    [(list u) (⊗ `((D ,f ,x) ,u) (d u))] ; xxx
-                    [_ `(diff (,f ,@us) ,x)])]             ; xxx
+                    [(list u) (cond [(eq? u x)  (Diff `(,f ,x) x)]
+                                    [else       (⊗ `(app (deriviative ,f ,x) ,u) (d u))])] ; xxx
+                    [_ `(diff (,f ,@us) ,x)])]           ; xxx
     [_ (error 'diff (~a "got: " u " wrt " x))]))
 
 (define (Diff: u [x 'x])
@@ -2465,8 +2467,8 @@
                                           (par v #:use exponent-sub
                                                #:wrap-fractions? #t)))]
       ; unnormalized
-      [(list 'diff f 'x)
-       #:when (symbol? f)                     (~a (~var f) "'")]                                 
+      [(list 'diff f)
+       #:when (symbol? f)                     (~a (~var f) "'")]
       [(list 'diff (list f x) x)
        #:when (and (symbol? f) (symbol? x))   (~a (~var f) "'(" (~var x) ")")]
       [(list 'diff u 'x)                      (~a "(" (v~ u) ")' ")]
