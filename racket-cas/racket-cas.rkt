@@ -656,6 +656,7 @@
                               [(<=) (<= r1 r2)]
                               [(>=) (>= r1 r2)]
                               [else u])]
+    [(Diff u x)      (diff u x)]
     [_ u]))
 
 (module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
@@ -1044,6 +1045,18 @@
                     [(list u) (⊗ `((D ,f ,x) ,u) (d u))] ; xxx
                     [_ `(diff (,f ,@us) ,x)])]             ; xxx
     [_ (error 'diff (~a "got: " u " wrt " x))]))
+
+(define (Diff: u [x 'x])
+  (define D Diff:)
+  (math-match u
+    [(Equal u1 u2) (Equal (D u1 x) (D u2 x))]
+    [_             (list 'diff u x)]))
+
+(define-match-expander Diff
+  (λ (stx) (syntax-parse stx [(_ u x) #'(list 'diff u x)]))
+  (λ (stx) (syntax-parse stx [(_ u x) #'(Diff: u)] [_ (identifier? stx) #'Diff:])))
+
+
 
 (module+ test
   (check-equal? (diff 1 x) 0)
@@ -2452,6 +2465,12 @@
                                           (par v #:use exponent-sub
                                                #:wrap-fractions? #t)))]
       ; unnormalized
+      [(list 'diff f 'x)
+       #:when (symbol? f)                     (~a (~var f) "'")]                                 
+      [(list 'diff (list f x) x)
+       #:when (and (symbol? f) (symbol? x))   (~a (~var f) "'(" (~var x) ")")]
+      [(list 'diff u 'x)                      (~a "(" (v~ u) ")' ")]
+      
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
