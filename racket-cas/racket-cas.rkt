@@ -2305,11 +2305,13 @@
                                                      (par v #:use exponent-sub
                                                           #:wrap-fractions? #t)))]
         [(Expt u p)   (~a (par u #:use base-sub)
-                          (~sym '^) ((output-format-function-symbol)
-                                     (par p #:use exponent-sub)))]
+                          (~sym '^) ((output-sub-exponent-wrapper)
+                                     ((output-format-function-symbol)
+                                      (par p #:use exponent-sub))))]
         [(Expt u v)   (~a (par u #:use base-sub)
-                          (~sym '^) ((output-format-function-symbol)
-                                     (par v #:use exponent-sub #:wrap-fractions? #t)))]
+                          (~sym '^) ((output-sub-exponent-wrapper)
+                                     ((output-format-function-symbol)
+                                      (par v #:use exponent-sub #:wrap-fractions? #t))))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]        
         [(app: f us) #:when (memq f '(< > <= >=))
@@ -2472,6 +2474,7 @@
       [(list 'diff (list f x) x)
        #:when (and (symbol? f) (symbol? x))   (~a (~var f) "'(" (~var x) ")")]
       [(list 'diff u 'x)                      (~a "(" (v~ u) ")' ")]
+      [(list 'diff u  x)                      (~a "\\dv{" (~var x) "}(" (v~ u) ") ")]
       
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
@@ -2537,6 +2540,7 @@
   (check-equal? (~ '(sqrt d)) "$\\sqrt{d}$")
   (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}\\cdot a$")
   (check-equal? (~ '(* -4 (expt -1 3))) "$-4\\cdot {(-1)}^3$")
+  (check-equal? (~ '(* -9 (expt x -10))) "$\\frac{-9}{x^{10}}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
