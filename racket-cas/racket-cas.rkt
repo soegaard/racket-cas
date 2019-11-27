@@ -2351,16 +2351,19 @@
         [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper) ; braces for tex otherwise nothing
                                            (v~ w)) 
                                           (~sym '^) ((output-sub-exponent-wrapper)
-                                                     (par v #:use exponent-sub
-                                                          #:wrap-fractions? #t)))]
+                                                     (fluid-let ([original? #t])
+                                                       (par v #:use exponent-sub
+                                                            #:wrap-fractions? #t))))]
         [(Expt u p)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-sub-exponent-wrapper)
                                      ((output-format-function-symbol)
-                                      (par p #:use exponent-sub))))]
+                                      (fluid-let ([original? #t])
+                                         (par p #:use exponent-sub)))))]
         [(Expt u v)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-sub-exponent-wrapper)
                                      ((output-format-function-symbol)
-                                      (par v #:use exponent-sub #:wrap-fractions? #t))))]
+                                      (fluid-let ([original? #t])
+                                        (par v #:use exponent-sub #:wrap-fractions? #t)))))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]        
         [(app: f us) #:when (memq f '(< > <= >=))
@@ -2518,8 +2521,8 @@
       [(Or u v)             (~a (v~ u) " " (~sym 'or) " " (v~ v))]
       [(list  '= v) (~a (~sym '=) (v~ v))]
       [(list* '= us) ; handle illegal = with multiple terms
-       (string-append* (add-between (map v~ us) (~a " " (~relop '=) " ")))]
-      [(Equal u v)          (~a (v~ u)  " " (~relop '=) " " (v~ v))]
+       (string-append* (add-between (map (λ (u) (v~ u #t)) us) (~a " " (~relop '=) " ")))]
+      [(Equal u v)        (~a (v~ u #t)  " " (~relop '=) " " (v~ v #t))] ; never reached!!
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
       ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
       [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
@@ -2543,7 +2546,7 @@
        #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
       [(list 'diff u  x)                      (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
       
-      [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
+      [(Equal u v) (~a (v~ u #t) (~sym '=) (v~ v #t))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
       [(Piecewise us vs)    (string-append*
