@@ -1,7 +1,8 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-
+(define debugging? #f)
+(define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: formatting of rational numbers 1/4 -> \frac{1}{4}
 ;   - fix: (App (Compose Expt Sin) 0)
@@ -38,6 +39,16 @@
          (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test (require rackunit math/bigfloat)
   (define x 'x) (define y 'y) (define z 'z))
+
+(define-syntax (fluid-let stx)
+  (syntax-parse stx
+    [(_ ([var:id e:expr] ...) body ...)
+     (with-syntax ([(t ...) (generate-temporaries #'(var ...))])
+       (syntax/loc stx
+         (let ([t var] ...)
+           (set! var e) ...
+           (begin0 (begin body ...)
+                   (begin (set! var t) ...)))))]))
 
 ;;; A SYMBOLIC EXPRESSION is :
 ;;;   <sym> ::= <num> | <var> | (<var> <sym> ...)
@@ -1963,13 +1974,48 @@
 ; (bf-newton-raphson '(- (sin x) 1.0) x 1. 80 #:trace? #t)
 
 ;;;
-;;; Display
+;;; FORMATTING
 ;;;
+
+;;; Variables and Constants
+
+; The parameter output-variable-name holds the formatter
+; for variables and constants.
+
+; Input  Default   TeX           MMA
+; @e     e         \mathrm{e}    E
+; @pi    pi        π             Pi
+; x      x         x             x
+
+; TeX handles various other symbols in symbol->tex.
+
+(define (default-output-variable-name x)
+  (match x ['@pi "pi"] ['@e "e"]           [_ (~a x)]))
+(define (mma-output-variable-name x)
+  (match x ['@pi "Pi"] ['@e "E"]           [_ (~a x)]))
+(define (tex-output-variable-name x)
+  (match x ['@pi "π"]  ['@e "\\mathrm{e}"] [_ (symbol->tex x)]))
+
+
+;;; Logarithms
+
+; Input      Default    Tex          MMA
+; (log x)    log(x)     \log(x)      log(x)
+; (log 2 x)  log_2(x)   \log_{2}(x)  log_2(x) 
 
 (define (default-output-log u [v #f])
   (match-define (list l r) (output-application-brackets))
   (cond [v    (~a "log_" (verbose~ u) l (verbose~ v) r)]
         [else (~a "log" l (verbose~ u) r)]))
+
+(define mma-output-log default-output-log)
+
+(define (tex-output-log u [v #f])
+  (parameterize ([output-wrapper values])
+    (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
+          [else (~a "\\log(" (verbose~ u) ")")])))
+
+;;; Formatting Parameters
 
 (define output-application-brackets      (make-parameter (list "(" ")")))
 (define output-format-function-symbol    (make-parameter ~a))
@@ -1988,7 +2034,8 @@
 (define output-implicit-product?         (make-parameter #f)) ; useful for TeX
 (define output-relational-operator       (make-parameter ~a)) ; useful for TeX
 (define output-floating-point-precision  (make-parameter 4))  ; 
-
+(define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e and @pi
+(define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -2000,11 +2047,12 @@
   (output-sqrt? #t)
   (output-format-sqrt (λ(u)   (~a "Sqrt[" (verbose~ u) "]")))
   (output-format-root (λ(u n) (~a "Root[" (verbose~ u) "," (verbose~ n) "]")))
-  (output-format-log default-output-log)
+  (output-format-log mma-output-log)
   (output-sub-exponent-parens (list "(" ")"))
   (output-sub-exponent-wrapper values)
   (output-implicit-product? #f)
-  (output-relational-operator ~a))
+  (output-relational-operator ~a)
+  (output-variable-name mma-output-variable-name))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
@@ -2020,7 +2068,8 @@
   (output-format-root (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")")))
   (output-format-log default-output-log)
   (output-implicit-product? #f)
-  (output-relational-operator ~a))
+  (output-relational-operator ~a)
+  (output-variable-name default-output-variable-name))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan asin acos atan log ln sqrt))
@@ -2050,18 +2099,16 @@
                                 (~a "\\sqrt{"  (verbose~ u) "}"))))  
   (output-format-root (λ(u n) (parameterize ([output-wrapper values])
                                 (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
-  (output-format-log 
-   (λ (u [v #f])
-     (parameterize ([output-wrapper values])
-       (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
-             [else (~a "\\log(" (verbose~ u) ")")]))))
+  (output-format-log tex-output-log)
   (output-sub-exponent-parens  (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
   (output-implicit-product? #t)
-  (output-relational-operator ~relop))
+  (output-relational-operator ~relop)
+  (output-variable-name tex-output-variable-name))
 
 (define (tex u)
-  (define operators '(sin cos tan asin acos atan log ln sqrt)) ; needs \\ in output
+  (define operators '(sin  cos  tan  asin acos atan log ln sqrt 
+                      sinh cosh tanh )) ; needs \\ in output
   (define relational-operators '(= < <= > >=))
   (define (~relop u)
     (match u
@@ -2091,13 +2138,10 @@
                                                (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
                  (output-sub-exponent-parens  (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
-                 (output-implicit-product? #t)
-                 (output-relational-operator ~relop)
-                 (output-format-log
-                    (λ (u [v #f])
-                      (parameterize ([output-wrapper values])
-                        (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
-                              [else (~a "\\log(" (verbose~ u) ")")])))))
+                 (output-implicit-product?    #t)
+                 (output-relational-operator  ~relop)
+                 (output-variable-name        tex-output-variable-name)
+                 (output-format-log           tex-output-log))
     (verbose~ u)))
 
 (define char->tex
@@ -2124,7 +2168,7 @@
 (define (symbol->tex s)
   (define t (string->symbol (string->tex (symbol->string s))))
   (match t
-    ['@e  "e"]         ; Euler's constant
+    ['@e  "\\mathrm{e}"]         ; Euler's constant
     ['@pi "\\pi"]      ; pi
     ['@n  "@n"]        ; an arbitrary natural number
     ['@p  "@p"]        ; an arbitrary integer
@@ -2234,10 +2278,11 @@
   (match-define (list quot-left quot-right) (output-format-quotient-parens))
   (define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol)) ; function names
-  (define (~var x)   (symbol->tex x))             ; variable names
+  (define ~var (let ([out (output-variable-name)]) (λ(x) (out x)))) ; variable names
   (define (~relop x) ((output-relational-operator) x))
   (define (~red str) (~a "{\\color{red}" str "\\color{black}}"))
-  (define (v~ u)
+  
+  (define (v~ u [original? #f])
     ; (displayln (list 'v~ u))
     (define (~num r)
       (define precision (output-floating-point-precision))
@@ -2246,11 +2291,13 @@
             [precision  (~r r #:precision precision)]
             [else       (~a r)]))
     (define (paren u) ; always wrap in ( )
-      (~a "(" (v~ u) ")"))
+      (~a "(" (v~ u #t) ")"))
+    (define (exponent-wrap s)
+      (~a expt-left s expt-right))
     (define (sub u) ; always wrap in sub-left and sub-right parentheses
-      (~a sub-left (v~ u) sub-right))    
+      (~a sub-left (v~ u #t) sub-right))    
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
-      (~a expt-left (v~ u) expt-right))
+      (exponent-wrap (v~ u #t)))
     (define (base-sub u) ; wraps the base of an expt-expression
       (if (and (number? u) (negative? u))
           ; we only need to add real parens, if expt-left aren't (
@@ -2262,8 +2309,6 @@
               (~a expt-left (paren u) expt-right))))
     (define (quotient-sub u) ; wraps numerator or denominator of quotient
       (~a quot-left (v~ u) quot-right))
-    (define (exponent-wrap s)
-      (~a expt-left s expt-right))
     (define implicit-mult (if (output-implicit-product?) "" (~sym '*)))
     (define (argcons op x xs)
       (match xs
@@ -2281,7 +2326,7 @@
         [_ (~sym '*)]))
              
     (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]) ; wrap if (locally) necessary
-      ; (displayln (list 'par u))
+      (when debugging? (displayln (list 'par u 'orig original?)))
       (math-match u
         [(list 'red  u) (~red (par u))]
         [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
@@ -2289,8 +2334,12 @@
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
         ; infix operators and relations
-        [(⊗ 1 v)     (exponent-wrap (par v))] ; xxx
-        [(⊗ u v)     (exponent-wrap (~a (par u) (~sym '*) (par v)))]
+        ; [(⊗ 1 v)     (exponent-wrap (par v))] ; xxx
+        [(⊗  1 v)                  (exponent-wrap        (~a  (v~ v original?)))]
+        [(⊗ -1 v) #:when original? (exponent-wrap        (~a "-"         (v~ v)))]
+        [(⊗ -1 v)                  (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
+        [(⊗ u v) #:when original?  (exponent-wrap (~a      u  (~sym '*) (par v)))]
+        [(⊗ u v)                   (exponent-wrap (~a (par u) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -2299,7 +2348,7 @@
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
         ; unnormalized power of a power
-        [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper)
+        [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper) ; braces for tex otherwise nothing
                                            (v~ w)) 
                                           (~sym '^) ((output-sub-exponent-wrapper)
                                                      (par v #:use exponent-sub
@@ -2323,6 +2372,15 @@
         [(list 'sqrt u)   ((output-format-sqrt) u)]
         ; unnormalized root
         [(list 'root u v) ((output-format-root) u v)]
+        ; unnormalized diff
+        [(list 'diff f)
+         #:when (symbol? f)                              (~a (~sym f) "'")]
+        [(list 'diff (list f x) x)
+         #:when (and (symbol? f) (symbol? x))            (~a (~sym f) "'(" (~var x) ")")]
+        [(list 'diff u x)
+         #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
+        [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
+
         ; applications
         [(app: f us) (let ()
                        (define arguments
@@ -2331,7 +2389,7 @@
                        (~a head app-left arguments app-right))]
         [_  (wrap u)]))
     (define (t1~ u) ; term 1 aka first term in a sum
-      ; (displayln (list 't1 u))
+      (when debugging? (displayln (list 't1 u)))
       (math-match u
                   [(list 'red  u) (~red (t1~ u))]
                   [(⊗  1 u)                       (~a                          (v~ u))]
@@ -2356,7 +2414,7 @@
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
                   [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
                   [u                                                           (v~ u) ]))
-    ; (displayln (list 'v~ u))             
+    (when debugging? (write (list 'v~ u 'orig original?)) (newline))
     (math-match u
       [(? string? u) u]
       [(list 'red  u) (~red (v~ u))]
@@ -2370,18 +2428,23 @@
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       ; mult
-      [(⊗  1 v)                         (~a             (v~ v))]
-      [(⊗ -1 v)                         (~a "-"         (v~ v))]
+      [(⊗  1 v)                                (~a             (v~ v))]
+      [(⊗ -1 v) #:when original?               (~a "-"         (v~ v))]
+      [(⊗ -1 v)                         (paren (~a "-"         (v~ v)))]
       ; Explicit multiplication between integers
-      [(⊗ p q)                          (~a (~num p) (~sym '*) (par q))]
+      [(⊗ p q) #:when original?           (~a (~num p) (~sym '*) (par q))]
+      [(⊗ p q) #:when (not (negative? p)) (~a (~num p) (~sym '*) (par q))]
+      [(⊗ p q) #:when      (negative? p)  (~a "(" (~num p) ")" (~sym '*) (par q))]
       ; An implicit multiplication can not be used for fractions 
       ;[(⊗ p v)  #:when (negative? p)        (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
       ;[(⊗ p v)  #:when (positive? p)        (~a     (~num (abs p)) implicit-mult (par v #:use paren))]
       ;[(⊗ α u)  #:when (= (numerator α)  1) (~a   "\\frac{" (v~ u) "}{"     (~num (/      α))  "}")]
       ;[(⊗ α u)  #:when (= (numerator α) -1) (~a   "\\frac{" (v~ u) "}{" "-" (~num (/ (abs α))) "}")]
       ; Implicit multiplication only if we have a symbols as base
-      [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) implicit-mult (v~ v))] ; XXXXX *
-      [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a     (~num (abs r)) implicit-mult (v~ v))]
+      [(⊗ r (and (Expt (var: x) u) v)) #:when (negative? r) (if original?
+                                                                (~a            "-" (~num (abs r))   implicit-mult (v~ v #t))
+                                                                (~a (paren (~a "-" (~num (abs r)))) implicit-mult (v~ v #t)))] ; XXXXX *
+      [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a                    (~num (abs r))   implicit-mult (v~ v #t))]
       ; Implicit multiplication between numbers and variables
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
 
@@ -2391,7 +2454,8 @@
       [(⊗ r (⊗ u v))  #:when (and (positive? r) (not (equal? '(*) v))) 
                       (~a    (~num (abs r))  (implicit* r u) (v~ (argcons '* u v)))] ; XXX
       [(⊗ r v)        #:when (negative? r)
-                      (~a "-" (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
+                      (define w (if original? values paren))
+                      (~a  (w (~a "-" (~num (abs r)))) (implicit* r v) (par v #:use paren))] ; XXX
       [(⊗ r v)        #:when (positive? r)
                       (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
       
@@ -2462,19 +2526,22 @@
       ; unnormalized power of a power
       [(Expt (and (Expt u v) w) w1)   (~a ((output-sub-exponent-wrapper)
                                           (v~ w)) 
-                                         (~sym '^) ((output-sub-exponent-wrapper)
-                                                   (par v #:use exponent-sub
-                                                        #:wrap-fractions? #t)))]
-      [(Expt u v)  (~a (par u) (~sym '^) ((output-sub-exponent-wrapper)
-                                          (par v #:use exponent-sub
-                                               #:wrap-fractions? #t)))]
+                                         (~sym '^) (fluid-let ([original? #t])
+                                                     ((output-sub-exponent-wrapper)
+                                                      (par v #:use exponent-sub
+                                                           #:wrap-fractions? #t))))]
+      [(Expt u v)  (~a (par u) (~sym '^) (fluid-let ([original? #t])
+                                                    ((output-sub-exponent-wrapper)
+                                                     (par v #:use exponent-sub
+                                                          #:wrap-fractions? #t))))]
       ; unnormalized
       [(list 'diff f)
-       #:when (symbol? f)                     (~a (~var f) "'")]
+       #:when (symbol? f)                     (~a (~sym f) "'")]
       [(list 'diff (list f x) x)
-       #:when (and (symbol? f) (symbol? x))   (~a (~var f) "'(" (~var x) ")")]
-      [(list 'diff u 'x)                      (~a "(" (v~ u) ")' ")]
-      [(list 'diff u  x)                      (~a "\\dv{" (~var x) "}(" (v~ u) ") ")]
+       #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (~var x) ")")]
+      [(list 'diff u x)
+       #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
+      [(list 'diff u  x)                      (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
       
       [(Equal u v) (~a (v~ u) (~sym '=) (v~ v))]
       [(Log u)     ((output-format-log) u)]
@@ -2496,7 +2563,7 @@
                      (~a head app-left arguments app-right))]
       [_ (display u)
          (error 'verbose~ (~a "internal error, got: " u))]))
-  ((output-wrapper) (v~ u)))
+  ((output-wrapper) (v~ u #t)))
 
 (define (reverse-plus u)
   (define r reverse-plus)
