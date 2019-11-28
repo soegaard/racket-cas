@@ -2398,6 +2398,12 @@
       (when debugging? (displayln (list 't1 u)))
       (math-match u
                   [(list 'red  u) (~red (t1~ u))]
+                  ; unnormalized and normalized quotients
+                  [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                                 (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+                  [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
+                                  (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                                  (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
                   [(⊗  1 u)                       (~a                          (v~ u))]
                   [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
                   ; integer
@@ -2479,11 +2485,11 @@
                             (~a (t1~ u)  (~sym '-) (~num (abs r)) (~sym '*) (par s) (~sym '*) (v~ v))]
       [(⊕ u (⊗  r (⊗ s v)))  #:when (positive? r) 
                              (~a (t1~ u) (~sym '+) (~num (abs r)) (~sym '*) (par s) (~sym '*) (v~ v))]
-      ; 
+      ;
       [(⊕ u (⊗  r v))       #:when (negative? r)
-                            (~a (t1~ u)  (~sym '-) (~num (abs r)) (v~ v))]
+                            (~a (t1~ u)  (~sym '-) (v~ (⊗ (abs r) v)))]
       [(⊕ u (⊗  r v))       #:when (positive? r) 
-                            (~a (t1~ u)  (~sym '+) (~num (abs r)) (v~ v))]
+                            (~a (t1~ u)  (~sym '+) (v~ (⊗ r v)))]
       [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))]
 ;      [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r) (displayln (list 'EEE r v))
 ;                            (~a (t1~ u)  (~sym '-) (v~ (argcons '+ (list '* (abs r) v) w)))]
@@ -2535,11 +2541,11 @@
                                          (~sym '^) (fluid-let ([original? #t])
                                                      ((output-sub-exponent-wrapper)
                                                       (par v #:use exponent-sub
-                                                           #:wrap-fractions? #t))))]
+                                                             #:wrap-fractions? #t))))]
       [(Expt u v)  (~a (par u) (~sym '^) (fluid-let ([original? #t])
-                                                    ((output-sub-exponent-wrapper)
-                                                     (par v #:use exponent-sub
-                                                          #:wrap-fractions? #t))))]
+                                           ((output-sub-exponent-wrapper)
+                                            (par v #:use exponent-sub
+                                                   #:wrap-fractions? #t))))]
       ; unnormalized
       ;   handle sqrt first
       [(list 'diff (list 'sqrt u) x)
@@ -2627,6 +2633,7 @@
   (check-equal? (~ '(+ 1 (* -2 x) 3)) "1-2*x+3")
   (check-equal? (parameterize ([output-sqrt? #f]) (~ '(expt x 1/2))) "x^(1/2)")
   (check-equal? (parameterize ([output-sqrt? #t]) (~ '(expt x 1/2))) "sqrt(x)")
+  (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "1+7*1/x")
   )
   
 
