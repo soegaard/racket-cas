@@ -2376,6 +2376,9 @@
         ; unnormalized root
         [(list 'root u v) ((output-format-root) u v)]
         ; unnormalized diff
+        [(list 'diff (list 'sqrt u) x)
+         #:when (member x (output-differentiation-mark))
+         (~a "(" ((output-format-sqrt) u) ")'")]
         [(list 'diff f)
          #:when (symbol? f)                              (~a (~sym f) "'")]
         [(list 'diff (list f x) x)
@@ -2538,6 +2541,10 @@
                                                      (par v #:use exponent-sub
                                                           #:wrap-fractions? #t))))]
       ; unnormalized
+      ;   handle sqrt first
+      [(list 'diff (list 'sqrt u) x)
+       #:when (member x (output-differentiation-mark))
+       (~a "(" ((output-format-sqrt) u) ")'")]      
       [(list 'diff f)
        #:when (symbol? f)                     (~a (~sym f) "'")]
       [(list 'diff (list f x) x)
