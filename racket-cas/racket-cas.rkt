@@ -1047,6 +1047,7 @@
     [(⊗ v w)     (⊕ (⊗ (d v) w) (⊗ v (d w)))]
     [(Expt u r)  (⊗ r (Expt u (- r 1)) (d u))]
     [(Expt @e u) (⊗ (Exp u) (d u))]
+    [(Expt r y)  #:when (and (positive? r) (equal? y x))  (⊗ (Expt r x) (Ln r))]
     [(Expt u v)  (diff (Exp (⊗ v (Ln u))) x)] ; assumes u positive    
     ; [(Exp u)   (⊗ (Exp u) (d u))]
     [(Ln u)    (⊗ (⊘ 1 u) (d u))]
@@ -2219,6 +2220,8 @@
     ; (displayln (list 'p u))
     (define (non-zero? u) (not (equal? 0 u)))
     (math-match u
+     ; keep formatting declaration unchanged           
+     [(list 'formatting options u)  `(formatting ,options ,(p u))]
      ; rewrites
      [(⊗ 1 v)         #:when one-factor (p v)]
      [(⊘ u 1)         #:when one-factor (p u)]
@@ -2276,7 +2279,7 @@
   (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
   (match-define (list quot-left quot-right) (output-format-quotient-parens))
-  (define use-quotients? (output-use-quotients?))
+  ;(define use-quotients? (output-use-quotients?))
   (define ~sym (output-format-function-symbol)) ; function names
   (define ~var (let ([out (output-variable-name)]) (λ(x) (out x)))) ; variable names
   (define (~relop x) ((output-relational-operator) x))
@@ -2347,6 +2350,8 @@
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
+        [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                        (format/ 1 (par u #:use quotient-sub))]
         ; unnormalized power of a power
         [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper) ; braces for tex otherwise nothing
                                            (v~ w)) 
@@ -2401,7 +2406,7 @@
                   ; unnormalized and normalized quotients
                   [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                                  (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
-                  [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
+                  [(Quotient u v) #:when (and  (output-use-quotients?) (not (rational? v)))
                                   (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                                   (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
                   [(⊗  1 u)                       (~a                          (v~ u))]
@@ -2430,15 +2435,23 @@
     (math-match u
       [(? string? u) u]
       [(list 'red  u) (~red (v~ u))]
+      [(list 'formatting options u)
+       (let loop ([os options])
+         (match os
+           ['()                                   (v~ u)]
+           [(list (list 'use-quotients? v) os ...) (parameterize ([output-use-quotients? v]) (loop os))]
+           [_                                     (error 'verbose-formatting (~a "unknown option" os))]))]
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
       ; unnormalized and normalized quotients
       [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
-      [(Quotient u v) #:when (and use-quotients? (not (rational? v)))
+      [(Quotient u v) #:when (and  (output-use-quotients?) (not (rational? v)))
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+      [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                      (format/ 1 (par u #:use quotient-sub))]
       ; mult
       [(⊗  1 v)                                (~a             (v~ v))]
       [(⊗ -1 v) #:when original?               (~a "-"         (v~ v))]
@@ -2633,7 +2646,8 @@
   (check-equal? (~ '(+ 1 (* -2 x) 3)) "1-2*x+3")
   (check-equal? (parameterize ([output-sqrt? #f]) (~ '(expt x 1/2))) "x^(1/2)")
   (check-equal? (parameterize ([output-sqrt? #t]) (~ '(expt x 1/2))) "sqrt(x)")
-  (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "1+7*1/x")
+  (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "1+7/x")
+  (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7*1/x")
   )
   
 
