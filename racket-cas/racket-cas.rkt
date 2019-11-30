@@ -1166,7 +1166,7 @@
         
 ;;; Substition
 
-(define (subst u v w) ; substitute w for v in u
+(define (subst u v w #:normalize? [normalize? #t]) ; substitute w for v in u
   (define le logical-expand)
   (define (n* us) (map normalize us))
   (define (s u)
@@ -1186,7 +1186,9 @@
       
       [(app: f us)       `(,f ,@(map s us))]
       [_ u]))
-  (normalize (s u)))
+  (if normalize?
+      (normalize (s u))
+      (s u)))
 
 
 
@@ -2364,6 +2366,9 @@
                                      ((output-format-function-symbol)
                                       (fluid-let ([original? #t])
                                          (par p #:use exponent-sub)))))]
+        [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
+                        (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                        (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
         [(Expt u v)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-sub-exponent-wrapper)
                                      ((output-format-function-symbol)
@@ -2452,6 +2457,13 @@
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par u #:use quotient-sub))]
+      [(Expt u p)     #:when (negative? p)
+                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub))]
+      [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
+                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                      (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
+      
       ; mult
       [(⊗  1 v)                                (~a             (v~ v))]
       [(⊗ -1 v) #:when original?               (~a "-"         (v~ v))]
@@ -2647,7 +2659,7 @@
   (check-equal? (parameterize ([output-sqrt? #f]) (~ '(expt x 1/2))) "x^(1/2)")
   (check-equal? (parameterize ([output-sqrt? #t]) (~ '(expt x 1/2))) "sqrt(x)")
   (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "1+7/x")
-  (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7*1/x")
+  (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7/x")
   )
   
 
