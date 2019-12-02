@@ -2125,7 +2125,8 @@
       ['>=  "\\geq "]
       ['*   "\\cdot "]   ; multiplication
       ['or  "\\vee "]    ; logical or
-      ['and "\\wedge "]  ; logical and      
+      ['and "\\wedge "]  ; logical and
+      ['|%| "\\%"]
       [_  (~a s)]))
   (parameterize ((output-application-brackets (list "(" ")"))
                  (output-format-function-symbol ~symbol)
@@ -2157,7 +2158,8 @@
        'κ "\\kappa"   'λ "\\lambda"  'Λ "\\Lambda"  'μ "\\mu"    'ν "\\nu"    'ξ "\\xi"
        'Ξ "\\Xi"      'π "\\pi"      'Π "\\Pi"      'ρ "\\rho"   'σ "\\sigma" 'Σ "\\Sigma"
        'τ "\\Tau"     'υ "\\upsilon" 'Υ "\\Upsilon" 'φ "\\phi"   'Φ "\\Phi"   'χ "\\chi"
-       'ψ "\\psi"     'Ψ "\\Psi"     'ω "\\omega"   'Ω "\\Omega" ))
+       'ψ "\\psi"     'Ψ "\\Psi"     'ω "\\omega"   'Ω "\\Omega" 
+       '|%| "\\%"))
     (λ (c)
       (define s (string->symbol (string c)))
       (match (hash-ref dict s #f)
@@ -2175,6 +2177,8 @@
     ['@pi "\\pi"]      ; pi
     ['@n  "@n"]        ; an arbitrary natural number
     ['@p  "@p"]        ; an arbitrary integer
+    ['|%|  "\\%"]        ; an arbitrary integer
+    
     [_ t]))
 
 
@@ -2397,6 +2401,8 @@
          #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
         [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
 
+        [(list 'percent u) (~a (v~ u) (~sym '|%|))]
+
         ; applications
         [(app: f us) (let ()
                        (define arguments
@@ -2594,6 +2600,7 @@
                                      (list "\\end{cases}")))]
       [(list 'sqrt u)   ((output-format-sqrt) u)]   ; unnormalized sqrt
       [(list 'root u v) ((output-format-root) u v)] ; unnormalized root
+      [(list 'percent u) (~a (v~ u) (~sym '|%|))]
 
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
