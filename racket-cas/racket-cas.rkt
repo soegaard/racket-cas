@@ -2577,7 +2577,9 @@
                                            ((output-sub-exponent-wrapper)
                                             (par v #:use exponent-sub
                                                    #:wrap-fractions? #t))))]
-      ; unnormalized
+      ; Unnormalized
+      [(list 'sqr u) (v~ `(expt ,u 2))]
+      
       ;   handle sqrt first
       [(list 'diff (list 'sqrt u) x)
        #:when (member x (output-differentiation-mark))
