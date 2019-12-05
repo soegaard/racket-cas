@@ -2571,7 +2571,7 @@
                                           (v~ w)) 
                                          (~sym '^) (fluid-let ([original? #t])
                                                      ((output-sub-exponent-wrapper)
-                                                      (par v #:use exponent-sub
+                                                      (par w1 #:use exponent-sub
                                                              #:wrap-fractions? #t))))]
       [(Expt u v)  (~a (par u) (~sym '^) (fluid-let ([original? #t])
                                            ((output-sub-exponent-wrapper)
@@ -2667,6 +2667,7 @@
   (check-equal? (parameterize ([output-sqrt? #t]) (~ '(expt x 1/2))) "sqrt(x)")
   (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "1+7/x")
   (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7/x")
+  (check-equal? (~ '(expt (expt 65 1/2) 2)) "sqrt(65)^2")
   )
   
 
