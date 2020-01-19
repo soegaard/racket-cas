@@ -2051,6 +2051,7 @@
 (define output-wrapper                   (make-parameter values))
 (define output-use-quotients?            (make-parameter #t))
 (define output-sqrt?                     (make-parameter #t))
+(define output-format-abs                (make-parameter (λ(u)   (~a "abs("  (verbose~ u) ")"))))
 (define output-format-sqrt               (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
 (define output-format-root               (make-parameter (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")"))))
 (define output-format-log                (make-parameter default-output-log))
@@ -2063,6 +2064,7 @@
 (define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e and @pi
 (define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
 
+
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
@@ -2071,6 +2073,7 @@
   (output-sub-expression-parens  (list "(" ")"))
   (output-wrapper values)
   (output-sqrt? #t)
+  (output-format-abs  (λ(u)   (~a "Abs["  (verbose~ u) "]")))
   (output-format-sqrt (λ(u)   (~a "Sqrt[" (verbose~ u) "]")))
   (output-format-root (λ(u n) (~a "Root[" (verbose~ u) "," (verbose~ n) "]")))
   (output-format-log mma-output-log)
@@ -2090,6 +2093,7 @@
   (output-sub-exponent-wrapper   values)
   (output-wrapper values)
   (output-sqrt? #t)
+  (output-format-abs  (λ(u)   (~a "abs("  (verbose~ u) ")")))
   (output-format-sqrt (λ(u)   (~a "sqrt(" (verbose~ u) ")")))
   (output-format-root (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")")))
   (output-format-log default-output-log)
@@ -2120,6 +2124,8 @@
   ; (output-use-quotients? #t)
   (output-sub-expression-parens (list "{" "}"))
   (output-wrapper (λ (s) (~a "$" s "$")))
+  (output-format-abs  (λ(u)   (parameterize ([output-wrapper values])
+                                (~a "\\left|"  (verbose~ u) "\\right|"))))  
   (output-sqrt? #t)
   (output-format-sqrt (λ(u)   (parameterize ([output-wrapper values])
                                 (~a "\\sqrt{"  (verbose~ u) "}"))))  
@@ -2629,6 +2635,8 @@
       [(list 'sqrt u)   ((output-format-sqrt) u)]   ; unnormalized sqrt
       [(list 'root u v) ((output-format-root) u v)] ; unnormalized root
       [(list 'percent u) (~a (v~ u) (~sym '|%|))]
+
+      [(list 'abs u) ((output-format-abs) u)] 
 
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
