@@ -527,7 +527,8 @@
     [(Sin u)            (Sin  (n u))]
     [(Asin u)           (Asin (n u))]
     [(Cos u)            (Cos  (n u))]
-    [(Acos u)           (Acos (n u))]
+    [(Acos u)           (Acos (n u))] 
+    [(Abs u)            (Abs  (n u))]
     [(Factorial u)      (Factorial (n u))]
     [(Gamma u)          (Gamma (n u))]
     [(Prime? u)         (Prime? (n u))]
@@ -1022,6 +1023,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'acos u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Acos: u)] [_ (identifier? stx) #'Acos:])))
 
+
 (define (Tan u)
   (⊘ (Sin u) (Cos u)))
 
@@ -1031,6 +1033,27 @@
 (define (Sqrt u)
   (Expt u 1/2))
 
+(define (Abs: u)
+  (math-match u
+    [α   (if (< α   0) (- α)   α)]
+    [r   (if (< r   0) (- r  ) r  )]
+    [r.0 (if (< r.0 0) (- r.0) r.0)]
+    [@e  @e]
+    [@pi @pi]
+    [_   `(abs ,u)]))
+
+(define-match-expander Abs
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'abs u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Abs: u)] [_ (identifier? stx) #'Abs:])))
+
+(module+ test 
+  (check-equal? (Abs (+ x x)) (Abs (* 2 x)))
+  (check-equal? (Abs -42)   42)
+  (check-equal? (Abs   0)    0)
+  (check-equal? (Abs  42)   42)
+  (check-equal? (Abs -42.0) 42.0)
+  (check-equal? (Abs   0.0)  0.0)
+  (check-equal? (Abs  42.0) 42.0))
 
 (define (Root u n)
   (Expt u (⊘ 1 n)))
@@ -2334,8 +2357,9 @@
              [_                   (~sym '*)])]        
         [_ (~sym '*)]))
              
-    (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]) ; wrap if (locally) necessary
-      (when debugging? (displayln (list 'par u 'orig original?)))
+    (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]
+                 #:exponent-base? [exponent-base? #f]) ; wrap if (locally) necessary
+      (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
         [(list 'red  u) (~red (par u))]
         [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
@@ -2344,11 +2368,13 @@
         [x                              (~a (~var x))]
         ; infix operators and relations
         ; [(⊗ 1 v)     (exponent-wrap (par v))] ; xxx
-        [(⊗  1 v)                  (exponent-wrap        (~a  (v~ v original?)))]
-        [(⊗ -1 v) #:when original? (exponent-wrap        (~a "-"         (v~ v)))]
-        [(⊗ -1 v)                  (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
-        [(⊗ u v) #:when original?  (exponent-wrap (~a      u  (~sym '*) (par v)))]
-        [(⊗ u v)                   (exponent-wrap (~a (par u) (~sym '*) (par v)))]
+        [(⊗  1 v)                       (exponent-wrap        (~a  (v~ v original?)))]
+        [(⊗ -1 v) #:when exponent-base? (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
+        [(⊗ -1 v) #:when original?      (exponent-wrap        (~a "-"         (v~ v)))]
+        [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
+        [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
+        [(⊗ u v) #:when original?       (exponent-wrap (~a      u  (~sym '*) (par v)))]
+        [(⊗ u v)                        (exponent-wrap (~a (par u) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -2465,10 +2491,10 @@
                       (format/ 1 (par u #:use quotient-sub))]
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub))]
+                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
       [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
+                      (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub #:exponent-base? #t))]
       
       ; mult
       [(⊗  1 v)                                (~a             (v~ v))]
@@ -2572,11 +2598,11 @@
                                          (~sym '^) (fluid-let ([original? #t])
                                                      ((output-sub-exponent-wrapper)
                                                       (par w1 #:use exponent-sub
-                                                             #:wrap-fractions? #t))))]
-      [(Expt u v)  (~a (par u) (~sym '^) (fluid-let ([original? #t])
+                                                           #:wrap-fractions? #t))))]
+      [(Expt u v)  (~a (par u #:exponent-base? #t) (~sym '^) (fluid-let ([original? #t])
                                            ((output-sub-exponent-wrapper)
                                             (par v #:use exponent-sub
-                                                   #:wrap-fractions? #t))))]
+                                                 #:wrap-fractions? #t))))]
       ; Unnormalized
       [(list 'sqr u) (v~ `(expt ,u 2))]
       
