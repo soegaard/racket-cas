@@ -2034,12 +2034,22 @@
   (cond [v    (~a "log_" (verbose~ u) l (verbose~ v) r)]
         [else (~a "log" l (verbose~ u) r)]))
 
+(define (default-output-up u v)
+  (~a "(" (verbose~ u) "," (verbose~ v) ")"))
+
+
 (define mma-output-log default-output-log)
 
 (define (tex-output-log u [v #f])
   (parameterize ([output-wrapper values])
     (cond [v    (~a "\\log_{" (verbose~ u) "}(" (verbose~ v) ")")]
           [else (~a "\\log(" (verbose~ u) ")")])))
+
+(define (tex-output-up u v)
+  (parameterize ([output-wrapper values])
+    (define x (verbose~ u))
+    (define y (verbose~ v))
+    (~a "\\begin{pmatrix} " x "\\\\" y "\\end{pmatrix}")))
 
 ;;; Formatting Parameters
 
@@ -2055,6 +2065,7 @@
 (define output-format-sqrt               (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
 (define output-format-root               (make-parameter (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")"))))
 (define output-format-log                (make-parameter default-output-log))
+(define output-format-up                 (make-parameter default-output-up))
 (define output-sub-exponent-parens       (make-parameter (list "(" ")"))) ; for Tex it is { }
 (define output-sub-exponent-wrapper      (make-parameter values))         ; TeX needs extra {}
 (define output-terms-descending?         (make-parameter #f)) ; reverse terms before outputting?
@@ -2077,6 +2088,7 @@
   (output-format-sqrt (λ(u)   (~a "Sqrt[" (verbose~ u) "]")))
   (output-format-root (λ(u n) (~a "Root[" (verbose~ u) "," (verbose~ n) "]")))
   (output-format-log mma-output-log)
+  (output-format-up           default-output-up)
   (output-sub-exponent-parens (list "(" ")"))
   (output-sub-exponent-wrapper values)
   (output-implicit-product? #f)
@@ -2097,6 +2109,7 @@
   (output-format-sqrt (λ(u)   (~a "sqrt(" (verbose~ u) ")")))
   (output-format-root (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")")))
   (output-format-log default-output-log)
+  (output-format-up  default-output-up)
   (output-implicit-product? #f)
   (output-relational-operator ~a)
   (output-variable-name default-output-variable-name))
@@ -2132,6 +2145,7 @@
   (output-format-root (λ(u n) (parameterize ([output-wrapper values])
                                 (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
   (output-format-log tex-output-log)
+  (output-format-up  tex-output-up)
   (output-sub-exponent-parens  (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
   (output-implicit-product? #t)
@@ -2174,7 +2188,8 @@
                  (output-implicit-product?    #t)
                  (output-relational-operator  ~relop)
                  (output-variable-name        tex-output-variable-name)
-                 (output-format-log           tex-output-log))
+                 (output-format-log           tex-output-log)
+                 (output-format-up            tex-output-up))
     (verbose~ u)))
 
 (define char->tex
@@ -2411,7 +2426,9 @@
                                       (fluid-let ([original? #t])
                                         (par v #:use exponent-sub #:wrap-fractions? #t)))))]
         [(Log u)      ((output-format-log) u)]
-        [(Log u v)    ((output-format-log) u v)]        
+        [(Log u v)    ((output-format-log) u v)]
+        [(Up u v)     ((output-format-up) u v)]
+        
         [(app: f us) #:when (memq f '(< > <= >=))
                      (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
         ; unnormalized quotient
@@ -2627,6 +2644,7 @@
       [(Equal u v) (~a (v~ u #t) (~sym '=) (v~ v #t))]
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
+      [(Up u v)    ((output-format-up)  u v)]
       [(Piecewise us vs)    (string-append*
                              (append (list "\\begin{cases}\n")
                                      (for/list ([u us] [v vs])
