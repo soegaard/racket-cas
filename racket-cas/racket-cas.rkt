@@ -2334,7 +2334,7 @@
   (define ~var (let ([out (output-variable-name)]) (λ(x) (out x)))) ; variable names
   (define (~relop x) ((output-relational-operator) x))
   (define (~red str) (~a "{\\color{red}" str "\\color{black}}"))
-  
+
   (define (v~ u [original? #f])
     ; (displayln (list 'v~ u))
     (define (~num r)
@@ -2370,11 +2370,12 @@
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
       (math-match u
         [r (math-match v
-             [s                   (~sym '*)]
-             [x                   implicit-mult]
-             [(⊗ u1 u2)           (implicit* r u1)]
-             [(Expt u1 u2)        (implicit* r u1)]
-             [(list '+ u1 u2 ...) implicit-mult]
+             [s                    (~sym '*)]
+             [x                     implicit-mult]
+             [(⊗ u1 u2)            (implicit* r u1)]
+             [(Expt u1 u2)         (implicit* r u1)]
+             [(list '+ u1 u2 ...)   implicit-mult]
+             [(list 'vec u1 u2 ...) implicit-mult]  
              [_                   (~sym '*)])]        
         [_ (~sym '*)]))
              
@@ -2427,7 +2428,7 @@
                                         (par v #:use exponent-sub #:wrap-fractions? #t)))))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
-        [(Up u v)     ((output-format-up) u v)]
+        [(Up u v)    ((output-format-up)  u v)]
         
         [(app: f us) #:when (memq f '(< > <= >=))
                      (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
@@ -2451,6 +2452,7 @@
         [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
 
         [(list 'percent u) (~a (v~ u) (~sym '|%|))]
+        [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
 
         ; applications
         [(app: f us) (let ()
@@ -2520,9 +2522,14 @@
                       (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub #:exponent-base? #t))]
       
       ; mult
-      [(⊗  1 v)                                (~a             (v~ v))]
-      [(⊗ -1 v) #:when original?               (~a "-"         (v~ v))]
-      [(⊗ -1 v)                         (paren (~a "-"         (v~ v)))]
+      [(⊗  1 v)                                               (~a             (v~ v))]
+      [(⊗ -1 α) #:when (negative? α)                          (~a "-" (paren  (v~ α)))]
+      [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]      
+      [(⊗ -1 p v) #:when (and original? (negative? p))        (displayln (list "A" p v (⊗ p v)))
+                                                              (~a "-" (paren  (v~ (⊗ p v) #f)))] ; wrong
+      [(⊗ -1 v)   #:when      original?                       (~a "-"         (v~ v))]
+      ; [(⊗ -1 p v) #:when                (negative? p)         (~a "-" (paren  (v~ (⊗ p v) #f)))]                 ; wrong
+      [(⊗ -1 v)                                        (paren (~a "-"         (v~ v)))]
       ; Explicit multiplication between integers
       [(⊗ p q) #:when original?           (~a (~num p) (~sym '*) (par q))]
       [(⊗ p q) #:when (not (negative? p)) (~a (~num p) (~sym '*) (par q))]
@@ -2655,6 +2662,7 @@
       [(list 'percent u) (~a (v~ u) (~sym '|%|))]
 
       [(list 'abs u) ((output-format-abs) u)] 
+      [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
 
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
@@ -2665,6 +2673,7 @@
                      (~a head app-left arguments app-right))]
       [_ (display u)
          (error 'verbose~ (~a "internal error, got: " u))]))
+
   ((output-wrapper) (v~ u #t)))
 
 (define (reverse-plus u)
