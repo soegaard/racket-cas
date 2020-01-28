@@ -2408,9 +2408,9 @@
                                           (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XX
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
         [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ u v) #:when original?       (displayln "A") (let ([s (~a      (v~ u)  (~sym '*) (par v))])
-                                                          (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XXX
-        [(⊗ u v)                        (displayln "B") (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
+        [(⊗ u v) #:when original?       (let ([s (~a      (v~ u)  (~sym '*) (par v))])
+                                          (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XXX
+        [(⊗ u v)                        (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
