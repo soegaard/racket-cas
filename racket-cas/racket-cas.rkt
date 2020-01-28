@@ -1047,7 +1047,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Abs: u)] [_ (identifier? stx) #'Abs:])))
 
 (module+ test 
-  (check-equal? (Abs (+ x x)) (Abs (* 2 x)))
+  (check-equal? (Abs (⊕ x x)) (Abs (⊗ 2 x)))
   (check-equal? (Abs -42)   42)
   (check-equal? (Abs   0)    0)
   (check-equal? (Abs  42)   42)
@@ -2115,7 +2115,7 @@
   (output-variable-name default-output-variable-name))
 
 (define (use-tex-output-style)
-  (define operators '(sin cos tan log ln sqrt))
+  (define operators '(sin cos tan log ln sqrt det))
   (define (~relop u)
     (match u
       ['<=  "≤ "]
@@ -2156,7 +2156,8 @@
   (output-variable-name tex-output-variable-name))
 
 (define (tex u)
-  (define operators '(sin  cos  tan log ln sqrt 
+  (define operators '(sin  cos  tan log ln sqrt
+                           det
                       sinh cosh tanh )) ; needs \\ in output
   (define relational-operators '(= < <= > >=))
   (define (~relop u)
@@ -2384,13 +2385,18 @@
              [(list 'vec u1 u2 ...) implicit-mult]  
              [_                   (~sym '*)])]        
         [_ (~sym '*)]))
+
+    (define (prefix-minus s)
+      (if (eqv? (string-ref s 0) #\-)
+          (~a "-(" s ")")
+          (~a "-" s)))
              
     (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]
                  #:exponent-base? [exponent-base? #f]) ; wrap if (locally) necessary
       (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
         [(list 'red  u) (~red (par u))]
-       [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
+        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2398,11 +2404,13 @@
         ; [(⊗ 1 v)     (exponent-wrap (par v))] ; xxx
         [(⊗  1 v)                       (exponent-wrap        (~a  (v~ v original?)))]
         [(⊗ -1 v) #:when exponent-base? (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
-        [(⊗ -1 v) #:when original?      (exponent-wrap        (~a "-"         (v~ v)))]
+        [(⊗ -1 v) #:when original?      (let ([s (prefix-minus (v~ v))])
+                                          (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XX
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
         [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ u v) #:when original?       (exponent-wrap (~a      (v~ u)  (~sym '*) (par v)))] ; XX
-        [(⊗ u v)                        (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
+        [(⊗ u v) #:when original?       (displayln "A") (let ([s (~a      (v~ u)  (~sym '*) (par v))])
+                                                          (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XXX
+        [(⊗ u v)                        (displayln "B") (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -2730,6 +2738,8 @@
   (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}\\cdot a$")
   (check-equal? (~ '(* -4 (expt -1 3))) "$-4\\cdot {(-1)}^3$")
   (check-equal? (~ '(* -9 (expt x -10))) "$\\frac{-9}{x^{10}}$")
+  (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
+  (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
