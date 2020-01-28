@@ -2489,7 +2489,7 @@
                                   (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                                   (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
                   [(⊗  1 u)                       (~a                          (v~ u))]
-                  [(⊗ -1 u)                       (~a (~sym '-)                (v~ u))]
+                  [(⊗ -1 u)                       (prefix-minus (v~ u))]
                   ; integer
                   ; Explicit multiplication between integers
                   [(⊗  p q)                       (~a (~num p)  (~sym '*) (par q))]
