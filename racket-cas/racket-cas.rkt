@@ -2115,7 +2115,7 @@
   (output-variable-name default-output-variable-name))
 
 (define (use-tex-output-style)
-  (define operators '(sin cos tan asin acos atan log ln sqrt))
+  (define operators '(sin cos tan log ln sqrt))
   (define (~relop u)
     (match u
       ['<=  "≤ "]
@@ -2123,6 +2123,9 @@
       [_    (~a u)]))
   (define (~symbol s) 
     (match s
+      ['acos "\\cos^{-1}"]
+      ['asin "\\sin^{-1}"]
+      ['atan "\\tan^{-1}"]
       [_ #:when (member s operators) (~a "\\" s)]
       ['<=  "\\leq "]
       ['>=  "\\geq "]
@@ -2153,7 +2156,7 @@
   (output-variable-name tex-output-variable-name))
 
 (define (tex u)
-  (define operators '(sin  cos  tan  asin acos atan log ln sqrt 
+  (define operators '(sin  cos  tan log ln sqrt 
                       sinh cosh tanh )) ; needs \\ in output
   (define relational-operators '(= < <= > >=))
   (define (~relop u)
@@ -2163,6 +2166,9 @@
       [_    (~a u)]))
   (define (~symbol s)
     (match s
+      ['acos "\\cos^{-1}"]
+      ['asin "\\sin^{-1}"]
+      ['atan "\\tan^{-1}"]
       [_ #:when (member s operators) (~a "\\" s)]      
       ['<=  "\\leq "]
       ['>=  "\\geq "]
@@ -2384,7 +2390,7 @@
       (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
         [(list 'red  u) (~red (par u))]
-        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
+       [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2395,8 +2401,8 @@
         [(⊗ -1 v) #:when original?      (exponent-wrap        (~a "-"         (v~ v)))]
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
         [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ u v) #:when original?       (exponent-wrap (~a      u  (~sym '*) (par v)))]
-        [(⊗ u v)                        (exponent-wrap (~a (par u) (~sym '*) (par v)))]
+        [(⊗ u v) #:when original?       (exponent-wrap (~a      (v~ u)  (~sym '*) (par v)))] ; XX
+        [(⊗ u v)                        (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -2452,7 +2458,10 @@
         [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
 
         [(list 'percent u) (~a (v~ u) (~sym '|%|))]
+        [(list 'abs u) ((output-format-abs) u)] 
         [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
+        [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
+        [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
 
         ; applications
         [(app: f us) (let ()
@@ -2663,6 +2672,8 @@
 
       [(list 'abs u) ((output-format-abs) u)] 
       [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
+      [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
+      [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
 
       [(app: f us) #:when (memq f '(< > <= >=))
                    (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
