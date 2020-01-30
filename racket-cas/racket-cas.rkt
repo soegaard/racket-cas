@@ -60,6 +60,7 @@
 ;;; SYMBOLIC CONSTANTS
 (define @e  '@e)  ; Euler's constant
 (define @pi '@pi) ; pi
+(define @i '@i)   ; the unit imaginary number
 (define @n  '@n)  ; stands for an arbitrary natural number
 (define @p  '@p)  ; stands for an arbitrary integer
 
@@ -243,12 +244,12 @@
     [(bool u)      #t]
     [(u bool)      #f]
     ; Case: At least one symbol
-    [(x y) (symbol<? x y)] 
+    [(x y) (symbol<? x y)]
     [(u x) (not (<< x u))]
     [(x (⊗ r x)) (< 1 r)]  ; x ~ (* 1 x)
     [(x (⊗ r u)) (<< x u)]
     [(x (⊗ u _)) (<< x u)]
-    [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)    
+    [(x (Expt x v)) (<< 1 v)]  ; (Note: x ~ (Expt x 1)
     ; Case: At least one product of ...
     [((k⊗ r u) (k⊗ s u)) (< r s)]
     [((k⊗ r u) (k⊗ s v)) ; (Note: neither u nor v are numbers)
@@ -776,6 +777,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Expt: @e u)] [_ (identifier? stx) #'Exp:])))
 
 (define (Expt: u v)
+  ; (displayln (list 'Expt: u v))
   (define (sqrt-natural n)
     ; suppose n = s^2 * f , where f is square-free
     ; sqrt(n) = s * sqrt(f)
@@ -799,6 +801,14 @@
     [(u 0)          1]
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
+    [(-1 1/2)       @i]
+    [(u 1/2) #:when (%negative? u) (⊗ @i (Expt (⊖ u) 1/2))]
+    [(@i n)         (case (remainder n 4)
+                      [(0) 1]
+                      [(1) @i]
+                      [(2) -1]
+                      [(3) (⊖ @i)]
+                    )]
     [(α p)          (expt α p)]
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
@@ -816,6 +826,7 @@
 (module+ test
   (check-equal? (Expt 2 3) 8)
   (check-equal? (Expt -1 2) 1)
+  (check-equal? (expand (Expt (⊕ (Sqrt -2) 2) 2)) '(+ 2 (* 4 (expt 2 1/2) @i)))
   (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
 (define (Sqr: u)
@@ -1040,6 +1051,7 @@
     [r.0 (if (< r.0 0) (- r.0) r.0)]
     [@e  @e]
     [@pi @pi]
+    [@i 1]
     [_   `(abs ,u)]))
 
 (define-match-expander Abs
@@ -2022,9 +2034,9 @@
 ; TeX handles various other symbols in symbol->tex.
 
 (define (default-output-variable-name x)
-  (match x ['@pi "pi"] ['@e "e"]           [_ (~a x)]))
+  (match x ['@pi "pi"] ['@e "e"] ['@i "i"]           [_ (~a x)]))
 (define (mma-output-variable-name x)
-  (match x ['@pi "Pi"] ['@e "E"]           [_ (~a x)]))
+  (match x ['@pi "Pi"] ['@e "E"] ['@i "i"]           [_ (~a x)]))
 (define (tex-output-variable-name x)
   (match x ['@pi "π"]  ['@e "\\mathrm{e}"] [_ (symbol->tex x)]))
 
@@ -2078,7 +2090,7 @@
 (define output-implicit-product?         (make-parameter #f)) ; useful for TeX
 (define output-relational-operator       (make-parameter ~a)) ; useful for TeX
 (define output-floating-point-precision  (make-parameter 4))  ; 
-(define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e and @pi
+(define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e, @pi, and @i
 (define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
 
 
@@ -2232,6 +2244,7 @@
   (match t
     ['@e  "\\mathrm{e}"]         ; Euler's constant
     ['@pi "\\pi"]      ; pi
+    ['@i "i"]          ; the unit imaginary number
     ['@n  "@n"]        ; an arbitrary natural number
     ['@p  "@p"]        ; an arbitrary integer
     ['|%|  "\\%"]        ; an arbitrary integer

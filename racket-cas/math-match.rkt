@@ -6,7 +6,7 @@
 (module+ test (require rackunit))
 
 (module predicates racket 
-  (provide exact-natural? @e? @pi? inexact-number? exact-number? bigfloat-number? 
+  (provide exact-natural? @e? @pi?  @i? inexact-number? exact-number? bigfloat-number? 
            inexact-number-or-bigloat?)
   (require math/bigfloat)
   (define (exact-number? x)   (and (number? x) (exact? x)))
@@ -15,7 +15,8 @@
   (define (inexact-number-or-bigloat? x) (or (and (number? x) (inexact? x)) (bigfloat? x)))
   (define (bigfloat-number? x) (bigfloat? x))
   (define (@e? u)  (eq? u '@e))   ; Euler's constant
-  (define (@pi? u) (eq? u '@pi))) ; pi
+  (define (@pi? u) (eq? u '@pi)) ; pi
+  (define (@i? u) (eq? u '@i))) ; i
 
 (module conventions racket
   (provide find-convention-type conventions  (struct-out convention))
@@ -57,7 +58,8 @@
           ;       so we need to pick something else to match booleans
           (convention (make-begins-with-pred "bool") #'boolean?)
           (convention (make-is-pred "@e")  #'@e?)
-          (convention (make-is-pred "@pi") #'@pi?)))
+          (convention (make-is-pred "@pi") #'@pi?)
+          (convention (make-is-pred "@i") #'@i?)))
   
   (define (find-convention-type s)
     (for/or ([c (in-list conventions)])
