@@ -1354,7 +1354,7 @@
       [r r]
       [r.bf r.bf]
       [x x]
-      [(⊕ (Expt (Cos x) 2) (Expt (Sin x) 2) ) 1] ; Special case of (⊕ u v)
+      [(⊕ (Expt (Cos u) 2) (Expt (Sin u) 2) ) 1] ; Special case of (⊕ u v)
       [(⊕ u v) (⊕ (t u) (t v))]
       [(⊗ u v) (⊗ (t u) (t v))]
       [(Sin 0) 0]
