@@ -802,6 +802,7 @@
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
     [(-1 1/2)       @i]
+    [(-1 α)  #:when (equal? 2 (denominator α)) (Expt @i (numerator α))]
     [(u 1/2) #:when (%negative? u) (⊗ @i (Expt (⊖ u) 1/2))]
     [(@i n)         (case (remainder n 4)
                       [(0) 1]
