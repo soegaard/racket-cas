@@ -1354,6 +1354,7 @@
       [r r]
       [r.bf r.bf]
       [x x]
+      [(⊕ (Expt (Cos x) 2) (Expt (Sin x) 2) ) 1] ; Special case of (⊕ u v)
       [(⊕ u v) (⊕ (t u) (t v))]
       [(⊗ u v) (⊗ (t u) (t v))]
       [(Sin 0) 0]
@@ -1382,6 +1383,7 @@
 (module+ test
   (check-equal? (trig-expand (Sin (⊗ 2 x))) (⊗ 2 (Cos x) (Sin x)))
   (check-equal? (trig-expand (Cos (⊗ 2 x))) (⊖ (Sqr (Cos x)) (Sqr (Sin x))))
+  (check-equal? (trig-expand (⊕ (Sqr (Sin x)) (Sqr (Cos x)))) 1)
   (let ([u 'u] [v 'v])
     (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
     (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
