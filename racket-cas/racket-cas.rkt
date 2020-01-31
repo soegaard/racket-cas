@@ -606,7 +606,7 @@
   ; (displayln (list 'expand s))
   (define e expand-all)
   (define d distribute)
-  (match u
+  (match (expt-expand u)
     [(⊗ a (⊕ u v))   (e (⊕ (⊗ a u) (⊗ a v)))]
     [(⊗ (⊕ u v) b)   (e (⊕ (⊗ u b) (⊗ v b)))]
     [(⊗ a b)         (let ([ea (e a)] [eb (e b)])
@@ -680,7 +680,7 @@
 (define (combine u)
   (displayln (list 'combine u))
   (define c combine)
-  (math-match u
+  (math-match (expt-combine u)
     [(⊕      (Expt w -1)  (⊗ v (Expt w -1)))         (⊘ (⊕ 1 v) w)]
     [(⊕      (Expt w -1)  (⊗ (Expt w -1) v))         (⊘ (⊕ 1 v) w)]
     [(⊕ (⊗ u (Expt w -1)) (⊗ v (Expt w -1)))         (⊘ (⊕ u v) w)]
@@ -769,7 +769,7 @@
 (define (together u)
   ; add terms - give the result a single denominator
   ; todo : this doesn't handle sums with more than two terms
-  (math-match u
+  (math-match (expt-combine u)
     [(⊕ (⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
     [_ u]))
 
@@ -832,11 +832,20 @@
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
-    ; [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
     [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
     [(_ _)          `(expt ,u ,v)]))
+
+(define (expt-expand u)
+  (math-match u
+    [(Expt (⊗ u v) w)    (⊗ (Expt u w) (Expt v w))]
+    [u u]))
+
+(define (expt-combine u)
+  (math-match u
+    [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ u v) w)]
+    [u u]))
 
 (define-match-expander Expt
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
