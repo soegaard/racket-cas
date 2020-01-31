@@ -676,6 +676,22 @@
 (module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
+(define (combine u)
+  ; (displayln (list 'combine u))
+  (define c combine)
+  (math-match u
+    [(⊕ (⊗ u (Expt w -1)) (⊗ v (Expt w -1)))         (⊘ (⊕ u v) w)]
+    [(⊕ (⊗ (Expt w -1) u) (⊗ v (Expt w -1)))         (⊘ (⊕ u v) w)]
+    [(⊕ (⊗ u (Expt w -1)) (⊗ (Expt w -1) v))         (⊘ (⊕ u v) w)]
+    [(⊕ (⊗ (Expt w -1) u) (⊗ (Expt w -1) v))         (⊘ (⊕ u v) w)]
+    [(⊕ u v) (let ([cu (c u)] [cv (c v)])
+               (cond [(and (equal? u cu) (equal? v cv))    (⊕  u  v)]     ; Trival case
+                     [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
+    [_ u]))
+
+(module+ test (check-equal? (combine '(+ 3 (* 2 (expt 8 1/2))))
+                            (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
+
 ; divide u by v
 (define (Oslash: u v)
   (math-match* (u v)
