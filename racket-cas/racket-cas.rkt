@@ -15,7 +15,7 @@
 ;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
 ;   - split expand into expand-one and expand (-all)
-;   - finish toghether
+;   - finish together
 ;   - examine automatic simplification of output of (diff '(expt x x) x)
 ;   - (Sqrt -3) currently returns (expt -3 1/2)
 ;     what is the correct error?
@@ -419,6 +419,7 @@
     [(u (Expt u v)) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) u) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) (Expt u w)) (Expt u (⊕ v w))]
+    [((Expt u w) (Expt v w)) (Expt (⊗ u v) w)]
     [(x y) (if (symbol<? x y) (list '* x y) (list '* y x))]
     ; all recursive calls must reduce size of s1 wrt <<=
     [((⊗ u v) (⊗ _ __)) (times2 u (times2 v s2))]
@@ -831,7 +832,7 @@
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
-    [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
+    ; [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
     [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
