@@ -329,7 +329,7 @@
 (define (plus . us) (foldl plus2 0 us))
 (define (plus2 s1 s2)
   ; '(+ (* 2 c) (* a b) (* 3 c))
-  ; (displayln (list 'plus2 s1 s2))
+  (when debugging? (displayln (list 'plus2 s1 s2)))
   ; Note: all recursive calls must reduce size of s1
   ; Note: This is the first use of math-match in this file.
   ; The conventions in math-match are:
@@ -402,7 +402,7 @@
 ;; Note: times assumes the expressions are canonical.
 (define (times . xs) (foldl times2 1 xs))
 (define (times2 s1 s2)
-  ; (displayln (list 'times2 s1 s2)) ; uncomment in time of need
+  (when debugging? (displayln (list 'times2 s1 s2)))
   (math-match* (s1 s2)
     [(0 u) 0] [(u 0) 0]
     [(1 u) u] [(u 1) u]
@@ -576,7 +576,7 @@
 
 ; distribute applies the distributive law recursively
 (define (distribute s)
-  ; (displayln (list 'distribute s))
+  (when debugging? (displayln (list 'distribute s)))
   (define d distribute)
   (math-match s
     [(⊗ a (⊕ u v)) (⊕ (d (⊗ a u)) (d (⊗ a v)))]
@@ -603,7 +603,7 @@
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
-  ; (displayln (list 'expand s))
+  (when debugging? (displayln (list 'expand-all u)))
   (define e expand-all)
   (define d distribute)
   (match (expt-expand u)
@@ -726,7 +726,7 @@
   (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
 
 (define (denominator u)
-  (math-match u
+  (math-match (together u)
     [r (%denominator u)]
     [x 1]
     [(Expt u r) #:when (negative? r) (Expt u (- r))]
@@ -746,7 +746,7 @@
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
 (define (numerator u)
-  (math-match u
+  (math-match (together u)
     [r (%numerator u)]
     [x x]
     [(⊗ u v) (⊗ (numerator u) (numerator v))]
@@ -766,16 +766,34 @@
   (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2))
   (check-equal? (numerator (⊘ x y)) x))
 
+(define (together-op . us) (foldl together-op2 0 us))
+(define (together-op2 s1 s2)
+  (define t together)
+  (when debugging? (displayln (list 'together-op2 s1 s2)))
+  (math-match* (s1 s2)
+    [(0 u) u]
+    [(u 0) u]
+    [((⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
+    [(   u    (⊘ a b)) (⊘ (⊕ (⊗ u b)    a   )      b )]
+    [((⊘ u v)    a   ) (⊘ (⊕    u    (⊗ a v))    v   )]
+    [(u v) (let ([tu (t u)] [tv (t v)])
+               (cond [(and (equal? u tu) (equal? v tv))    (⊕ u v)]       ; Trival case, return the original form
+                     [else                              (t (⊕ tu tv))]))] ; May match special case after inner expansions.
+    ))
+
 (define (together u)
+  (displayln (list 'together u))
   ; add terms - give the result a single denominator
-  ; todo : this doesn't handle sums with more than two terms
   (math-match (expt-combine u)
-    [(⊕ (⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
+    [(⊕ u v) (together-op u v)]
     [_ u]))
 
 (module+ test 
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
-  (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c))))
+  (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
+  (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
+  (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (+ (* c (expt d -1)) (* e (expt f -1)))))))
+  )
 
 
 ; unary and binary minus 
@@ -796,7 +814,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Expt: @e u)] [_ (identifier? stx) #'Exp:])))
 
 (define (Expt: u v)
-  ; (displayln (list 'Expt: u v))
+  (when debugging? (displayln (list 'Expt: u v)))
   (define (sqrt-natural n)
     ; suppose n = s^2 * f , where f is square-free
     ; sqrt(n) = s * sqrt(f)
@@ -840,12 +858,12 @@
 (define (expt-expand u)
   (math-match u
     [(Expt (⊗ u v) w)    (⊗ (Expt u w) (Expt v w))]
-    [u u]))
+    [_ u]))
 
 (define (expt-combine u)
   (math-match u
     [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ u v) w)]
-    [u u]))
+    [_ u]))
 
 (define-match-expander Expt
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
