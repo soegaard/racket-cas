@@ -2444,16 +2444,23 @@
         [args                 (list* op x (list args))]))
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
       (when debugging? (displayln (list 'implicit* u v)))
-      (math-match u
-        [r (math-match v
+      (math-match* (u v)
+        [(r v) (math-match v
              [s                    (~sym '*)]
              [x                     implicit-mult]
              [(⊗ u1 u2)            (implicit* r u1)]
              [(Expt u1 u2)         (implicit* r u1)]
              [(list '+ u1 u2 ...)   implicit-mult]
              [(list 'vec u1 u2 ...) implicit-mult]  
-             [_                   (~sym '*)])]        
-        [_ (~sym '*)]))
+             [_                    (~sym '*)])]
+        [(u v) (math-match v
+             [@pi                   implicit-mult]
+             [@e                    implicit-mult]
+             [@i                    implicit-mult]
+             [x                     implicit-mult]
+             [(⊗ v1 v2)            (implicit* u v1)]
+             [_                    (~sym '*)])]
+        ))
 
     (define (prefix-minus s)
       (if (eqv? (string-ref s 0) #\-)
@@ -2645,7 +2652,7 @@
       [(⊗ r v)        #:when (positive? r)
                       (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
       
-      [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
+      [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (v~ v))]
       ; plus
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (~num (abs r)))
@@ -2811,6 +2818,7 @@
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
+  (check-equal? (~ (⊗ (Sqrt -2) y @pi `a)) "$\\sqrt{2}iπay$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
