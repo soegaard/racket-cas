@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #f)
+(define debugging? #t)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
@@ -454,7 +454,7 @@
   (check-equal? (⊗ x (Expt x -1)) 1)
   (check-equal? (⊗ y (Expt x 2)) '(* (expt x 2) y))
   (check-equal? (⊗ x (Cos x)) '(* x (cos x)))
-  (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
+  (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (Expt (⊗ x y) 3))
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
   (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
 
@@ -625,7 +625,7 @@
     [(Equal u v)      (Equal (e u) (e v))]
     [(Or u v)         (Or (e u) (e v))]
     [(And u v)        (And (e u) (e v))]
-    [_ u]))
+    [u u]))
 
 (module+ test
   (check-equal? (expand (Sqr (⊕ x y))) (⊕ (Sqr x) (Sqr y) (⊗ 2 x y)))
@@ -668,7 +668,7 @@
                               [else u])]
     [(Equal u1 u2)   (Equal (s u1) (s u2))]
     [(Diff u x)      (diff u x)]
-    [_ u]))
+    [u u]))
 
 (module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
@@ -687,7 +687,7 @@
     [(⊕ u v) (let ([cu (c u)] [cv (c v)])
                (cond [(and (equal? u cu) (equal? v cv))    (⊕  u  v)]     ; Trival case
                      [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
-    [_ u]))
+    [u u]))
 
 (module+ test (check-equal? (combine (⊕ (⊘ (⊕ x) z) (⊘ (⊕ y x) z) (⊘ 1 z)))
                             '(* (expt z -1) (+ 1 (* 2 x) y))))
@@ -750,7 +750,7 @@
     [(⊕ v w) u]
     [(Expt v r) #:when (positive? r) u]
     [(Expt v r) #:when (negative? r) 1]
-    [_ u]))
+    [u u]))
 
 (module+ test
   (check-equal? (numerator 2) 2)
@@ -783,7 +783,7 @@
   ; add terms - give the result a single denominator
   (math-match (expt-combine u)
     [(⊕ u v) (together-op u v)]
-    [_ u]))
+    [u u]))
 
 (module+ test 
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
@@ -856,13 +856,13 @@
   (when debugging? (displayln (list 'expt-expand u)))
   (math-match u
     [(Expt (⊗ u v) w)    (⊗ (Expt u w) (Expt v w))]
-    [_ u]))
+    [u u]))
 
 (define (expt-combine u)
   (when debugging? (displayln (list 'expt-combine u)))
   (math-match u
     [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ u v) w)]
-    [_ u]))
+    [u u]))
 
 (define-match-expander Expt
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
@@ -1265,7 +1265,7 @@
       [(GreaterEqual u v) (GreaterEqual (s u) (s v))]
       
       [(app: f us)       `(,f ,@(map s us))]
-      [_ u]))
+      [u u]))
   (if normalize?
       (normalize (s u))
       (s u)))
@@ -1321,7 +1321,7 @@
     [(Or u v)           (M2 logical-or Or u v)]
 
     [(app: f us) `(,f ,@(map N us))]
-    [_ u]))
+    [u u]))
 
 (module+ test 
   (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
@@ -1362,7 +1362,7 @@
         ; [(Atan u)    (M bfatan Atan u)]
         [(app: f us) (displayln (list 'bf-N f us))
                      `(,f ,@(map N us))]
-        [_ u]))
+        [u u]))
     (N u)))
 
 
@@ -1440,7 +1440,7 @@
       [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]
       [(Expt u n)  (expand (Expt (t u) n))]
       [(app: f us) `(,f ,@(map t us))]
-      [_ u]))
+      [u u]))
   (t u))
 
 (module+ test
