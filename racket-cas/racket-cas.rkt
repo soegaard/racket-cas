@@ -5,7 +5,7 @@
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
-;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
+;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ? -> expt-expand
 ;   - documentation
 ;   - simplify: rewrite fractions with square roots in the denominator
 ;   - in-terms  ( in-terms/proc is done )
@@ -14,7 +14,6 @@
 ;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
 ;   - split expand into expand-one and expand (-all)
-;   - finish together
 ;   - examine automatic simplification of output of (diff '(expt x x) x)
 ;   - (Sqrt -3) currently returns (expt -3 1/2)
 ;     what is the correct error?
@@ -418,7 +417,6 @@
     [(u (Expt u v)) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) u) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) (Expt u w)) (Expt u (⊕ v w))]
-    [((Expt u w) (Expt v w)) (Expt (⊗ u v) w)]
     [(x y) (if (symbol<? x y) (list '* x y) (list '* y x))]
     ; all recursive calls must reduce size of s1 wrt <<=
     [((⊗ u v) (⊗ _ __)) (times2 u (times2 v s2))]
@@ -620,8 +618,7 @@
                       (let ([t (e (Expt (⊕ u v) (- n 1)))])
                         (e (⊕ (⊗ u t) (⊗ v t))))]
     [(Expt (⊕ u v) n) #:when (and (>= n 3) (even? n))
-                      (let ()
-                        (define t (e (Expt (⊕ u v) (/ n 2))))
+                      (let ([t (e (Expt (⊕ u v) (/ n 2)))])
                         (e (⊗ t t)))]
     [(Expt (⊗ u v) w) (e (⊗ (Expt u w) (Expt v w)))]
     [(Ln (Expt u v))  (e (⊗ v (Ln (e u))))]
@@ -677,6 +674,7 @@
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 (define (combine u)
+  (when debugging? (displayln (list 'combine u)))
   (displayln (list 'combine u))
   (define c combine)
   (math-match (expt-combine u)
@@ -855,11 +853,13 @@
     [(_ _)          `(expt ,u ,v)]))
 
 (define (expt-expand u)
+  (when debugging? (displayln (list 'expt-expand u)))
   (math-match u
     [(Expt (⊗ u v) w)    (⊗ (Expt u w) (Expt v w))]
     [_ u]))
 
 (define (expt-combine u)
+  (when debugging? (displayln (list 'expt-combine u)))
   (math-match u
     [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ u v) w)]
     [_ u]))
