@@ -4,7 +4,6 @@
 (define debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
-;   - fix: formatting of rational numbers 1/4 -> \frac{1}{4}
 ;   - fix: (App (Compose Expt Sin) 0)
 ;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
 ;   - documentation
@@ -782,7 +781,7 @@
     ))
 
 (define (together u)
-  (displayln (list 'together u))
+  (when debugging? (displayln (list 'together u)))
   ; add terms - give the result a single denominator
   (math-match (expt-combine u)
     [(⊕ u v) (together-op u v)]
@@ -2075,6 +2074,7 @@
 ; Input  Default   TeX           MMA
 ; @e     e         \mathrm{e}    E
 ; @pi    pi        π             Pi
+; @i     i         i             i
 ; x      x         x             x
 
 ; TeX handles various other symbols in symbol->tex.
@@ -2396,7 +2396,7 @@
 ;  The output format is configured using parameters.
 ;  The three builtin styles are default, mma and tex.
 (define (verbose~ u)
-  ; (displayln u)
+  (when debugging? (displayln (list 'verbose~ u)))
   (match-define (list app-left  app-right)  (output-application-brackets))
   (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
@@ -2585,6 +2585,8 @@
            ['()                                   (v~ u)]
            [(list (list 'use-quotients? v) os ...) (parameterize ([output-use-quotients? v]) (loop os))]
            [_                                     (error 'verbose-formatting (~a "unknown option" os))]))]
+      [α    #:when (not (integer? α)) (let ([alpha-n (numerator α)] [alpha-d (denominator α)]) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                                        (format/ (par alpha-n #:use quotient-sub) (par alpha-d #:use quotient-sub)))]
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
@@ -2805,6 +2807,7 @@
   (check-equal? (~ '(* -9 (expt x -10))) "$\\frac{-9}{x^{10}}$")
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
+  (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
