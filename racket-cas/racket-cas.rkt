@@ -1286,6 +1286,7 @@
 ;;; Numeric evalution
 
 (define euler-e (exp 1))
+(define imaginary-unit (sqrt -1))
 ; Given an expression without variables, N will evalutate the expression
 ; using Racket's standard mathematical operations.
 (define (N u)
@@ -1298,6 +1299,7 @@
     [r   r]
     [@pi pi]
     [@e  euler-e]
+    [@i  imaginary-unit]
     [(⊕ u v)     (M2 + ⊕ u v)]
     [(⊗ u v)     (M2 * ⊗ u v)]
     [(Expt u v)  (M2 expt Expt u v)]
@@ -1323,6 +1325,7 @@
 
 (module+ test 
   (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
+  (check-equal? (N '(expt @i 3)) (expt -1 3/2))
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (require math/bigfloat)
@@ -2408,7 +2411,7 @@
   (define (~red str) (~a "{\\color{red}" str "\\color{black}}"))
 
   (define (v~ u [original? #f])
-    ; (displayln (list 'v~ u))
+    (when debugging? (displayln (list 'v~ u 'orig original?)))
     (define (~num r)
       (define precision (output-floating-point-precision))
       (cond [(exact? r) (~a r)]
@@ -2440,6 +2443,7 @@
         [(list* (== op) args) (list* op x args)]
         [args                 (list* op x (list args))]))
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
+      (when debugging? (displayln (list 'implicit* u v)))
       (math-match u
         [r (math-match v
              [s                    (~sym '*)]
@@ -2575,7 +2579,6 @@
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
                   [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
                   [u                                                           (v~ u) ]))
-    (when debugging? (write (list 'v~ u 'orig original?)) (newline))
     (math-match u
       [(? string? u) u]
       [(list 'red  u) (~red (v~ u))]
