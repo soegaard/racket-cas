@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #t)
+(define debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
@@ -675,7 +675,6 @@
 
 (define (combine u)
   (when debugging? (displayln (list 'combine u)))
-  (displayln (list 'combine u))
   (define c combine)
   (math-match (expt-combine u)
     [(⊕      (Expt w -1)  (⊗ v (Expt w -1)))         (⊘ (⊕ 1 v) w)]
@@ -724,7 +723,7 @@
 
 (define (denominator u)
   (math-match (together u)
-    [r (%denominator u)]
+    [r (%denominator r)]
     [x 1]
     [(Expt u r) #:when (negative? r) (Expt u (- r))]
     [(Expt u r) #:when (positive? r) 1]
@@ -743,8 +742,9 @@
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
 (define (numerator u)
+  (when debugging? (displayln (list 'numerator- u)))
   (math-match (together u)
-    [r (%numerator u)]
+    [r (%numerator r)]
     [x x]
     [(⊗ u v) (⊗ (numerator u) (numerator v))]
     [(⊕ v w) u]
@@ -836,7 +836,7 @@
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
     [(-1 1/2)       @i]
-    [(r α)  #:when (and (negative? r) (= (denominator α) 2)) (⊗ (Expt @i (numerator α)) (Expt (⊖ r) α))]
+    [(r α)  #:when (and (real? r) (negative? r) (= (denominator α) 2)) (⊗ (Expt @i (numerator α)) (Expt (⊖ r) α))]
     [(@i n)         (case (remainder n 4)
                       [(0) 1]
                       [(1) @i]
@@ -1290,6 +1290,7 @@
 ; Given an expression without variables, N will evalutate the expression
 ; using Racket's standard mathematical operations.
 (define (N u)
+  (when debugging? (displayln (list 'N u)))
   (define (M  f F u)   (math-match (N u) [r (f r)] [v (F v)]))
   (define (M2 f F u v) (math-match* ((N u) (N v)) [(r s) (f r s)] [(v w) (F v w)]))
   (define (logical-or . xs)  (for/or  ([x xs]) (equal? x #t)))
@@ -1302,6 +1303,8 @@
     [@i  imaginary-unit]
     [(⊕ u v)     (M2 + ⊕ u v)]
     [(⊗ u v)     (M2 * ⊗ u v)]
+    [(Expt u α) #:when (and (not (integer? α)) (real? u) (negative? u) (even? (denominator α)))
+                (N (Expt (N (Expt u (/ (denominator α)))) (numerator α)))]
     [(Expt u v)  (M2 expt Expt u v)]
     [(Sin u)     (M sin Sin u)]
     [(Cos u)     (M cos Cos u)]
@@ -1325,7 +1328,7 @@
 
 (module+ test 
   (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
-  (check-equal? (N '(expt @i 3)) (expt -1 3/2))
+  (check-equal? (N '(expt @i 3)) (expt (expt -1 1/2) 3))
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (require math/bigfloat)
@@ -2419,6 +2422,7 @@
             [precision  (~r r #:precision precision)]
             [else       (~a r)]))
     (define (paren u) ; always wrap in ( )
+      (when debugging? (displayln (list 'paren u )))
       (~a "(" (v~ u #t) ")"))
     (define (exponent-wrap s)
       (~a expt-left s expt-right))
@@ -2618,10 +2622,10 @@
       ; mult
       [(⊗  1 v)                                               (~a             (v~ v))]
       [(⊗ -1 α) #:when (negative? α)                          (~a "-" (paren  (v~ α)))]
-      [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]      
+      [(⊗ -1 v)   #:when      original?                       (~a "-"         (v~ v))]
+      [(⊗ -1 v)                                               (~a "-" (par  (v~ v)))]
       [(⊗ -1 p v) #:when (and original? (negative? p))        (displayln (list "A" p v (⊗ p v)))
                                                               (~a "-" (paren  (v~ (⊗ p v) #f)))] ; wrong
-      [(⊗ -1 v)   #:when      original?                       (~a "-"         (v~ v))]
       ; [(⊗ -1 p v) #:when                (negative? p)         (~a "-" (paren  (v~ (⊗ p v) #f)))]                 ; wrong
       [(⊗ -1 v)                                        (paren (~a "-"         (v~ v)))]
       ; Explicit multiplication between integers
@@ -2652,7 +2656,7 @@
       [(⊗ r v)        #:when (positive? r)
                       (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
       
-      [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (v~ v))]
+      [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
       ; plus
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (~num (abs r)))
@@ -2694,8 +2698,8 @@
       [(list* '- u v)        (~a (t1~ u) (~sym '-)
                                  (par (match v
                                         [(list v)   v]
-                                        [(list* vs) (cons '+ vs)])
-                                      #:use paren))]
+                                        [(list* vs) (cons '+ vs) ]) #:use paren)
+                                      )]
       ; other
       [(And (Less u v) (Less u1 v1))           #:when (equal? v u1)
        (~a (par u) " " (~sym '<) " " (par v) " " (~relop '<) " " (par v1))]
