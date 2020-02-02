@@ -844,14 +844,6 @@
     [(u 0)          1]
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
-    [(-1 1/2)       @i]
-    [(r α)  #:when (and (real? r) (negative? r) (= (denominator α) 2)) (⊗ (Expt @i (numerator α)) (Expt (⊖ r) α))]
-    [(@i n)         (case (remainder n 4)
-                      [(0) 1]
-                      [(1) @i]
-                      [(2) -1]
-                      [(3) (⊖ @i)]
-                    )]
     [(α p)          (expt α p)]
     [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
@@ -863,15 +855,44 @@
 
 (define (expt-expand u)
   (when debugging? (displayln (list 'expt-expand u)))
+  (define ee expt-expand)
   (math-match u
-    [(Expt (⊗ u v) w)    (⊗ (Expt u w) (Expt v w))]
+    [(Expt (⊗ u v) w)    (let [(eew (ee w))] (⊗ (Expt (ee u) eew) (Expt(ee v) eew)))]
+    [(Expt u v)          (Expt (ee u) (ee v))]
+    [(⊗ u v)             (⊗ (ee u) (ee v))]
+    [(⊕ u v)             (⊕ (ee u) (ee v))]
     [u u]))
 
 (define (expt-combine u)
   (when debugging? (displayln (list 'expt-combine u)))
+  (define ec expt-combine)
   (math-match u
-    [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ u v) w)]
+    [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ (ec u) (ec v)) (ec w))]
+    [(⊗ u v)                      (⊗ (ec u) (ec v))]
+    [(⊕ u v)                      (⊕ (ec u) (ec v))]
+    [(Expt u v)                   (Expt (ec u) (ec v))]
     [u u]))
+
+(define (complex-expt-expand u)
+  (when debugging? (displayln (list 'complex-expt-expand u)))
+  (define cee complex-expt-expand)
+  (math-match u
+    [(Expt -1 1/2)       @i]
+    [(Expt r α)  #:when (and (real? r) (negative? r) (= (denominator α) 2)) (⊗ (Expt @i (numerator α)) (Expt (⊖ r) α))]
+    [(Expt @i n)         (case (remainder n 4)
+                      [(0) 1]
+                      [(1) @i]
+                      [(2) -1]
+                      [(3) (⊖ @i)]
+                    )]
+    [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
+               (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
+                     [else                                       (cee (Expt cee-u cee-v))]))] ; May match special cases after inner expansions.
+    [(Expt u v)                   (Expt (cee u) (cee v))]
+    [(⊗ u v)                      (⊗ (cee u) (cee v))]
+    [(⊕ u v)                      (⊕ (cee u) (cee v))]
+    [u u]
+    ))
 
 (define-match-expander Expt
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
@@ -880,7 +901,7 @@
 (module+ test
   (check-equal? (Expt 2 3) 8)
   (check-equal? (Expt -1 2) 1)
-  (check-equal? (expand (Expt (⊕ (Sqrt -2) 2) 2)) '(+ 2 (* 4 (expt 2 1/2) @i)))
+  (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
   (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
 (define (Sqr: u)
@@ -2834,7 +2855,7 @@
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
-  (check-equal? (~ (⊗ (Sqrt -2) y @pi `a)) "$\\sqrt{2}{i{π{ay}}}$")
+  (check-equal? (~ (complex-expt-expand (⊗ (Sqrt -2) y @pi `a))) "$\\sqrt{2}{i{π{ay}}}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
