@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #f)
+(define debugging? #t)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
@@ -9,7 +9,7 @@
 ;   - documentation
 ;   - simplify: rewrite fractions with square roots in the denominator
 ;   - in-terms  ( in-terms/proc is done )
-;   - polynomial?  
+;   - polynomial?
 ;   - use multivariable polynomial-quotient/remainder to simplify trig (cos^2+sin^2=1)
 ;   - power-expand
 ;   - Implement Integer pattern that accepts @n as an integer
@@ -596,14 +596,14 @@
   ; expand products and powers with positive integer exponents
   ; expand terms, but don't recurse into sub terms
   ; TODO : implement the above description
-  (expand-all u))
+  (expand-all (expt-expand u)))
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
   (when debugging? (displayln (list 'expand-all u)))
   (define e expand-all)
   (define d distribute)
-  (match (expt-expand u)
+  (match u
     [(⊗ a (⊕ u v))   (e (⊕ (⊗ a u) (⊗ a v)))]
     [(⊗ (⊕ u v) b)   (e (⊕ (⊗ u b) (⊗ v b)))]
     [(⊗ a b)         (let ([ea (e a)] [eb (e b)])
@@ -674,9 +674,12 @@
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 (define (combine u)
-  (when debugging? (displayln (list 'combine u)))
-  (define c combine)
-  (math-match (expt-combine u)
+  (combine-impl (expt-combine u)))
+
+(define (combine-impl u)
+  (when debugging? (displayln (list 'combine-impl u)))
+  (define c combine-impl)
+  (math-match u
     [(⊕      (Expt w -1)  (⊗ v (Expt w -1)))         (⊘ (⊕ 1 v) w)]
     [(⊕      (Expt w -1)  (⊗ (Expt w -1) v))         (⊘ (⊕ 1 v) w)]
     [(⊕ (⊗ u (Expt w -1)) (⊗ v (Expt w -1)))         (⊘ (⊕ u v) w)]
@@ -722,12 +725,15 @@
   (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
 
 (define (denominator u)
-  (math-match (together u)
+  (denominator-impl (together u)))
+  
+(define (denominator-impl u)
+  (math-match u
     [r (%denominator r)]
     [x 1]
     [(Expt u r) #:when (negative? r) (Expt u (- r))]
     [(Expt u r) #:when (positive? r) 1]
-    [(⊗ u v) (⊗ (denominator u) (denominator v))]
+    [(⊗ u v) (⊗ (denominator-impl u) (denominator-impl v))]
     [(⊕ u v) 1]
     [_ 1]))
 
@@ -742,11 +748,14 @@
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
 (define (numerator u)
-  (when debugging? (displayln (list 'numerator u)))
-  (math-match (together u)
+  (numerator-impl (together u)))
+  
+(define (numerator-impl u)
+  (when debugging? (displayln (list 'numerator-impl u)))
+  (math-match u
     [r (%numerator r)]
     [x x]
-    [(⊗ u v) (⊗ (numerator u) (numerator v))]
+    [(⊗ u v) (⊗ (numerator-impl u) (numerator-impl v))]
     [(⊕ v w) u]
     [(Expt v r) #:when (positive? r) u]
     [(Expt v r) #:when (negative? r) 1]
@@ -765,7 +774,7 @@
 
 (define (together-op . us) (foldl together-op2 0 us))
 (define (together-op2 s1 s2)
-  (define t together)
+  (define t together-impl)
   (when debugging? (displayln (list 'together-op2 s1 s2)))
   (math-match* (s1 s2)
     [(0 u) (t u)]
@@ -781,7 +790,6 @@
     ))
 
 (define (greedy-together-op2 s1 s2)
-  (define t together)
   (when debugging? (displayln (list 'together-op2 s1 s2)))
   (math-match* (s1 s2)
     [(   u    (⊘ a b)) #:when (integer? u) (together-op2 s2 s1)]
@@ -790,9 +798,11 @@
     ))
 
 (define (together u)
-  (when debugging? (displayln (list 'together u)))
-  ; add terms - give the result a single denominator
-  (math-match (expt-combine u)
+  (together-impl (expt-combine u)))
+
+(define (together-impl u)
+  (when debugging? (displayln (list 'together-impl u)))
+  (math-match u
     [(⊕ u v) (together-op u v)]
     [u u]))
 
