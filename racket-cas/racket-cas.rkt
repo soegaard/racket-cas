@@ -695,7 +695,7 @@
 (define (Oslash: u v)
   (math-match* (u v)
     [(r 0) +nan.0]
-    [(r s) (/ r s)]
+    ;[(r s) (/ r s)]
     [(u 1) u]
     [(u -1) (⊖ u)]
     [(u v) (⊗ u (Expt v -1))]))
@@ -768,12 +768,14 @@
   (define t together)
   (when debugging? (displayln (list 'together-op2 s1 s2)))
   (math-match* (s1 s2)
-    [(0 u) u]
-    [(u 0) u]
-    [((⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
+    [(0 u) (t u)]
+    [(u 0) (t u)]
+    [(α u) #:when (not (integer? α)) (⊘ (⊗ (t u) (%numerator α)) (%denominator α))]
+    [(u α) #:when (not (integer? α)) (together-op2 α u)]
+    [((⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ (t u) (t b)) (⊗ (t a) (t v))) (⊗ (t v) (t b)))]
     [(   u    (⊘ a b)) #:when (not (integer? u)) (together-op2 s2 s1)]
-    [((⊘ u v)    a   ) #:when (not (integer? a)) (⊘ (⊕    u    (⊗ a v))    v   )]
-    [(u v) (let ([tu (t u)] [tv (t v)]) 
+    [((⊘ u v)    a   ) #:when (not (integer? a)) (⊘ (⊕ (t u) (⊗ (t a) (t v))) (t v))]
+    [(u v) (let ([tu (t u)] [tv (t v)])
                (cond [(and (equal? u tu) (equal? v tv))    (⊕ u v)]       ; Trival case, return the original form
                      [else                              (t (⊕ tu tv))]))] ; May match special case after inner expansions.
     ))
@@ -799,6 +801,8 @@
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (+ (* c (expt d -1)) (* e (expt f -1)))))))
+  (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '(* 41 (expt 10 -1)))
+  (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
   )
 
 
@@ -844,14 +848,50 @@
     [(u 0)          1]
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
-    [(α p)          (expt α p)]
-    [(p q)          (expt p q)]
+    [(α n)          (expt α n)]
+    ; [(p q)          (expt p q)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
-    [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
+    [((Expt u v) w) #:when (not (equal? -1 w)) (Expt u (⊗ v w))]          ; ditto
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
     [(_ _)          `(expt ,u ,v)]))
+
+(define (fractionize u)
+  (when debugging? (displayln (list 'fractionize u)))
+  (define f fractionize)
+  (math-match u
+    [α                                                     (⊘ (%numerator α) (%denominator α))]
+    [(Expt u q) #:when (and (negative? q) (not (= -1 q)))  (Expt (Expt (f u) (- q)) -1)]
+    [(Expt u (⊗ -1 v))                                     (Expt (Expt (f u) v) -1)]
+    [(Expt u v) (let ([fu (f u)] [fv (f v)])
+                  (cond [(and (equal? u fu) (equal? v fv)) (Expt u v)]     ; Trival case
+                        [else                              (f (Expt fu fv))]))] ; May match special cases after inner expansions.
+    [(⊗ u v)             (⊗ (f u) (f v))]
+    [(⊕ u v)             (⊕ (f u) (f v))]
+    [u u]))
+
+(define (de-fractionize u)
+  (when debugging? (displayln (list 'de-fractionize u)))
+  (define df de-fractionize)
+  (math-match u
+    [(Expt α p)          (expt α p)]
+    [(Expt (Expt u v) -1) (df (Expt u (⊖ v)))]
+    [(Expt u v) (let ([dfu (df u)] [dfv (df v)])
+                  (cond [(and (equal? u dfu) (equal? v dfv)) (Expt u v)]     ; Trival case
+                        [else                              (df (Expt dfu dfv))]))] ; May match special cases after inner expansions.
+    [(⊗ u v)             (⊗ (df u) (df v))]
+    [(⊕ u v)             (⊕ (df u) (df v))]
+    [u u]))
+
+
+(module+ test
+  (check-equal? (fractionize (Expt 1/7 y)) '(expt (expt 7 y) -1))
+  (check-equal? (fractionize (Expt -1/3 x)) '(expt (* -1 (expt 3 -1)) x))
+  (check-equal? (de-fractionize (fractionize '(* 1/7 (+ 1/4 x)))) '(* 1/7 (+ 1/4 x)))
+  (check-equal? (fractionize '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
+  (check-equal? (de-fractionize (fractionize '(+ 1/7 1/4 x))) '(+ 11/28 x))
+  )
 
 (define (expt-expand u)
   (when debugging? (displayln (list 'expt-expand u)))
