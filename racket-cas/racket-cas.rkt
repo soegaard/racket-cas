@@ -800,7 +800,7 @@
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
-  (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (+ (* c (expt d -1)) (* e (expt f -1)))))))
+  (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (expt (* d f) -1) (+ (* c f) (* d e))))))
   (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '(* 41 (expt 10 -1)))
   (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
   )
@@ -1003,7 +1003,7 @@
     ; [(_ 0)     +nan.0] ; TODO: error?
     [(1 u)     '<undefined:log-with-base-1-is-undefined>] ; TODO: error?
     [(n m) #:when (divides? n m) (let ([k (max-dividing-power n m)])
-                                   (⊕ k (Log n (⊘ m (Expt n k)))))]
+                                   (⊕ k (Log n (de-fractionize (⊘ m (Expt n k))))))]
     [(n m) `(log ,n ,m)]
     [(2 r.0) #:when      (positive? r.0)              (fllog2 r.0)]
     [(r s)   #:when (and (positive? r) (positive? s)) (fllog10 r s)]
@@ -1373,8 +1373,6 @@
     [@i  imaginary-unit]
     [(⊕ u v)     (M2 + ⊕ u v)]
     [(⊗ u v)     (M2 * ⊗ u v)]
-    [(Expt u α) #:when (and (not (integer? α)) (real? u) (negative? u) (even? (denominator α)))
-                (N (Expt (N (Expt u (/ (denominator α)))) (numerator α)))]
     [(Expt u v)  (M2 expt Expt u v)]
     [(Sin u)     (M sin Sin u)]
     [(Cos u)     (M cos Cos u)]
@@ -1400,6 +1398,9 @@
   (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
   (check-equal? (N '(expt @i 3)) (expt (expt -1 1/2) 3))
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
+
+(define (N-complex u)
+  u)
 
 (require math/bigfloat)
 (bf-precision 100)
@@ -1742,7 +1743,7 @@
                   (define r+ (expand (⊖    (⊖ r (⊗ lcr (Expt x m)))
                                            (⊗ (⊖ v (⊗ lcv (Expt x n))) t))))
                   (loop (⊕ q t) r+ (exponent r+ x))]
-        [else     (list (distribute q) (distribute r))]))))
+        [else     (map de-fractionize (list (distribute q) (distribute r)))]))))
 
 (define (polynomial-quotient u v x)
   (first (polynomial-quotient-remainder u v x)))
@@ -1754,7 +1755,7 @@
   (let ([a 'a] [b 'b]) 
     (check-equal? (polynomial-quotient (Sqr x) (⊕ x a) x) (⊕ (⊖ a) x))
     (check-equal? (polynomial-quotient-remainder '(+ (* x x) x 1) '(+ (* 2 x) 1) x)
-                  (list (⊕ 1/4 (⊘ x 2)) 3/4))
+                  (list (⊕ 1/4 (⊗ 1/2 x)) 3/4))
     (check-equal? (polynomial-quotient (⊕ (⊗ x x) (⊗ b x) 1) (⊕ (⊗ a x) 1) x)
                   '(+ (* -1 (expt a -2)) (* (expt a -1) b) (* (expt a -1) x)))))
 
@@ -1774,6 +1775,7 @@
 (define (polynomial-gcd u v x)
   ; u and v are polynomials in F[x]
   ; where automatic simplification handles operations in F
+  (when debugging? (displayln (list 'polynomial-gcd u v x)))
   (define U
     (match* (u v)
       [(0 0) 0]
@@ -1781,9 +1783,9 @@
                (match V
                  [0 U]
                  [_ (loop V (polynomial-remainder U V x))]))]))
-  (expand (⊗ (⊘ 1 (leading-coefficient U x)) U)))
+  (de-fractionize (expand (⊗ (⊘ 1 (leading-coefficient U x)) U))))
 
-(module+ test (check-equal? (polynomial-gcd '(* (expt (+ 1 x) 2) (+ 2 x) (+ 4 x))
+(module+ test (check-equal? (polynomial-gcd (de-fractionize '(* (expt (+ 1 x) 2) (+ 2 x) (+ 4 x)))
                                             '(* (+ 1 x) (+ 2 x) (+ 3 x)) x)
                             '(+ 2 (* 3 x) (expt x 2))))
 
