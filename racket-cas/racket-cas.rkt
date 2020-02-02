@@ -742,7 +742,7 @@
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
 (define (numerator u)
-  (when debugging? (displayln (list 'numerator- u)))
+  (when debugging? (displayln (list 'numerator u)))
   (math-match (together u)
     [r (%numerator r)]
     [x x]
@@ -771,11 +771,20 @@
     [(0 u) u]
     [(u 0) u]
     [((⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ u b) (⊗ a v)) (⊗ v b))]
-    [(   u    (⊘ a b)) (⊘ (⊕ (⊗ u b)    a   )      b )]
-    [((⊘ u v)    a   ) (⊘ (⊕    u    (⊗ a v))    v   )]
-    [(u v) (let ([tu (t u)] [tv (t v)])
+    [(   u    (⊘ a b)) #:when (not (integer? u)) (together-op2 s2 s1)]
+    [((⊘ u v)    a   ) #:when (not (integer? a)) (⊘ (⊕    u    (⊗ a v))    v   )]
+    [(u v) (let ([tu (t u)] [tv (t v)]) 
                (cond [(and (equal? u tu) (equal? v tv))    (⊕ u v)]       ; Trival case, return the original form
                      [else                              (t (⊕ tu tv))]))] ; May match special case after inner expansions.
+    ))
+
+(define (greedy-together-op2 s1 s2)
+  (define t together)
+  (when debugging? (displayln (list 'together-op2 s1 s2)))
+  (math-match* (s1 s2)
+    [(   u    (⊘ a b)) #:when (integer? u) (together-op2 s2 s1)]
+    [((⊘ u v)    a   ) #:when (integer? a) (⊘ (⊕    u    (⊗ a v))    v   )]
+    [(u v) (u v)]
     ))
 
 (define (together u)
@@ -2487,10 +2496,10 @@
         [(⊗ -1 v) #:when original?      (let ([s (prefix-minus (v~ v))])
                                           (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XX
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
-        [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ u v) #:when original?       (let ([s (~a      (v~ u)  (~sym '*) (par v))])
+        [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (implicit* u v) (par v))))] ; TODO XXX ~ two layers
+        [(⊗ u v) #:when original?       (let ([s (~a      (v~ u)  (implicit* u v) (par v))])
                                           (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XXX
-        [(⊗ u v)                        (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
+        [(⊗ u v)                        (exponent-wrap (~a (par (v~ u)) (implicit* u v) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -2608,6 +2617,9 @@
       [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Quotient u v) #:when (and  (output-use-quotients?) (not (rational? v)))
+                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+      [(Quotient u v) #:when (or (and (integer? u) (symbol? v)) (and (integer? v) (symbol? u)) )
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
@@ -2816,13 +2828,13 @@
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "$4(-7-a)$")
   (check-equal? (~ '(* 3 6)) "$3\\cdot 6$")
   (check-equal? (~ '(sqrt d)) "$\\sqrt{d}$")
-  (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}\\cdot a$")
-  (check-equal? (~ '(* -4 (expt -1 3))) "$-4\\cdot {(-1)}^3$")
+  (check-equal? (~ '(* (sqrt d) a)) "$\\sqrt{d}a$")
+  (check-equal? (~ '(* -4 (expt -1 3))) "$-4\\cdot {(-1)}^{3}$")
   (check-equal? (~ '(* -9 (expt x -10))) "$\\frac{-9}{x^{10}}$")
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
-  (check-equal? (~ (⊗ (Sqrt -2) y @pi `a)) "$\\sqrt{2}iπay$")
+  (check-equal? (~ (⊗ (Sqrt -2) y @pi `a)) "$\\sqrt{2}{i{π{ay}}}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
