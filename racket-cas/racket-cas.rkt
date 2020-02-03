@@ -598,7 +598,7 @@
   ; expand products and powers with positive integer exponents
   ; expand terms, but don't recurse into sub terms
   ; TODO : implement the above description
-  (expand-all (expt-expand u)))
+  (expand-all (de-fractionize (expt-expand u))))
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
@@ -637,6 +637,7 @@
   (check-equal? (expand '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
+
   (check-equal? (expand '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
   )
 
@@ -1372,7 +1373,6 @@
   (if normalize?
       (normalize (s u))
       (s u)))
-
 
 
 (module+ test
