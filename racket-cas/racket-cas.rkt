@@ -961,7 +961,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
-
+; todo: change (Polar u v) to (Unit-Polar u)
 (define (Polar: u v)
   (when debugging? (displayln (list 'Polar: u v)))
   (math-match* (u v)
