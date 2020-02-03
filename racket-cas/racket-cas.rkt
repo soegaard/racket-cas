@@ -942,6 +942,26 @@
     [(Expt u v)                   (Expt (ec u) (ec v))]
     [u u]))
 
+(define-match-expander Expt
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Expt: u v)] [_ (identifier? stx) #'Expt:])))
+
+(module+ test
+  (check-equal? (Expt 2 3) 8)
+  (check-equal? (Expt -1 2) 1)
+  (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
+  (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
+  ; todo: handle @i with polar. (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
+  (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
+
+(define (Sqr: u)
+  (Expt u 2))
+
+(define-match-expander Sqr
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
+
+
 (define (Polar: u v)
   (when debugging? (displayln (list 'Polar: u v)))
   (math-match* (u v)
@@ -987,30 +1007,27 @@
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
                (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
                      [else                                       (cee (Expt cee-u cee-v))]))] ; May match special cases after inner expansions.
-    [(Expt u v)                   (Expt (cee u) (cee v))]
     [(⊗ u v)                      (⊗ (cee u) (cee v))]
     [(⊕ u v)                      (⊕ (cee u) (cee v))]
-    [u u]
+    [_ u]
     ))
 
-(define-match-expander Expt
-  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(Expt: u v)] [_ (identifier? stx) #'Expt:])))
+(define (polar-to-rect u)
+  (when debugging? (displayln (list 'polar-to-rect u)))
+  (define ptr polar-to-rect)
+  (math-match u
+    [(Polar ρ θ) (let [(ptr-θ (ptr θ))] (⊗ (ptr ρ) (⊕ (Cos ptr-θ) (⊗ (Sin ptr-θ) @i))))]
+    [(Expt u v)  (Expt (ptr u) (ptr v))]
+    [(⊗ u v)     (⊗ (ptr u) (ptr v))]
+    [(⊕ u v)     (⊕ (ptr u) (ptr v))]
+    [_ u]
+    )
+  )
 
 (module+ test
-  (check-equal? (Expt 2 3) 8)
-  (check-equal? (Expt -1 2) 1)
-  (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
-  (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
-  ; todo: handle @i with polar. (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
-  (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
-
-(define (Sqr: u)
-  (Expt u 2))
-
-(define-match-expander Sqr
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
+  (check-equal? (polar-to-rect (complex-expt-expand '(expt -8 1/3))) '(* 2.0 (+ 0.5000000000000001 (* 0.8660254037844386 @i))))
+  (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1.0+1.732i 0.0001)
+  )
 
 (define (Ln: u)
   (math-match u
@@ -1432,6 +1449,7 @@
     [@pi pi]
     [@e  euler-e]
     [@i  imaginary-unit]
+    [(Polar r s) (make-polar r s)]
     [(⊕ u v)     (M2 + ⊕ u v)]
     [(⊗ u v)     (M2 * ⊗ u v)]
     [(Expt u v)  (M2 expt Expt u v)]
@@ -1460,16 +1478,10 @@
   (check-equal? (N '(expt @i 3)) (expt (expt -1 1/2) 3))
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
-(define (N-complex u)
-  (when debugging? (displayln (list 'N-complex u)))
-  (define Nc N-complex)
-  (math-match u
-    [(Polar r s) (make-polar r s)]))
-
 (module+ test
   (check-equal? (complex-expt-expand '(expt -8 1/3)) '(make-polar 2.0 1.0471975511965976))
-  (check-= (N-complex (complex-expt-expand '(expt -8 1/3))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
-  (check-= (N-complex (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
+  (check-= (N (complex-expt-expand '(expt -8 1/3))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
+  (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
 
 (require math/bigfloat)
