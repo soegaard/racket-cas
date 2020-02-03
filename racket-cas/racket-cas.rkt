@@ -6,7 +6,6 @@
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
-;   - combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ? -> expt-expand
 ;   - documentation
 ;   - simplify: rewrite fractions with square roots in the denominator
 ;   - in-terms  ( in-terms/proc is done )
@@ -628,7 +627,7 @@
     [(Equal u v)      (Equal (e u) (e v))]
     [(Or u v)         (Or (e u) (e v))]
     [(And u v)        (And (e u) (e v))]
-    [u u]))
+    [_ u]))
 
 (module+ test
   (check-equal? (expand (Sqr (⊕ x y))) (⊕ (Sqr x) (Sqr y) (⊗ 2 x y)))
@@ -673,7 +672,7 @@
                               [else u])]
     [(Equal u1 u2)   (Equal (s u1) (s u2))]
     [(Diff u x)      (diff u x)]
-    [u u]))
+    [_ u]))
 
 (module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
@@ -703,10 +702,9 @@
 (define (Oslash: u v)
   (math-match* (u v)
     [(r 0) +nan.0]
-    ;[(r s) (/ r s)]
+    [(r s) (/ r s)]
     [(u 1) u]
     [(u -1) (⊖ u)]
-    [(α β) (/ α β)]
     [(u v) (⊗ u (Expt v -1))]))
 
 (define-match-expander ⊘
@@ -765,7 +763,7 @@
     [(⊕ v w) u]
     [(Expt v r) #:when (positive? r) u]
     [(Expt v r) #:when (negative? r) 1]
-    [u u]))
+    [_ u]))
 
 (module+ test
   (check-equal? (numerator 2) 2)
@@ -787,24 +785,31 @@
     [(u 0) (t u)]
     [(α u) #:when (not (integer? α)) (⊘ (⊗ (t u) (%numerator α)) (%denominator α))]
     [(u α) #:when (not (integer? α)) (together-op2 α u)]
-    [((⊘ u v) (⊘ a b)) (⊘ (⊕ (⊗ (t u) (t b)) (⊗ (t a) (t v))) (⊗ (t v) (t b)))]
+    
+    [((Expt b -1) (Expt v -1)) (let ([tb (t b)] [tv (t v)]) (⊘ (⊕ tb tv) (⊗ tv tb)))]
+    [((Expt b -1) (⊘ u v)) (together-op2 s2 s1)]
+    [((⊘ a b) (Expt v -1)) (let ([ta (t a)] [tb (t b)] [tv (t v)]) (⊘ (⊕ tb (⊗ ta tv)) (⊗ tv tb)))]
+    [((Expt b -1)    u   ) #:when (not (integer? u)) (together-op2 s2 s1)]
+    [(   a    (Expt v -1)) #:when (not (integer? a)) (let ([ta (t a)] [tv (t v)]) (⊘ (⊕ 1 (⊗ ta tv)) tv))]
+    
+    [((⊘ u v) (⊘ a b)) (let ([ta (t a)] [tb (t b)] [tu (t u)] [tv (t v)]) (⊘ (⊕ (⊗ tu tb) (⊗ ta tv)) (⊗ tv tb)))]
     [(   u    (⊘ a b)) #:when (not (integer? u)) (together-op2 s2 s1)]
-    [((⊘ u v)    a   ) #:when (not (integer? a)) (⊘ (⊕ (t u) (⊗ (t a) (t v))) (t v))]
+    [((⊘ u v)    a   ) #:when (not (integer? a)) (let ([ta (t a)] [tu (t u)] [tv (t v)]) (⊘ (⊕ tu (⊗ ta tv)) tv))]
     [(u v) (let ([tu (t u)] [tv (t v)])
                (cond [(and (equal? u tu) (equal? v tv))    (⊕ u v)]       ; Trival case, return the original form
                      [else                              (t (⊕ tu tv))]))] ; May match special case after inner expansions.
     ))
 
 (define (greedy-together-op2 s1 s2)
-  (when debugging? (displayln (list 'together-op2 s1 s2)))
+  (when debugging? (displayln (list 'greedy-together-op2 s1 s2)))
   (math-match* (s1 s2)
-    [(   u    (⊘ a b)) #:when (integer? u) (together-op2 s2 s1)]
+    [(   u    (⊘ a b)) #:when (integer? u) (greedy-together-op2 s2 s1)]
     [((⊘ u v)    a   ) #:when (integer? a) (⊘ (⊕    u    (⊗ a v))    v   )]
-    [(u v) (u v)]
+    [(_ _) (⊕ s1 s2)]
     ))
 
 (define (together u)
-  (together-impl (expt-combine u)))
+  (together-impl (combine u)))
 
 (define (together-impl u)
   (when debugging? (displayln (list 'together-impl u)))
@@ -815,10 +820,14 @@
 (module+ test 
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
+  (check-equal? (together-op2 (⊘ y 5) 1) '(+ 1 (* (expt 5 -1) y)))
+  (check-equal? (greedy-together-op2 (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (expt (* d f) -1) (+ (* c f) (* d e))))))
   (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '41/10)
   (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
+  (check-equal? (together (⊕ (⊘ 2 y) (⊘ 1 x))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
+  (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   )
 
 
@@ -957,6 +966,8 @@
 (module+ test
   (check-equal? (Expt 2 3) 8)
   (check-equal? (Expt -1 2) 1)
+  (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
+  (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
   (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
   (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
