@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #f)
+(define debugging? #t)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
@@ -571,7 +571,7 @@
 (module+ test (check-equal? ((compile '(sin (sqrt x))) 0) 0))
 
 (define (distribute s)
-  (distribute-impl (de-fractionize s)))
+  (distribute-impl s))
 
 ; distribute applies the distributive law recursively
 (define (distribute-impl s)
@@ -598,7 +598,7 @@
   ; expand products and powers with positive integer exponents
   ; expand terms, but don't recurse into sub terms
   ; TODO : implement the above description
-  (expand-all (de-fractionize (expt-expand u))))
+  (expand-all (expt-expand u)))
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
@@ -1026,6 +1026,7 @@
   (check-equal? (fllog10 2. 16.) 4.))
 
 (define (Log: u [v #f])
+  (when debugging? (displayln (list 'Log: u)))
   (math-match* (u v)
     [(_ #f)    (Log: 10 u)] ; 10 is the default base
     [(@e v)    (Ln: v)]     ; special case the natural logarithm
@@ -1033,7 +1034,7 @@
     ; [(_ 0)     +nan.0] ; TODO: error?
     [(1 u)     '<undefined:log-with-base-1-is-undefined>] ; TODO: error?
     [(n m) #:when (divides? n m) (let ([k (max-dividing-power n m)])
-                                   (⊕ k (Log n (de-fractionize (⊘ m (Expt n k))))))]
+                                   (⊕ k (Log n (⊘ m (Expt n k)))))]
     [(n m) `(log ,n ,m)]
     [(2 r.0) #:when      (positive? r.0)              (fllog2 r.0)]
     [(r s)   #:when (and (positive? r) (positive? s)) (fllog10 r s)]
