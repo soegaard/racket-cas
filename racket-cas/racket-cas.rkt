@@ -571,11 +571,13 @@
 
 (module+ test (check-equal? ((compile '(sin (sqrt x))) 0) 0))
 
+(define (distribute s)
+  (distribute-impl (de-fractionize s)))
 
 ; distribute applies the distributive law recursively
-(define (distribute s)
-  (when debugging? (displayln (list 'distribute s)))
-  (define d distribute)
+(define (distribute-impl s)
+  (when debugging? (displayln (list 'distribute-impl s)))
+  (define d distribute-impl)
   (math-match s
     [(⊗ a (⊕ u v)) (⊕ (d (⊗ a u)) (d (⊗ a v)))]
     [(⊗ (⊕ u v) b) (⊕ (d (⊗ u b)) (d (⊗ v b)))]
@@ -597,7 +599,7 @@
   ; expand products and powers with positive integer exponents
   ; expand terms, but don't recurse into sub terms
   ; TODO : implement the above description
-  (expand-all (expt-expand u)))
+  (expand-all (de-fractionize (expt-expand u))))
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
@@ -635,7 +637,9 @@
   (check-equal? (expand (Ln (Expt x 3))) (⊗ 3 (Ln x)))
   (check-equal? (expand '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
-                '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2))))
+                '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
+  (check-equal? (expand '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
+  )
 
 (define (logical-expand u)
   (define u0 u)
@@ -702,6 +706,7 @@
     ;[(r s) (/ r s)]
     [(u 1) u]
     [(u -1) (⊖ u)]
+    [(α β) (/ α β)]
     [(u v) (⊗ u (Expt v -1))]))
 
 (define-match-expander ⊘
@@ -812,7 +817,7 @@
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (expt (* d f) -1) (+ (* c f) (* d e))))))
-  (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '(* 41 (expt 10 -1)))
+  (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '41/10)
   (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
   )
 
@@ -872,7 +877,7 @@
   (when debugging? (displayln (list 'fractionize u)))
   (define f fractionize)
   (math-match u
-    [α                                                     (⊘ (%numerator α) (%denominator α))]
+    [α                                                     (let [(n (%numerator α)) (d (%denominator α))]  (⊗ n (Expt d -1)))]
     [(Expt u q) #:when (and (negative? q) (not (= -1 q)))  (Expt (Expt (f u) (- q)) -1)]
     [(Expt u (⊗ -1 v))                                     (Expt (Expt (f u) v) -1)]
     [(Expt u v) (let ([fu (f u)] [fv (f v)])
@@ -1754,7 +1759,7 @@
                   (define r+ (expand (⊖    (⊖ r (⊗ lcr (Expt x m)))
                                            (⊗ (⊖ v (⊗ lcv (Expt x n))) t))))
                   (loop (⊕ q t) r+ (exponent r+ x))]
-        [else     (map de-fractionize (list (distribute q) (distribute r)))]))))
+        [else     (list (distribute q) (distribute r))]))))
 
 (define (polynomial-quotient u v x)
   (first (polynomial-quotient-remainder u v x)))
@@ -1788,13 +1793,13 @@
   ; where automatic simplification handles operations in F
   (when debugging? (displayln (list 'polynomial-gcd u v x)))
   (define U
-    (match* ((de-fractionize u) (de-fractionize v))
+    (match* (u v)
       [(0 0) 0]
       [(_ _) (let loop ([U u] [V v])
                (match V
                  [0 U]
                  [_ (loop V (polynomial-remainder U V x))]))]))
-  (de-fractionize (expand (⊗ (⊘ 1 (leading-coefficient U x)) U))))
+  (expand (⊗ (⊘ 1 (leading-coefficient U x)) U)))
 
 (module+ test (check-equal? (polynomial-gcd '(* (expt (+ 1 x) 2) (+ 2 x) (+ 4 x))
                                             '(* (+ 1 x) (+ 2 x) (+ 3 x)) x)
@@ -1989,6 +1994,7 @@
       [_      #t])) ; todo: add cases for variables with assumptions
 
 (define (solve eqn x) ; assume x is real (use csolve for complex solutions)
+  (when debugging? (displayln (list 'solve eqn x)))
   (let/ec return
     (define (solve-by-inverse w)
       (define (remove-invertibles w)
@@ -2080,7 +2086,7 @@
                 [_        (Equal u 0)])]
            [_ (Equal u 0)])]
         [w w]))
-    (solve1 (solve-by-inverse eqn))))
+     (solve1 (solve-by-inverse eqn))))
 
 (module+ test
   (check-equal? (solve '(= x 1) x) '(= x 1))
