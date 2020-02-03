@@ -778,22 +778,23 @@
 
 (define (together-op . us) (foldl together-op2 0 us))
 (define (together-op2 s1 s2)
-  (define t together-impl)
   (when debugging? (displayln (list 'together-op2 s1 s2)))
+  (define t together-impl)
+  (define t2 together-op2)
   (math-match* (s1 s2)
     [(0 u) (t u)]
     [(u 0) (t u)]
     [(α u) #:when (not (integer? α)) (⊘ (⊗ (t u) (%numerator α)) (%denominator α))]
-    [(u α) #:when (not (integer? α)) (together-op2 α u)]
+    [(u α) #:when (not (integer? α)) (t2 α u)]
     
     [((Expt b -1) (Expt v -1)) (let ([tb (t b)] [tv (t v)]) (⊘ (⊕ tb tv) (⊗ tv tb)))]
-    [((Expt b -1) (⊘ u v)) (together-op2 s2 s1)]
+    [((Expt b -1) (⊘ u v)) (t2 s2 s1)]
     [((⊘ a b) (Expt v -1)) (let ([ta (t a)] [tb (t b)] [tv (t v)]) (⊘ (⊕ tb (⊗ ta tv)) (⊗ tv tb)))]
-    [((Expt b -1)    u   ) #:when (not (integer? u)) (together-op2 s2 s1)]
+    [((Expt b -1)    u   ) #:when (not (integer? u)) (t2 s2 s1)]
     [(   a    (Expt v -1)) #:when (not (integer? a)) (let ([ta (t a)] [tv (t v)]) (⊘ (⊕ 1 (⊗ ta tv)) tv))]
     
     [((⊘ u v) (⊘ a b)) (let ([ta (t a)] [tb (t b)] [tu (t u)] [tv (t v)]) (⊘ (⊕ (⊗ tu tb) (⊗ ta tv)) (⊗ tv tb)))]
-    [(   u    (⊘ a b)) #:when (not (integer? u)) (together-op2 s2 s1)]
+    [(   u    (⊘ a b)) #:when (not (integer? u)) (t2 s2 s1)]
     [((⊘ u v)    a   ) #:when (not (integer? a)) (let ([ta (t a)] [tu (t u)] [tv (t v)]) (⊘ (⊕ tu (⊗ ta tv)) tv))]
     [(u v) (let ([tu (t u)] [tv (t v)])
                (cond [(and (equal? u tu) (equal? v tv))    (⊕ u v)]       ; Trival case, return the original form
@@ -873,8 +874,10 @@
     [(u 0)          1]
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
-    [(α n)          (expt α n)]
-    ; [(p q)          (expt p q)]
+    [(p -1)         `(expt ,p -1)]
+    [(p q) #:when (negative? q)
+           (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
+    [(α p)          (expt α p)]
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)]
     [((Expt u v) w) #:when (not (equal? -1 w)) (Expt u (⊗ v w))]          ; ditto
