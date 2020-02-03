@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #t)
+(define debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
@@ -1787,7 +1787,7 @@
   ; where automatic simplification handles operations in F
   (when debugging? (displayln (list 'polynomial-gcd u v x)))
   (define U
-    (match* (u v)
+    (match* ((de-fractionize u) (de-fractionize v))
       [(0 0) 0]
       [(_ _) (let loop ([U u] [V v])
                (match V
@@ -1795,7 +1795,7 @@
                  [_ (loop V (polynomial-remainder U V x))]))]))
   (de-fractionize (expand (⊗ (⊘ 1 (leading-coefficient U x)) U))))
 
-(module+ test (check-equal? (polynomial-gcd (de-fractionize '(* (expt (+ 1 x) 2) (+ 2 x) (+ 4 x)))
+(module+ test (check-equal? (polynomial-gcd '(* (expt (+ 1 x) 2) (+ 2 x) (+ 4 x))
                                             '(* (+ 1 x) (+ 2 x) (+ 3 x)) x)
                             '(+ 2 (* 3 x) (expt x 2))))
 
