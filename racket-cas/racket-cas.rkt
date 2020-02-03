@@ -2,6 +2,7 @@
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
 (define debugging? #f)
+(define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
@@ -327,7 +328,7 @@
 (define (plus . us) (foldl plus2 0 us))
 (define (plus2 s1 s2)
   ; '(+ (* 2 c) (* a b) (* 3 c))
-  (when debugging? (displayln (list 'plus2 s1 s2)))
+  (when verbose-debugging? (displayln (list 'plus2 s1 s2)))
   ; Note: all recursive calls must reduce size of s1
   ; Note: This is the first use of math-match in this file.
   ; The conventions in math-match are:
@@ -400,7 +401,7 @@
 ;; Note: times assumes the expressions are canonical.
 (define (times . xs) (foldl times2 1 xs))
 (define (times2 s1 s2)
-  (when debugging? (displayln (list 'times2 s1 s2)))
+  (when verbose-debugging? (displayln (list 'times2 s1 s2)))
   (math-match* (s1 s2)
     [(0 u) 0] [(u 0) 0]
     [(1 u) u] [(u 1) u]
