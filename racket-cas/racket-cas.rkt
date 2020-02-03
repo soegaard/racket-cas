@@ -944,18 +944,33 @@
     [(Expt u v)                   (Expt (ec u) (ec v))]
     [u u]))
 
+(define (Polar: u v)
+  (when debugging? (displayln (list 'Polar: u v)))
+  (math-match* (u v)
+    [(0 _)     0]
+    [(_ 0)     u]
+    [(_ _)          `(make-polar ,u ,v)]))
+
+(define-match-expander Polar
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'make-polar u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Polar: u v)] [_ (identifier? stx) #'Polar:])))
+
+
 (define (complex-expt-expand u)
   (when debugging? (displayln (list 'complex-expt-expand u)))
   (define cee complex-expt-expand)
   (math-match u
-    [(Expt -1 1/2)       @i]
-    [(Expt r α)  #:when (and (real? r) (negative? r) (= (denominator α) 2)) (⊗ (Expt @i (numerator α)) (Expt (⊖ r) α))]
-    [(Expt @i n)         (case (remainder n 4)
-                      [(0) 1]
-                      [(1) @i]
-                      [(2) -1]
-                      [(3) (⊖ @i)]
-                    )]
+    ; principal value
+    ; todo: angle -> Angle, to delay evaluation.
+    [(Expt r s) (let [(ρ (expt (magnitude r) s)) (θ (* s (angle r)))] (Polar: ρ θ))]
+;    [(Expt -1 1/2)       @i]
+;    [(Expt r α)  #:when (and (real? r) (negative? r) (= (%denominator α) 2)) (⊗ (Expt @i (%numerator α)) (Expt (⊖ r) α))]
+;    [(Expt @i n)         (case (remainder n 4)
+;                      [(0) 1]
+;                      [(1) @i]
+;                      [(2) -1]
+;                      [(3) (⊖ @i)]
+;                    )]
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
                (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
                      [else                                       (cee (Expt cee-u cee-v))]))] ; May match special cases after inner expansions.
@@ -1029,7 +1044,7 @@
   (check-equal? (fllog10 2. 16.) 4.))
 
 (define (Log: u [v #f])
-  (when debugging? (displayln (list 'Log: u)))
+  (when debugging? (displayln (list 'Log: u v)))
   (math-match* (u v)
     [(_ #f)    (Log: 10 u)] ; 10 is the default base
     [(@e v)    (Ln: v)]     ; special case the natural logarithm
@@ -1433,7 +1448,15 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (define (N-complex u)
-  u)
+  (when debugging? (displayln (list 'N-complex u)))
+  (define Nc N-complex)
+  (math-match u
+    [(Polar r s) (make-polar r s)]))
+
+(module+ test
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(make-polar 2 1.5707963267948966))
+  (check-equal? (N-complex (complex-expt-expand '(expt -8 1/3))) 1.0000000000000002+1.7320508075688772i) ; principal value 1+sqrt(3)i instead of 2i
+  )
 
 (require math/bigfloat)
 (bf-precision 100)
