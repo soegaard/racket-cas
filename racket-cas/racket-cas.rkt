@@ -962,6 +962,7 @@
   (math-match u
     ; principal value
     ; todo: angle -> Angle, to delay evaluation.
+    ; todo: handle (θ (* s (angle r))) more carefully.
     [(Expt r s) (let [(ρ (expt (magnitude r) s)) (θ (* s (angle r)))] (Polar: ρ θ))]
 ;    [(Expt -1 1/2)       @i]
 ;    [(Expt r α)  #:when (and (real? r) (negative? r) (= (%denominator α) 2)) (⊗ (Expt @i (%numerator α)) (Expt (⊖ r) α))]
