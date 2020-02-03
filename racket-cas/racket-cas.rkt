@@ -880,9 +880,7 @@
     [(p -1)         `(expt ,p -1)]
     [(p q) #:when (negative? q)
            (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
-    [(α p)          (expt α p)]
-    [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
-    [(r s.0)        (expt r s.0)]
+    [(r s)        (expt r s)]
     [((Expt u v) w) #:when (not (equal? -1 w)) (Expt u (⊗ v w))]          ; ditto
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
@@ -955,6 +953,19 @@
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'make-polar u v)]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Polar: u v)] [_ (identifier? stx) #'Polar:])))
 
+(define (Magnitude u)
+  (when debugging? (displayln (list 'Magnitude u)))
+  (Sqrt (⊕ (Sqr (real-part u)) (Sqr (imag-part u))))
+  )
+
+(define (Angle u)
+  (when debugging? (displayln (list 'Angle u)))
+  (let [(re (real-part u)) (im (imag-part u))]
+  (when (= 0 u) error)
+  (cond [(= im 0) (if (> re 0) 0 pi)]
+        [(> im 0) Asin (/ re im)]
+        [(< im 0) Acos (/ im re)]
+  )))
 
 (define (complex-expt-expand u)
   (when debugging? (displayln (list 'complex-expt-expand u)))
@@ -963,7 +974,8 @@
     ; principal value
     ; todo: angle -> Angle, to delay evaluation.
     ; todo: handle (θ (* s (angle r))) more carefully.
-    [(Expt r s) (let [(ρ (expt (magnitude r) s)) (θ (* s (angle r)))] (Polar: ρ θ))]
+    [(Expt (Polar ρ θ) s) #:when (real? s) (let [(new-ρ (Expt ρ s)) (new-θ (⊗ s θ))] (Polar new-ρ new-θ))]
+    [(Expt r s)           #:when (real? s) (let [(ρ (Expt (Magnitude r) s)) (θ (⊗ s (Angle r)))] (Polar ρ θ))]
 ;    [(Expt -1 1/2)       @i]
 ;    [(Expt r α)  #:when (and (real? r) (negative? r) (= (%denominator α) 2)) (⊗ (Expt @i (%numerator α)) (Expt (⊖ r) α))]
 ;    [(Expt @i n)         (case (remainder n 4)
@@ -1456,7 +1468,8 @@
 
 (module+ test
   (check-equal? (complex-expt-expand '(expt -8 1/3)) '(make-polar 2.0 1.0471975511965976))
-  (check-equal? (N-complex (complex-expt-expand '(expt -8 1/3))) 1.0000000000000002+1.7320508075688772i) ; principal value 1+sqrt(3)i instead of 2i
+  (check-= (N-complex (complex-expt-expand '(expt -8 1/3))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
+  (check-= (N-complex (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
 
 (require math/bigfloat)
