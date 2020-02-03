@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #t)
+(define debugging? #f)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 ; Short term:
@@ -677,6 +677,8 @@
 (module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
+; combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
+; first basic combine, only for fractions.
 (define (combine u)
   (combine-impl (expt-combine u)))
 
@@ -903,7 +905,7 @@
   (when debugging? (displayln (list 'de-fractionize u)))
   (define df de-fractionize)
   (math-match u
-    [(Expt α p)          (expt α p)]
+    [(Expt p -1)          (expt p -1)]
     [(Expt (Expt u v) -1) (df (Expt u (⊖ v)))]
     [(Expt u v) (let ([dfu (df u)] [dfv (df v)])
                   (cond [(and (equal? u dfu) (equal? v dfv)) (Expt u v)]     ; Trival case
@@ -1366,7 +1368,7 @@
       [(GreaterEqual u v) (GreaterEqual (s u) (s v))]
       
       [(app: f us)       `(,f ,@(map s us))]
-      [u u]))
+      [_ u]))
   (if normalize?
       (normalize (s u))
       (s u)))
@@ -1423,7 +1425,7 @@
     [(Or u v)           (M2 logical-or Or u v)]
 
     [(app: f us) `(,f ,@(map N us))]
-    [u u]))
+    [_ u]))
 
 (module+ test 
   (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
@@ -1467,7 +1469,7 @@
         ; [(Atan u)    (M bfatan Atan u)]
         [(app: f us) (displayln (list 'bf-N f us))
                      `(,f ,@(map N us))]
-        [u u]))
+        [_ u]))
     (N u)))
 
 
@@ -1545,7 +1547,7 @@
       [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]
       [(Expt u n)  (expand (Expt (t u) n))]
       [(app: f us) `(,f ,@(map t us))]
-      [u u]))
+      [_ u]))
   (t u))
 
 (module+ test
@@ -2101,7 +2103,7 @@
                 [_        (Equal u 0)])]
            [_ (Equal u 0)])]
         [w w]))
-     (solve1 (solve-by-inverse eqn))))
+    (solve1 (solve-by-inverse eqn))))
 
 (module+ test
   (check-equal? (solve '(= x 1) x) '(= x 1))
@@ -2552,8 +2554,8 @@
         [args                 (list* op x (list args))]))
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
       (when debugging? (displayln (list 'implicit* u v)))
-      (math-match* (u v)
-        [(r v) (math-match v
+      (math-match u
+        [r (math-match v
              [s                    (~sym '*)]
              [x                     implicit-mult]
              [(⊗ u1 u2)            (implicit* r u1)]
@@ -2561,7 +2563,7 @@
              [(list '+ u1 u2 ...)   implicit-mult]
              [(list 'vec u1 u2 ...) implicit-mult]  
              [_                    (~sym '*)])]
-        [(u v) (math-match v
+        [_ (math-match v
              [@pi                   implicit-mult]
              [@e                    implicit-mult]
              [@i                    implicit-mult]
@@ -2703,6 +2705,7 @@
            ['()                                   (v~ u)]
            [(list (list 'use-quotients? v) os ...) (parameterize ([output-use-quotients? v]) (loop os))]
            [_                                     (error 'verbose-formatting (~a "unknown option" os))]))]
+      ; formatting of rational numbers 1/4 -> \frac{1}{4}
       [α    #:when (not (integer? α)) (let ([alpha-n (numerator α)] [alpha-d (denominator α)]) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                                         (format/ (par alpha-n #:use quotient-sub) (par alpha-d #:use quotient-sub)))]
       [r           (~num r)]
@@ -2805,8 +2808,8 @@
       [(list* '- u v)        (~a (t1~ u) (~sym '-)
                                  (par (match v
                                         [(list v)   v]
-                                        [(list* vs) (cons '+ vs) ]) #:use paren)
-                                      )]
+                                        [(list* vs) (cons '+ vs)])
+                                      #:use paren))]
       ; other
       [(And (Less u v) (Less u1 v1))           #:when (equal? v u1)
        (~a (par u) " " (~sym '<) " " (par v) " " (~relop '<) " " (par v1))]
