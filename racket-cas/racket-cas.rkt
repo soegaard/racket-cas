@@ -894,13 +894,18 @@
     [(u 0)          1]
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
-    [(p -1)         `(expt ,p -1)]
+    [(u -1)         `(expt ,u -1)]
     [(p q) #:when (negative? q)
            (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
     [(α β) #:when (and (not (integer? α)) (not (integer? β)))
                   (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt (Expt d β) -1)))]
+    [(α p)        (expt α p)]
+    [(r s) #:when (negative? r)
+                  `(expt ,u ,v)]
     [(r s)        (expt r s)]
-    [((Expt u v) w) #:when (not (equal? -1 w)) (Expt u (⊗ v w))]          ; ditto
+    [((Expt u p) q) (Expt u (⊗ p q))]
+    [((Expt u v) w) #:when (integer? (⊗ v w)) (Expt u (⊗ v w))]
+    [((Expt r v) w) #:when (and (real? r) (positive? r) (not (equal? -1 w))) (Expt r (⊗ v w))]
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
     [(_ _)          `(expt ,u ,v)]))
@@ -1002,7 +1007,7 @@
   (check-equal? (Expt -1 2) 1)
   (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
   (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
-  ; todo: handle @i with polar. (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
+  (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
   (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
 (define (Sqr: u)
@@ -1016,6 +1021,7 @@
   (when debugging? (displayln (list 'Polar-Unit: u)))
   (math-match u
     [0     1]
+    [(list '* 1/2 @pi) @i]
     [_     `(make-polar 1 ,u)]))
 
 (define-match-expander Polar-Unit
@@ -1031,7 +1037,7 @@
   (when debugging? (displayln (list 'Angle u)))
   (let [(re (real-part u)) (im (imag-part u))]
   (when (= 0 u) error)
-  (cond [(= im 0) (if (> re 0) 0 pi)]
+  (cond [(= im 0) (if (> re 0) 0 @pi)]
         [(> im 0) Asin (/ re im)]
         [(< im 0) Acos (/ im re)]
   )))
@@ -2897,14 +2903,15 @@
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
 
       ; Use explicit multiplication for fractions
-      [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v)))
+      ; todo: (and (real? r) (negative? r)) -> new function
+      [(⊗ r (⊗ u v))  #:when (and (real? r) (negative? r) (not (equal? '(*) v)))
                       (~a "-" (~num (abs r)) (implicit* r u) (v~ (argcons '* u v)))]
-      [(⊗ r (⊗ u v))  #:when (and (positive? r) (not (equal? '(*) v))) 
+      [(⊗ r (⊗ u v))  #:when (and (real? r) (positive? r) (not (equal? '(*) v))) 
                       (~a    (~num (abs r))  (implicit* r u) (v~ (argcons '* u v)))] ; XXX
-      [(⊗ r v)        #:when (negative? r)
+      [(⊗ r v)        #:when (and (real? r) (negative? r))
                       (define w (if original? values paren))
                       (~a  (w (~a "-" (~num (abs r)))) (implicit* r v) (par v #:use paren))] ; XXX
-      [(⊗ r v)        #:when (positive? r)
+      [(⊗ r v)        #:when (and (real? r) (positive? r))
                       (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
       
       [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
@@ -3074,7 +3081,7 @@
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
-  ; handle @i with polar. (check-equal? (~ (complex-expt-expand (⊗ (Sqrt -2) y @pi `a))) "$\\sqrt{2}{i{π{ay}}}$")
+  (check-equal? (~ (complex-expt-expand (⊗ (Sqrt -2) y @pi `a))) "$\\sqrt{2}{i{π{ay}}}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
