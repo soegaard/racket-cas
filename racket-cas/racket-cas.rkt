@@ -717,7 +717,10 @@
   (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
 
 (module+ test
-  (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y)))
+  (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y))
+  ; '(* 3 (expt x -1) y) need to handle (expt x -1) specially, maybe keep Oslash and Minus until forced evaluation.
+  ; (check-equal? (math-match (⊘ (⊗ y 3) x) [(⊘ u v) (list u v)]) '((* 3 y) x))
+  )
 
 (define (Quotient: u v)
   (⊘ u v))
@@ -834,13 +837,27 @@
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   )
 
-
 ; unary and binary minus 
-(define (⊖ . us)
+(define (minus . us)
   (match us
     [(list u)   (⊗ -1 u)]
     [(list u v) (⊕ u (⊗ -1 v))]
     [_ (error)]))
+
+(define-match-expander ⊖
+  (λ (stx)
+    (syntax-parse stx
+      [(_ v u)     #'(or (list '+ v (list '* u -1))
+                         (list '+ v (list '* -1 u))
+                         (list '+ (list '* u -1) v)
+                         (list '+ (list '* -1 u) v))]
+      [(_ u)       #'(or (list '* u -1) (list '* -1 u))]))
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(minus u ...)] [_ (identifier? stx) #'minus])))
+
+(module+ test
+  (check-equal? (math-match (⊖ x y) [(⊖ u v) (list u v)]) '(x y))
+  (check-equal? (math-match (⊖ (⊗ y 3) x) [(⊖ u v) (list u v)]) '((* 3 y) x))
+  )
 
 ;; The pattern Exp matches the natural exponential function
 ;;  (Exp u) matches (expt @e a) and binds u->a
@@ -1260,30 +1277,52 @@
   )
 
 (define (Asin: u)
+  (when debugging? (displayln (list 'Asin: u)))
   (math-match u
     [0 0]
     [1  (⊗ 1/2 @pi)]
-    [-1 (⊗ -1/2 @pi)]
-    ; [r (sin r)] ; nope - automatic evaluation is for exact results only
+    [1/2 (⊗ 1/6 @pi)]
+    [(list '* (list 'expt 2 -1) (list 'expt 3 1/2)) (⊗ 1/3 @pi)]
+    [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/3 @pi)]
+    [r #:when (negative? r) (⊖ (Asin (- r)))]
     [r.0 (asin r.0)]
+    [(⊖ u) (⊖ (Asin u))] ; odd function
+    ; todo
+    ;[(Sin u) -> clamp u to [-pi/2, pi/2]
     [_ `(asin ,u)]))
 
 (define-match-expander Asin
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'asin u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Asin: u)] [_ (identifier? stx) #'Asin:])))
 
+; Acos = pi/2 - Asin
 (define (Acos: u)
+  (when debugging? (displayln (list 'Acos: u)))
   (math-match u
     [0 (⊘ @pi 2)]
     [1 0]
-    [-1 @pi]
+    [1/2 (⊗ 1/3 @pi)]
+    [(list '* (list 'expt 2 -1) (list 'expt 3 1/2)) (⊗ 1/6 @pi)]
+    [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)] ; de-fractionized
+    [r #:when (negative? r) (⊖ @pi (Acos (- r)))]
     [r.0 (acos r.0)]
+    [(⊖ u) (⊖ @pi (Acos u))]
+    ; todo
+    ;[(Cos u) -> clamp u to [0, pi]
     [_ `(acos ,u)]))
 
 (define-match-expander Acos
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'acos u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Acos: u)] [_ (identifier? stx) #'Acos:])))
 
+(module+ test
+  (check-equal? (Acos -1/2) '(* 2/3 @pi))
+  (check-equal? (Asin -1/2) '(* -1/6 @pi))
+  (check-equal? (Acos '(* 1/2 (expt 3 1/2))) '(* 1/6 @pi))
+  (check-equal? (Asin '(* 1/2 (expt 3 1/2))) '(* 1/3 @pi))
+  ; (check-equal? (Asin (Sin '(* -1/3 @pi))) '(* -1/3 @pi)) to be fixed.
+  (check-equal? (Acos (Cos '(* -1/3 @pi))) '(* 1/3 @pi))
+  )
 
 (define (Tan u)
   (⊘ (Sin u) (Cos u)))
