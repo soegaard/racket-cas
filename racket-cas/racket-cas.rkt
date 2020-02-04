@@ -880,6 +880,8 @@
     [(p -1)         `(expt ,p -1)]
     [(p q) #:when (negative? q)
            (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
+    [(α β) #:when (and (not (integer? α)) (not (integer? β)))
+                  (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt (Expt d β) -1)))]
     [(r s)        (expt r s)]
     [((Expt u v) w) #:when (not (equal? -1 w)) (Expt u (⊗ v w))]          ; ditto
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
@@ -890,7 +892,7 @@
   (when debugging? (displayln (list 'fractionize u)))
   (define f fractionize)
   (math-match u
-    [α                                                     (let [(n (%numerator α)) (d (%denominator α))]  (⊗ n (Expt d -1)))]
+    [α #:when (not (integer? α))                           (let [(n (%numerator α)) (d (%denominator α))]  (⊗ n (Expt d -1)))]
     [(Expt u q) #:when (and (negative? q) (not (= -1 q)))  (Expt (Expt (f u) (- q)) -1)]
     [(Expt u (⊗ -1 v))                                     (Expt (Expt (f u) v) -1)]
     [(Expt u v) (let ([fu (f u)] [fv (f v)])
@@ -898,10 +900,22 @@
                         [else                              (f (Expt fu fv))]))] ; May match special cases after inner expansions.
     [(⊗ u v)             (⊗ (f u) (f v))]
     [(⊕ u v)             (⊕ (f u) (f v))]
-    [(Sin u)             (Sin (f u))]
-    [(Cos u)             (Cos (f u))]
-    [(Asin u)            (Asin (f u))]
-    [(Acos u)            (Acos (f u))]
+    [(Sin u) (let ([s-f-u (Sin (f u))])
+               (if (equal? s-f-u (Sin u))
+                   s-f-u
+                   (f s-f-u)))]
+    [(Cos u) (let ([c-f-u (Cos (f u))])
+               (if (equal? c-f-u (Cos u))
+                   c-f-u
+                   (f c-f-u)))]
+    [(Asin u) (let ([a-f-u (Asin (f u))])
+               (if (equal? a-f-u (Asin u))
+                   a-f-u
+                   (f a-f-u)))]
+    [(Acos u) (let ([a-f-u (Acos (f u))])
+               (if (equal? a-f-u (Acos u))
+                   a-f-u
+                   (f a-f-u)))]
     [u u]))
 
 (define (de-fractionize u)
@@ -1132,19 +1146,34 @@
   (check-equal? (Log @e x) (Ln x))
   (check-equal? (Log 2 (Expt 2 x)) x))
 
+; [0, 2)
+(define (clamp-0-2 c)
+  (let [(n (%numerator c)) (d (%denominator c))]
+    (/ (modulo n (* 2 d)) d)))
+
+; [-pi, pi), i.e [-1, 1)
+; better be (-1, 1], but we can save the effort
+; clamp-0-2(c + 1) - 1
+(define (normalize-pi-coeff c)
+  (- (clamp-0-2 (+ c 1)) 1))
+
 (define (Cos: u)
+  (when debugging? (displayln (list 'Cos: u)))
   (math-match u
     [0 1]
     [r.0 (cos r.0)]
     ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [@pi -1]
-    [(⊗ 1/3 @pi) 1/2] 
+    [(⊗ 1/3 @pi) 1/2]
     [(⊗ α u)   #:when (negative? α)      (Cos: (⊗ (- α) u))]  ; cos is even
     [(⊗ n @pi)                           (if (even? n) 1 -1)]    
     [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
+    [(⊗ α @pi) #:when (or (> α 1) (< α -1))
+               (Cos (⊗ (normalize-pi-coeff α) @pi))]
     [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                (let ([sign (expt -1 (floor (/ (+ α 1) 2)))])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx test sign
+    [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (⊖ 1 α) @pi)))]
     [(⊗ p (Integer _) @pi) #:when (even? p) 1]
     
     [(⊕ u (k⊗ p @pi)) #:when (odd? p)  (⊖ (Cos: u))]
@@ -1175,9 +1204,13 @@
   (check-equal? (Cos (⊕ x (⊗ 3 @pi)))  (⊖ (Cos x)))
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
-  (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x)))
+  (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
+  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "sqrt(3)/2")
+  (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
+  )
 
 (define (Sin: u)
+  (when debugging? (displayln (list 'Sin: u)))
   (define (Odd? n)  (and (integer? n) (odd? n)))
   (define (Even? n) (and (integer? n) (even? n)))
   (math-match u
@@ -1197,11 +1230,14 @@
     [(⊕ (⊗ p (Integer v) @pi) u) #:when (Even? p) (Sin: u)]
     [(⊕ u (⊗ p (Integer v) @pi)) #:when (Odd? p) (⊖ (Sin: u))]
     [(⊕ (⊗ p (Integer v) @pi) u) #:when (Odd? p) (⊖ (Sin: u))]
+    [(⊗ α @pi) #:when (or (> α 1) (< α -1))
+               (Sin (⊗ (normalize-pi-coeff α) @pi))]
     [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                (let* ([θ      (* 2 α pi)]
                       [sign.0 (sgn (+ (- (* 2 pi) θ) (* 4 pi (floor (/ θ (* 4 pi))))))]
                       [sign   (if (> sign.0 0) 1 -1)])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
+    [(⊗ α @pi) #:when (> α 1/2) (Sin (⊗ (⊖ 1 α) @pi))]
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
     [_ `(sin ,u)]))
 
@@ -1219,7 +1255,9 @@
   (check-equal? (Sin (⊕ x (⊗ 3 @pi)))    (⊖ (Sin x)))
   (check-equal? (Sin (⊕ x (⊗ 2 @n @pi)))    (Sin x))
   (check-equal? (Sin (⊕ x (⊗ 4 @n @pi)))    (Sin x))
-  (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x)))
+  (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x))
+  (check-equal? (Sin (⊗ 2/3 @pi)) '(* (expt 2 -1) (expt 3 1/2)))
+  )
 
 (define (Asin: u)
   (math-match u
@@ -1616,12 +1654,10 @@
 (module+ test
   (check-equal? (trig-expand (Sin (⊗ 2 x))) (⊗ 2 (Cos x) (Sin x)))
   (check-equal? (trig-expand (Cos (⊗ 2 x))) (⊖ (Sqr (Cos x)) (Sqr (Sin x))))
-  (check-equal? (expand (trig-expand (fractionize (Cos (⊗ 4/3 @pi))))) -1/2)
   (let ([u 'u] [v 'v])
     (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
     (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
     (check-equal? (trig-expand '(expt (sin (* 2 x)) 2)) '(* 4 (expt (cos x) 2) (expt (sin x) 2)))))
-
 
 
 (define-syntax (for/⊕ stx)
@@ -2666,6 +2702,7 @@
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
+        [(Expt u (Expt 2 -1)) #:when (output-sqrt?) ((output-format-sqrt) u)]
         [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (wrap (format/ 1 (par u #:use quotient-sub)))]
         ; unnormalized power of a power
@@ -2784,12 +2821,15 @@
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par u #:use quotient-sub))]
-      [(Expt u p)     #:when (negative? p)
-                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
+      [(Expt u (Expt 2 -1)) #:when (output-sqrt?) ((output-format-sqrt) u)]
       [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub #:exponent-base? #t))]
+      [(Expt u p)     #:when (negative? p)
+                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
+      [(⊘ u v)        (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       
       ; mult
       [(⊗  1 v)                                               (~a             (v~ v))]
@@ -2970,6 +3010,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
+  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)/2")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
