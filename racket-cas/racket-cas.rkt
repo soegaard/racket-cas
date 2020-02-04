@@ -898,14 +898,14 @@
     [(p q) #:when (negative? q)
            (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
     [(α β) #:when (and (not (integer? α)) (not (integer? β)))
-                  (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt (Expt d β) -1)))]
-    [(α p)        (expt α p)]
-    [(r s) #:when (negative? r)
+                  (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
+    [(r s) #:when (and (negative? r) (not (integer? s)))
                   `(expt ,u ,v)]
     [(r s)        (expt r s)]
+    [((Polar-Unit θ) s) #:when (real? s) (let [(new-θ (⊗ s θ))] (Polar-Unit new-θ))]
     [((Expt u p) q) (Expt u (⊗ p q))]
-    [((Expt u v) w) #:when (integer? (⊗ v w)) (Expt u (⊗ v w))]
-    [((Expt r v) w) #:when (and (real? r) (positive? r) (not (equal? -1 w))) (Expt r (⊗ v w))]
+    [((Expt r v) w) #:when (and (real? r) (positive? r)) (Expt r (⊗ v w))]
+    [((Expt u v) w) #:when (set-member? (set @e @pi) u) (Expt u (⊗ v w))]
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
     [(_ _)          `(expt ,u ,v)]))
@@ -1007,7 +1007,7 @@
   (check-equal? (Expt -1 2) 1)
   (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
   (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
-  (check-equal? (complex-expt-expand (expand (Expt (⊕ (Sqrt -2) 2) 2))) '(+ 2 (* 4 (expt 2 1/2) @i)))
+  (check-equal? (polar-to-rect (expand (complex-expt-expand (Expt (⊕ (Sqrt -2) 2) 2)))) '(+ 2 (* 4 (expt 2 1/2) @i)))
   (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
 (define (Sqr: u)
@@ -1021,7 +1021,6 @@
   (when debugging? (displayln (list 'Polar-Unit: u)))
   (math-match u
     [0     1]
-    [(list '* 1/2 @pi) @i]
     [_     `(make-polar 1 ,u)]))
 
 (define-match-expander Polar-Unit
@@ -1030,7 +1029,8 @@
 
 (define (Magnitude u)
   (when debugging? (displayln (list 'Magnitude u)))
-  (Sqrt (⊕ (Sqr (real-part u)) (Sqr (imag-part u))))
+  (if (real? u) (abs u)
+  (Sqrt (⊕ (Sqr (real-part u)) (Sqr (imag-part u)))))
   )
 
 (define (Angle u)
@@ -1047,8 +1047,6 @@
   (define cee complex-expt-expand)
   (math-match u
     ; principal value
-    ; todo: angle -> Angle, to delay evaluation.
-    ; todo: handle (θ (* s (angle r))) more carefully.
     [(Expt (Polar-Unit θ) s) #:when (real? s) (let [(new-θ (⊗ s θ))] (Polar-Unit new-θ))]
     [(Expt r s)           #:when (real? s) (let [(ρ (Expt (Magnitude r) s)) (θ (⊗ s (Angle r)))] (⊗ ρ (Polar-Unit θ)))]
 ;    [(Expt -1 1/2)       @i]
@@ -1080,7 +1078,7 @@
   )
 
 (module+ test
-  (check-equal? (polar-to-rect (complex-expt-expand '(expt -8 1/3))) '(* 2.0 (+ 0.5000000000000001 (* 0.8660254037844386 @i))))
+  (check-equal? (polar-to-rect (complex-expt-expand '(expt -8 1/3))) '(* 2.0 (+ 1/2 (* (expt 2 -1) (expt 3 1/2) @i))))
   (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1.0+1.732i 0.0001)
   )
 
@@ -1187,16 +1185,17 @@
     [r.0 (cos r.0)]
     ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [@pi -1]
+    [(⊗ 1/6 @pi) (⊘ (Sqrt 3) 2)]
     [(⊗ 1/3 @pi) 1/2]
     [(⊗ α u)   #:when (negative? α)      (Cos: (⊗ (- α) u))]  ; cos is even
     [(⊗ n @pi)                           (if (even? n) 1 -1)]    
     [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
     [(⊗ α @pi) #:when (or (> α 1) (< α -1))
                (Cos (⊗ (normalize-pi-coeff α) @pi))]
+    [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (⊖ 1 α) @pi)))]
     [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                (let ([sign (expt -1 (floor (/ (+ α 1) 2)))])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx test sign
-    [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (⊖ 1 α) @pi)))]
     [(⊗ p (Integer _) @pi) #:when (even? p) 1]
     
     [(⊕ u (k⊗ p @pi)) #:when (odd? p)  (⊖ (Cos: u))]
@@ -1228,7 +1227,7 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "sqrt(3)/2")
+  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-sqrt(3)/2")
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   )
 
@@ -1240,6 +1239,7 @@
     [0 0]
     [r.0 (sin r.0)]
     [@pi 0]
+    [(⊗ 1/6 @pi) 1/2]
     [(⊗ 1/3 @pi) (⊘ (Sqrt 3) 2)]
     [(⊗ (Integer _) @pi) 0]
     [(⊗ α     u) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) u)))]
@@ -1255,12 +1255,12 @@
     [(⊕ (⊗ p (Integer v) @pi) u) #:when (Odd? p) (⊖ (Sin: u))]
     [(⊗ α @pi) #:when (or (> α 1) (< α -1))
                (Sin (⊗ (normalize-pi-coeff α) @pi))]
+    [(⊗ α @pi) #:when (> α 1/2) (Sin (⊗ (⊖ 1 α) @pi))]
     [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                (let* ([θ      (* 2 α pi)]
                       [sign.0 (sgn (+ (- (* 2 pi) θ) (* 4 pi (floor (/ θ (* 4 pi))))))]
                       [sign   (if (> sign.0 0) 1 -1)])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
-    [(⊗ α @pi) #:when (> α 1/2) (Sin (⊗ (⊖ 1 α) @pi))]
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
     [_ `(sin ,u)]))
 
@@ -1580,8 +1580,8 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (module+ test
-  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (make-polar 1 1.0471975511965976)))
-  (check-= (N (complex-expt-expand '(expt -8 1/3))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (make-polar 1 (* 1/3 @pi))))
+  (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
   (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
 
@@ -3081,7 +3081,7 @@
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
-  (check-equal? (~ (complex-expt-expand (⊗ (Sqrt -2) y @pi `a))) "$\\sqrt{2}{i{π{ay}}}$")
+  (check-equal? (~ (polar-to-rect (complex-expt-expand (⊗ (Sqrt -2) y @pi `a)))) "$\\sqrt{2}{i{π{ay}}}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
