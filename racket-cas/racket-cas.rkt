@@ -898,6 +898,10 @@
                         [else                              (f (Expt fu fv))]))] ; May match special cases after inner expansions.
     [(⊗ u v)             (⊗ (f u) (f v))]
     [(⊕ u v)             (⊕ (f u) (f v))]
+    [(Sin u)             (Sin (f u))]
+    [(Cos u)             (Cos (f u))]
+    [(Asin u)            (Asin (f u))]
+    [(Acos u)            (Acos (f u))]
     [u u]))
 
 (define (de-fractionize u)
@@ -911,6 +915,22 @@
                         [else                              (df (Expt dfu dfv))]))] ; May match special cases after inner expansions.
     [(⊗ u v)             (⊗ (df u) (df v))]
     [(⊕ u v)             (⊕ (df u) (df v))]
+    [(Sin u) (let ([s-df-u (Sin (df u))])
+               (if (equal? s-df-u (Sin u))
+                   s-df-u
+                   (df s-df-u)))]
+    [(Cos u) (let ([c-df-u (Cos (df u))])
+               (if (equal? c-df-u (Cos u))
+                   c-df-u
+                   (df c-df-u)))]
+    [(Asin u) (let ([a-df-u (Asin (df u))])
+               (if (equal? a-df-u (Asin u))
+                   a-df-u
+                   (df a-df-u)))]
+    [(Acos u) (let ([a-df-u (Acos (df u))])
+               (if (equal? a-df-u (Acos u))
+                   a-df-u
+                   (df a-df-u)))]
     [u u]))
 
 
@@ -1575,16 +1595,16 @@
                      (⊖ (t (Sin (- n) u)))]
       [(Sin (⊗ n u)) (for/⊕ ([k (in-range (+ n 1))])
                             (⊗ (binomial n k) 
-                               (Expt (Cos x) k)
-                               (Expt (Sin x) (- n k))
+                               (Expt (Cos u) k)
+                               (Expt (Sin u) (- n k))
                                (sin-pi/2* (- n k))))]
       [(Cos 0) 1]
       [(Cos (⊗ n u)) #:when (negative? n)
                      (t (Cos (- n) u))]
       [(Cos (⊗ n u)) (for/⊕ ([k (in-range (+ n 1))])
                             (⊗ (binomial n k)
-                               (Expt (Cos x) k)
-                               (Expt (Sin x) (- n k))
+                               (Expt (Cos u) k)
+                               (Expt (Sin u) (- n k))
                                (cos-pi/2* (- n k))))]
       [(Sin (⊕ u v)) (t (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))]
       [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]
@@ -1596,6 +1616,7 @@
 (module+ test
   (check-equal? (trig-expand (Sin (⊗ 2 x))) (⊗ 2 (Cos x) (Sin x)))
   (check-equal? (trig-expand (Cos (⊗ 2 x))) (⊖ (Sqr (Cos x)) (Sqr (Sin x))))
+  (check-equal? (expand (trig-expand (fractionize (Cos (⊗ 4/3 @pi))))) -1/2)
   (let ([u 'u] [v 'v])
     (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
     (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
@@ -2646,7 +2667,7 @@
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
         [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                        (format/ 1 (par u #:use quotient-sub))]
+                        (wrap (format/ 1 (par u #:use quotient-sub)))]
         ; unnormalized power of a power
         [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper) ; braces for tex otherwise nothing
                                            (v~ w)) 
