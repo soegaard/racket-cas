@@ -961,17 +961,15 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
-; todo: change (Polar u v) to (Unit-Polar u)
-(define (Polar: u v)
-  (when debugging? (displayln (list 'Polar: u v)))
-  (math-match* (u v)
-    [(0 _)     0]
-    [(_ 0)     u]
-    [(_ _)          `(make-polar ,u ,v)]))
+(define (Polar-Unit: u)
+  (when debugging? (displayln (list 'Polar-Unit: u)))
+  (math-match u
+    [0     1]
+    [_     `(make-polar 1 ,u)]))
 
-(define-match-expander Polar
-  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'make-polar u v)]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(Polar: u v)] [_ (identifier? stx) #'Polar:])))
+(define-match-expander Polar-Unit
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'make-polar 1 u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Polar-Unit: u)] [_ (identifier? stx) #'Polar-Unit:])))
 
 (define (Magnitude u)
   (when debugging? (displayln (list 'Magnitude u)))
@@ -994,8 +992,8 @@
     ; principal value
     ; todo: angle -> Angle, to delay evaluation.
     ; todo: handle (θ (* s (angle r))) more carefully.
-    [(Expt (Polar ρ θ) s) #:when (real? s) (let [(new-ρ (Expt ρ s)) (new-θ (⊗ s θ))] (Polar new-ρ new-θ))]
-    [(Expt r s)           #:when (real? s) (let [(ρ (Expt (Magnitude r) s)) (θ (⊗ s (Angle r)))] (Polar ρ θ))]
+    [(Expt (Polar-Unit θ) s) #:when (real? s) (let [(new-θ (⊗ s θ))] (Polar-Unit new-θ))]
+    [(Expt r s)           #:when (real? s) (let [(ρ (Expt (Magnitude r) s)) (θ (⊗ s (Angle r)))] (⊗ ρ (Polar-Unit θ)))]
 ;    [(Expt -1 1/2)       @i]
 ;    [(Expt r α)  #:when (and (real? r) (negative? r) (= (%denominator α) 2)) (⊗ (Expt @i (%numerator α)) (Expt (⊖ r) α))]
 ;    [(Expt @i n)         (case (remainder n 4)
@@ -1016,7 +1014,7 @@
   (when debugging? (displayln (list 'polar-to-rect u)))
   (define ptr polar-to-rect)
   (math-match u
-    [(Polar ρ θ) (let [(ptr-θ (ptr θ))] (⊗ (ptr ρ) (⊕ (Cos ptr-θ) (⊗ (Sin ptr-θ) @i))))]
+    [(Polar-Unit θ) (let [(ptr-θ (ptr θ))] (⊕ (Cos ptr-θ) (⊗ (Sin ptr-θ) @i)))]
     [(Expt u v)  (Expt (ptr u) (ptr v))]
     [(⊗ u v)     (⊗ (ptr u) (ptr v))]
     [(⊕ u v)     (⊕ (ptr u) (ptr v))]
@@ -1449,7 +1447,7 @@
     [@pi pi]
     [@e  euler-e]
     [@i  imaginary-unit]
-    [(Polar r s) (make-polar r s)]
+    [(Polar-Unit r) (make-polar 1 r)]
     [(⊕ u v)     (M2 + ⊕ u v)]
     [(⊗ u v)     (M2 * ⊗ u v)]
     [(Expt u v)  (M2 expt Expt u v)]
@@ -1479,7 +1477,7 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (module+ test
-  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(make-polar 2.0 1.0471975511965976))
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (make-polar 1 1.0471975511965976)))
   (check-= (N (complex-expt-expand '(expt -8 1/3))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
   (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
