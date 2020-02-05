@@ -580,13 +580,10 @@
 
 (module+ test (check-equal? ((compile '(sin (sqrt x))) 0) 0))
 
-(define (distribute s)
-  (distribute-impl s))
-
 ; distribute applies the distributive law recursively
-(define (distribute-impl s)
-  (when debugging? (displayln (list 'distribute-impl s)))
-  (define d distribute-impl)
+(define (distribute s)
+  (when debugging? (displayln (list 'distribute s)))
+  (define d distribute)
   (math-match s
     [(⊗ a (⊕ u v)) (⊕ (d (⊗ a u)) (d (⊗ a v)))]
     [(⊗ (⊕ u v) b) (⊕ (d (⊗ u b)) (d (⊗ v b)))]
@@ -920,6 +917,8 @@
                [(n 1/2)        (sqrt-natural n)]
                [(_ _) #:when (lazy-expt?)
                                `(expt ,u ,v)]
+               [(α β) #:when (and (not (integer? α)) (not (integer? β)))
+                  (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
                [(α p)          (expt α p)]
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
@@ -1205,7 +1204,6 @@
     [r.0 (cos r.0)]
     ; [r (cos r)] ; nope - automatic evaluation is for exact results only
     [@pi -1]
-    [(⊗ 1/6 @pi) (⊘ (Sqrt 3) 2)]
     [(⊗ 1/3 @pi) 1/2]
     [(⊗ α u)   #:when (negative? α)      (Cos: (⊗ (- α) u))]  ; cos is even
     [(⊗ n @pi)                           (if (even? n) 1 -1)]    
@@ -1247,7 +1245,7 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-1/2*sqrt(3)")
+  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-sqrt(3)*1/2")
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   )
 
@@ -1259,7 +1257,6 @@
     [0 0]
     [r.0 (sin r.0)]
     [@pi 0]
-    [(⊗ 1/6 @pi) 1/2]
     [(⊗ 1/3 @pi) (⊘ (Sqrt 3) 2)]
     [(⊗ (Integer _) @pi) 0]
     [(⊗ α     u) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) u)))]
@@ -3124,7 +3121,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
-  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "1/2*sqrt(3)")
+  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "-sqrt(3)*1/2")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
