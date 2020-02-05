@@ -2022,6 +2022,34 @@
 (define (tex-output-variable-name x)
   (match x ['@pi "π"]  ['@e "\\mathrm{e}"] [_ (symbol->tex x)]))
 
+;;; Fractions
+
+(define (default-output-fraction α) (~a α))
+(define (mma-output-fraction     α) (~a α))
+(define (tex-output-fraction     α) 
+  (if (> (denominator α) 1)
+      (~a "\\frac{" (numerator α) "}{" (denominator α) "}")
+      (~a α)))
+
+;;; Roots
+
+; If output-root? is true, the formatter uses output-root to output
+; powers of the form (expt u 1/n).
+
+(define (default-output-root u n)
+  ; note: KAS can't parse root(u,n) so we need to output u^(1/n)
+  #f) ; this makes verbose! output u^(1/n) with correct parens
+
+;; (define (mma-output-root formattted-u) 
+;;   (match u
+;;     [(Expt u α) #:when (= (numerator? α) 1) (def n (/ 1 α)) (~a "Power[" formattted-u "," α ")")]
+;;     [_ (error 'mma-output-root (~a "Expected expression of the form (expt u 1/n), got: " u))]))
+
+;; (define (tex-output-root formattted-u) 
+;;   (match u
+;;     [(Expt u α) #:when (= (numerator? α) 1)  (def n (/ 1 α)) (~a "\\sqrt[" n " ]{" formatted-u "}")]
+;;     [_ (error 'tex-output-root (~a "Expected expression of the form (expt u 1/n), got: " u))]))
+
 
 ;;; Logarithms
 
@@ -2060,10 +2088,11 @@
 (define output-sub-expression-parens     (make-parameter (list "(" ")")))
 (define output-wrapper                   (make-parameter values))
 (define output-use-quotients?            (make-parameter #t))
-(define output-sqrt?                     (make-parameter #t))
+(define output-sqrt?                     (make-parameter #t)) ; use sqrt to output (expt u 1/2) ; otherwise as expt
+(define output-root?                     (make-parameter #t)) ; use root to output (expt u 1/n) ; otherwise as expt
 (define output-format-abs                (make-parameter (λ(u)   (~a "abs("  (verbose~ u) ")"))))
 (define output-format-sqrt               (make-parameter (λ(u)   (~a "sqrt(" (verbose~ u) ")"))))
-(define output-format-root               (make-parameter (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")"))))
+(define output-format-root               (make-parameter default-output-root))
 (define output-format-log                (make-parameter default-output-log))
 (define output-format-up                 (make-parameter default-output-up))
 (define output-sub-exponent-parens       (make-parameter (list "(" ")"))) ; for Tex it is { }
@@ -2074,7 +2103,7 @@
 (define output-floating-point-precision  (make-parameter 4))  ; 
 (define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e and @pi
 (define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
-
+(define output-fraction                  (make-parameter default-output-fraction))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -2093,7 +2122,8 @@
   (output-sub-exponent-wrapper values)
   (output-implicit-product? #f)
   (output-relational-operator ~a)
-  (output-variable-name mma-output-variable-name))
+  (output-variable-name mma-output-variable-name)
+  (output-fraction mma-output-fraction))
 
 (define (use-default-output-style)
   (output-application-brackets (list "(" ")"))
@@ -2105,6 +2135,7 @@
   (output-sub-exponent-wrapper   values)
   (output-wrapper values)
   (output-sqrt? #t)
+  (output-root? #f)
   (output-format-abs  (λ(u)   (~a "abs("  (verbose~ u) ")")))
   (output-format-sqrt (λ(u)   (~a "sqrt(" (verbose~ u) ")")))
   (output-format-root (λ(u n) (~a "root(" (verbose~ u) "," (verbose~ n) ")")))
@@ -2112,7 +2143,8 @@
   (output-format-up  default-output-up)
   (output-implicit-product? #f)
   (output-relational-operator ~a)
-  (output-variable-name default-output-variable-name))
+  (output-variable-name default-output-variable-name)
+  (output-fraction default-output-fraction))
 
 (define (use-tex-output-style)
   (define operators '(sin cos tan log ln sqrt det))
@@ -2143,17 +2175,21 @@
   (output-format-abs  (λ(u)   (parameterize ([output-wrapper values])
                                 (~a "\\left|"  (verbose~ u) "\\right|"))))  
   (output-sqrt? #t)
+  (output-root? #f)
   (output-format-sqrt (λ(u)   (parameterize ([output-wrapper values])
                                 (~a "\\sqrt{"  (verbose~ u) "}"))))  
   (output-format-root (λ(u n) (parameterize ([output-wrapper values])
-                                (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
+                                (if (equal? n 2)
+                                    (~a "\\sqrt{" (verbose~ u) "}")
+                                    (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}")))))
   (output-format-log tex-output-log)
   (output-format-up  tex-output-up)
   (output-sub-exponent-parens  (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
   (output-implicit-product? #t)
   (output-relational-operator ~relop)
-  (output-variable-name tex-output-variable-name))
+  (output-variable-name tex-output-variable-name)
+  (output-fraction tex-output-fraction))
 
 (define (tex u)
   (define operators '(sin  cos  tan log ln sqrt
@@ -2189,14 +2225,17 @@
                  (output-format-sqrt (λ(u) (parameterize ([output-wrapper values])
                                              (~a "\\sqrt{" (verbose~ u) "}"))))
                  (output-format-root (λ(u n) (parameterize ([output-wrapper values])
-                                               (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}"))))
+                                               (if (equal? n 2)
+                                                   (~a "\\sqrt{" (verbose~ u) "}")
+                                                   (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}")))))
                  (output-sub-exponent-parens  (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
                  (output-implicit-product?    #t)
                  (output-relational-operator  ~relop)
                  (output-variable-name        tex-output-variable-name)
                  (output-format-log           tex-output-log)
-                 (output-format-up            tex-output-up))
+                 (output-format-up            tex-output-up)
+                 (output-fraction             tex-output-fraction))
     (verbose~ u)))
 
 (define char->tex
@@ -2337,16 +2376,20 @@
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
   (match-define (list quot-left quot-right) (output-format-quotient-parens))
   ;(define use-quotients? (output-use-quotients?))
-  (define ~sym (output-format-function-symbol)) ; function names
+  (define ~sym (let ([sym (output-format-function-symbol)]) (λ (x) (sym x)))) ; function names
   (define ~var (let ([out (output-variable-name)]) (λ(x) (out x)))) ; variable names
   (define (~relop x) ((output-relational-operator) x))
-  (define (~red str) (~a "{\\color{red}" str "\\color{black}}"))
+  (define (~red str)  (~a "{\\color{red}" str "\\color{black}}"))
+  (define (~blue str) (~a "{\\color{blue}" str "\\color{black}}"))
+  (define (~explicit-paren strs) (~a "{\\left(" (string-join (add-between strs ",")) "\\right)}"))
 
   (define (v~ u [original? #f])
     ; (displayln (list 'v~ u))
+    (define ~frac (output-fraction))
     (define (~num r)
       (define precision (output-floating-point-precision))
-      (cond [(exact? r) (~a r)]
+      (cond [(and (exact? r) (> (denominator r) 1)) (~frac r) (~a r)]
+            [(exact? r) (~a r)]
             [(nan? r)   (~a r)]
             [precision  (~r r #:precision precision)]
             [else       (~a r)]))
@@ -2395,8 +2438,10 @@
                  #:exponent-base? [exponent-base? #f]) ; wrap if (locally) necessary
       (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
-        [(list 'red  u) (~red (par u))]
-        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap α)] ; XXX
+        [(list 'red   u) (~red  (par u))]           ; red color
+        [(list 'blue  u) (~blue (par u))]           ; blue color
+        [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
+        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap (~frac α))] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2481,7 +2526,10 @@
     (define (t1~ u) ; term 1 aka first term in a sum
       (when debugging? (displayln (list 't1 u)))
       (math-match u
-                  [(list 'red  u) (~red (t1~ u))]
+                  [(list 'red   u) (~red  (t1~ u))]
+                  [(list 'blue  u) (~blue (t1~ u))]           ; blue color
+                  [(list 'paren u ...) (~explicit-paren (map t1~ u))] ; explicit parens (tex)
+
                   ; unnormalized and normalized quotients
                   [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                                  (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
@@ -2513,13 +2561,16 @@
     (when debugging? (write (list 'v~ u 'orig original?)) (newline))
     (math-match u
       [(? string? u) u]
-      [(list 'red  u) (~red (v~ u))]
+      [(list 'red   u) (~red  (v~ u))]
+      [(list 'blue  u) (~blue (v~ u))]           ; blue color
+      [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
       [(list 'formatting options u)
        (let loop ([os options])
          (match os
            ['()                                   (v~ u)]
            [(list (list 'use-quotients? v) os ...) (parameterize ([output-use-quotients? v]) (loop os))]
            [_                                     (error 'verbose-formatting (~a "unknown option" os))]))]
+      [α           (~frac α)]
       [r           (~num r)]
       [r.bf        (bigfloat->string r.bf)]
       [x           (~a (~var x))]
@@ -2534,6 +2585,8 @@
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
+      [(Expt u α)     #:when (and (output-root?) (= (numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
+                      ((output-format-root) u (/ 1 α))] ; only used, if (output-format-root) returns non-#f 
       [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub #:exponent-base? #t))]
@@ -2729,6 +2782,8 @@
   (check-equal? (~ '(* 2 x y)) "2*x*y")
   ; —–- TeX
   (use-tex-output-style)
+  (check-equal? (~ 4)   "$4$")
+  (check-equal? (~ 2/3) "$\\frac{2}{3}$")
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "$\\frac{x}{1-y^{2}}$")
   (check-equal? (~ '(* -8 x )) "$-8x$")
   (check-equal? (~ '(- 1 (+ 2 3))) "$1-(2+3)$")
@@ -2740,6 +2795,11 @@
   (check-equal? (~ '(* -9 (expt x -10))) "$\\frac{-9}{x^{10}}$")
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
+  (check-equal? (~ '(paren -3)) "${\\left(-3\\right)}$")
+  (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
+  (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
+  (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
+  (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
