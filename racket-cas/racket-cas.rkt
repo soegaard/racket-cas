@@ -4,6 +4,7 @@
 (define debugging? #f)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
+(define (verbose-debug!) (set! verbose-debugging? (not verbose-debugging?)) verbose-debugging?)
 ; Short term:
 ;   - fix: (App (Compose Expt Sin) 0)
 ;   - documentation
@@ -37,6 +38,15 @@
          (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test (require rackunit math/bigfloat)
   (define x 'x) (define y 'y) (define z 'z))
+
+; Control Parameters
+(define lazy-expt?            (make-parameter #f))
+
+(define (lazy-mode)
+  (lazy-expt? #t))
+
+(define (eager-mode)
+  (lazy-expt? #f))
 
 (define-syntax (fluid-let stx)
   (syntax-parse stx
@@ -454,7 +464,7 @@
   (check-equal? (⊗ x (Expt x -1)) 1)
   (check-equal? (⊗ y (Expt x 2)) '(* (expt x 2) y))
   (check-equal? (⊗ x (Cos x)) '(* x (cos x)))
-  (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (Expt (⊗ x y) 3))
+  (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
   (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
 
@@ -598,7 +608,7 @@
   ; expand products and powers with positive integer exponents
   ; expand terms, but don't recurse into sub terms
   ; TODO : implement the above description
-  (expand-all (de-fractionize (expt-expand u))))
+  (expand-all (expt-expand u)))
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
@@ -735,9 +745,11 @@
   (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
 
 (define (denominator u)
-  (denominator-impl (together u)))
+  (when debugging? (displayln (list 'denominator u)))
+  (de-fractionize (denominator-impl (together u))))
   
 (define (denominator-impl u)
+  (when debugging? (displayln (list 'denominator-impl u)))
   (math-match u
     [r (%denominator r)]
     [x 1]
@@ -758,7 +770,8 @@
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
 (define (numerator u)
-  (numerator-impl (together u)))
+  (when debugging? (displayln (list 'numerator u)))
+  (de-fractionize (numerator-impl (together u))))
   
 (define (numerator-impl u)
   (when debugging? (displayln (list 'numerator-impl u)))
@@ -815,11 +828,16 @@
     [(_ _) (⊕ s1 s2)]
     ))
 
+; todo define a macro to call functions with lazy-expt? on
 (define (together u)
-  (together-impl (combine u)))
+  (when debugging? (displayln (list 'together u)))
+  (define lazy-expt-org (lazy-expt?))
+  (lazy-expt? #t)
+  (define result (together-impl (fractionize (combine u))))
+  (lazy-expt? lazy-expt-org)
+  result)
 
 (define (together-impl u)
-  (when debugging? (displayln (list 'together-impl u)))
   (math-match u
     [(⊕ u v) (together-op u v)]
     [u u]))
@@ -827,14 +845,18 @@
 (module+ test 
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
-  (check-equal? (together-op2 (⊘ y 5) 1) '(+ 1 (* (expt 5 -1) y)))
-  (check-equal? (greedy-together-op2 (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (expt (* d f) -1) (+ (* c f) (* d e))))))
-  (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '41/10)
+  (check-equal? (normalize (together (⊕ (⊘ 7 2) (⊘ 3 5)))) '41/10)
   (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
   (check-equal? (together (⊕ (⊘ 2 y) (⊘ 1 x))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
+
+  (define lazy-expt-org (lazy-expt?))
+  (lazy-expt? #t)
+  (check-equal? (together-op2        (⊘ y 5) 1) '(+ 1 (* (expt 5 -1) y)))
+  (check-equal? (greedy-together-op2 (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
+  (lazy-expt? lazy-expt-org)
   )
 
 ; unary and binary minus 
@@ -887,30 +909,24 @@
          (⊗ (for/product ([s (in-list ss)]) s)
             (match (for/product ([n (in-list ns)]) n) 
               [1 1] [p `(expt ,p 1/2)]))]))
-  (math-match* (u v)
-    [(1 v)          1]
-    [(u 1)          u]
-    [(0 0)          +nan.0] ; TODO: is this the best we can do?
-    [(u 0)          1]
-    ; [(0 v)          0]
-    [(n 1/2)        (sqrt-natural n)]
-    [(α -1) #:when (not (integer? α))
-                   (/ α)]
-    [(u -1)        `(expt ,u -1)]
-    [(p q) #:when (negative? q)
-           (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
-    [(α β) #:when (and (not (integer? α)) (not (integer? β)))
-                  (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
-    [(r s) #:when (and (negative? r) (not (integer? s)))
-                  `(expt ,u ,v)]
-    [(r s)        (expt r s)]
-    [((Polar-Unit θ) s) #:when (real? s) (let [(new-θ (⊗ s θ))] (Polar-Unit new-θ))]
-    [((Expt u p) q) (Expt u (⊗ p q))]
-    [((Expt r v) w) #:when (and (real? r) (positive? r)) (Expt r (⊗ v w))]
-    [((Expt u v) w) #:when (set-member? (set @e @pi) u) (Expt u (⊗ v w))]
-    [(u (Log u v))  v]                         ; xxx - is this only true for u real?
-    [(Exp (Ln v))   v]
-    [(_ _)          `(expt ,u ,v)]))
+  (if (lazy-expt?)
+      `(expt ,u ,v)
+      (math-match* (u v)
+                   [(1 v)          1]
+                   [(u 1)          u]
+                   [(0 0)          +nan.0] ; TODO: is this the best we can do?
+                   [(u 0)          1]
+                   ; [(0 v)          0]
+                   [(n 1/2)        (sqrt-natural n)]
+                   [(α p)          (expt α p)]
+                   [(p q)          (expt p q)]
+                   [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
+                   [(r s.0)        (expt r s.0)]
+                   [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
+                   [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
+                   [(u (Log u v))  v]                         ; xxx - is this only true for u real?
+                   [(Exp (Ln v))   v]
+                   [(_ _)          `(expt ,u ,v)])))
 
 (define-match-expander Expt
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
@@ -922,13 +938,26 @@
   (check-equal? (Expt -1 2) 1)
   )
 
+
 (define (fractionize u)
-  (when debugging? (displayln (list 'fractionize u)))
-  (define f fractionize)
-  (math-match u
+  (define lazy-expt-org (lazy-expt?))
+  (lazy-expt? #t)
+  (define result (fractionize-impl u))
+  (lazy-expt? lazy-expt-org)
+  result)
+
+(define (fractionize-impl s)
+  (when debugging? (displayln (list 'fractionize-impl s)))
+  (define f fractionize-impl)
+  (math-match s
     [α #:when (not (integer? α))                           (let [(n (%numerator α)) (d (%denominator α))]  (⊗ n (Expt d -1)))]
     [(Expt u q) #:when (and (negative? q) (not (= -1 q)))  (Expt (Expt (f u) (- q)) -1)]
     [(Expt u (⊗ -1 v))                                     (Expt (Expt (f u) v) -1)]
+    [(Expt u (⊗ v -1))                                     (Expt (Expt (f u) v) -1)]
+    [(Expt (Expt u v) w) #:when (not (equal? -1 w))
+                         (f (Expt u (⊗ v w)))]
+    [(Expt (⊗ u v) w) #:when (not (equal? -1 w))
+                         (f (expt-expand s))]
     [(Expt u v) (let ([fu (f u)] [fv (f v)])
                   (cond [(and (equal? u fu) (equal? v fv)) (Expt u v)]     ; Trival case
                         [else                              (f (Expt fu fv))]))] ; May match special cases after inner expansions.
@@ -950,7 +979,7 @@
                (if (equal? a-f-u (Acos u))
                    a-f-u
                    (f a-f-u)))]
-    [u u]))
+    [_ s]))
 
 (define (de-fractionize u)
   (when debugging? (displayln (list 'de-fractionize u)))
@@ -984,7 +1013,7 @@
 
 (module+ test
   (check-equal? (fractionize (Expt 1/7 y)) '(expt (expt 7 y) -1))
-  (check-equal? (fractionize (Expt -1/3 x)) '(expt (* -1 (expt 3 -1)) x))
+  (check-equal? (fractionize (Expt -1/3 x)) '(* (expt -1 x) (expt (expt 3 x) -1)))
   (check-equal? (de-fractionize (fractionize '(* 1/7 (+ 1/4 x)))) '(* 1/7 (+ 1/4 x)))
   (check-equal? (fractionize '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
   (check-equal? (de-fractionize (fractionize '(+ 1/7 1/4 x))) '(+ 11/28 x))
@@ -1001,8 +1030,15 @@
     [u u]))
 
 (define (expt-combine u)
-  (when debugging? (displayln (list 'expt-combine u)))
-  (define ec expt-combine)
+  (define lazy-expt-org (lazy-expt?))
+  (lazy-expt? #t)
+  (define result (expt-combine-impl u))
+  (lazy-expt? lazy-expt-org)
+  result)
+  
+(define (expt-combine-impl u)
+  (when debugging? (displayln (list 'expt-combine-impl u)))
+  (define ec expt-combine-impl)
   (math-match u
     [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ (ec u) (ec v)) (ec w))]
     [(⊗ u v)                      (⊗ (ec u) (ec v))]
@@ -1010,7 +1046,6 @@
     [(Expt u v)                   (Expt (ec u) (ec v))]
     [u u]))
 
-  
 (module+ test
   (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
   (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
@@ -1073,8 +1108,11 @@
     ))
 
 (define (polar-to-rect u)
-  (when debugging? (displayln (list 'polar-to-rect u)))
-  (define ptr polar-to-rect)
+  (polar-to-rect-impl (complex-expt-expand u)))
+  
+(define (polar-to-rect-impl u)
+  (when debugging? (displayln (list 'polar-to-rect-impl u)))
+  (define ptr polar-to-rect-impl)
   (math-match u
     [(Polar-Unit θ) (let [(ptr-θ (ptr θ))] (⊕ (Cos ptr-θ) (⊗ (Sin ptr-θ) @i)))]
     [(Expt u v)  (Expt (ptr u) (ptr v))]
@@ -1085,7 +1123,7 @@
   )
 
 (module+ test
-  (check-equal? (polar-to-rect (complex-expt-expand '(expt -8 1/3))) '(* 2.0 (+ 1/2 (* (expt 2 -1) (expt 3 1/2) @i))))
+  (check-equal? (polar-to-rect (complex-expt-expand '(expt -8 1/3))) '(* (expt 8 1/3) (+ 1/2 (* 1/2 (expt 3 1/2) @i)))) ; todo: handle (expt n alpha) when it can get exact result.
   (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1.0+1.732i 0.0001)
   )
 
@@ -1234,7 +1272,7 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-sqrt(3)/2")
+  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-1/2*sqrt(3)")
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   )
 
@@ -1286,7 +1324,7 @@
   (check-equal? (Sin (⊕ x (⊗ 2 @n @pi)))    (Sin x))
   (check-equal? (Sin (⊕ x (⊗ 4 @n @pi)))    (Sin x))
   (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x))
-  (check-equal? (Sin (⊗ 2/3 @pi)) '(* (expt 2 -1) (expt 3 1/2)))
+  (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
   )
 
 (define (Asin: u)
@@ -1587,7 +1625,7 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (module+ test
-  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (make-polar 1 (* 1/3 @pi))))
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* (expt 8 1/3) (make-polar 1 (* 1/3 @pi))))
   (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
   (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
@@ -2916,9 +2954,6 @@
       [(Quotient u v) #:when (and  (output-use-quotients?) (not (rational? v)))
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
-      [(Quotient u v) #:when (or (and (integer? u) (symbol? v)) (and (integer? v) (symbol? u)) )
-                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par u #:use quotient-sub))]
       [(Expt u p)     #:when (negative? p)
@@ -3115,7 +3150,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
-  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)/2")
+  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "1/2*sqrt(3)")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
