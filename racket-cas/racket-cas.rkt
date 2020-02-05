@@ -746,7 +746,7 @@
 
 (define (denominator u)
   (when debugging? (displayln (list 'denominator u)))
-  (de-fractionize (denominator-impl (together u))))
+  (normalize (denominator-impl (together u))))
   
 (define (denominator-impl u)
   (when debugging? (displayln (list 'denominator-impl u)))
@@ -771,7 +771,7 @@
 
 (define (numerator u)
   (when debugging? (displayln (list 'numerator u)))
-  (de-fractionize (numerator-impl (together u))))
+  (normalize (numerator-impl (together u))))
   
 (define (numerator-impl u)
   (when debugging? (displayln (list 'numerator-impl u)))
@@ -940,7 +940,10 @@
   (check-equal? (Expt -1 2) 1)
   )
 
-
+; move expt -1 to outermost layers.
+; prepare for together.
+; normalize can be used to cancel its effect, because expt auto simplification can handle it correctly.
+; when lazy-expt? = #f, some auto simplification of expt will be disabled, so that fractionze and together can work.
 (define (fractionize u)
   (define lazy-expt-org (lazy-expt?))
   (lazy-expt? #t)
@@ -983,42 +986,12 @@
                    (f a-f-u)))]
     [_ s]))
 
-(define (de-fractionize u)
-  (when debugging? (displayln (list 'de-fractionize u)))
-  (define df de-fractionize)
-  (math-match u
-    [(Expt p -1)          (expt p -1)]
-    [(Expt (Expt u v) -1) (df (Expt u (⊖ v)))]
-    [(Expt u v) (let ([dfu (df u)] [dfv (df v)])
-                  (cond [(and (equal? u dfu) (equal? v dfv)) (Expt u v)]     ; Trival case
-                        [else                              (df (Expt dfu dfv))]))] ; May match special cases after inner expansions.
-    [(⊗ u v)             (⊗ (df u) (df v))]
-    [(⊕ u v)             (⊕ (df u) (df v))]
-    [(Sin u) (let ([s-df-u (Sin (df u))])
-               (if (equal? s-df-u (Sin u))
-                   s-df-u
-                   (df s-df-u)))]
-    [(Cos u) (let ([c-df-u (Cos (df u))])
-               (if (equal? c-df-u (Cos u))
-                   c-df-u
-                   (df c-df-u)))]
-    [(Asin u) (let ([a-df-u (Asin (df u))])
-               (if (equal? a-df-u (Asin u))
-                   a-df-u
-                   (df a-df-u)))]
-    [(Acos u) (let ([a-df-u (Acos (df u))])
-               (if (equal? a-df-u (Acos u))
-                   a-df-u
-                   (df a-df-u)))]
-    [u u]))
-
-
 (module+ test
   (check-equal? (fractionize (Expt 1/7 y)) '(expt (expt 7 y) -1))
   (check-equal? (fractionize (Expt -1/3 x)) '(* (expt -1 x) (expt (expt 3 x) -1)))
-  (check-equal? (de-fractionize (fractionize '(* 1/7 (+ 1/4 x)))) '(* 1/7 (+ 1/4 x)))
+  (check-equal? (normalize (fractionize '(* 1/7 (+ 1/4 x)))) '(* 1/7 (+ 1/4 x)))
   (check-equal? (fractionize '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
-  (check-equal? (de-fractionize (fractionize '(+ 1/7 1/4 x))) '(+ 11/28 x))
+  (check-equal? (normalize (fractionize '(+ 1/7 1/4 x))) '(+ 11/28 x))
   )
 
 (define (expt-expand u)
@@ -1355,8 +1328,7 @@
     [0 (⊘ @pi 2)]
     [1 0]
     [1/2 (⊗ 1/3 @pi)]
-    [(list '* (list 'expt 2 -1) (list 'expt 3 1/2)) (⊗ 1/6 @pi)]
-    [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)] ; de-fractionized
+    [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)]
     [r #:when (negative? r) (⊖ @pi (Acos (- r)))]
     [r.0 (acos r.0)]
     [(⊖ u) (⊖ @pi (Acos u))]
