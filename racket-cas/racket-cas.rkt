@@ -831,11 +831,13 @@
 ; todo define a macro to call functions with lazy-expt? on
 (define (together u)
   (when debugging? (displayln (list 'together u)))
-  (define lazy-expt-org (lazy-expt?))
-  (lazy-expt? #t)
-  (define result (together-impl (fractionize (combine u))))
-  (lazy-expt? lazy-expt-org)
-  result)
+  (if (number? u)
+      u
+      (let [(lazy-expt-org (lazy-expt?))]
+       (lazy-expt? #t)
+       (define result (together-impl (fractionize (combine u))))
+       (lazy-expt? lazy-expt-org)
+       result)))
 
 (define (together-impl u)
   (math-match u
@@ -847,7 +849,7 @@
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (expt (* d f) -1) (+ (* c f) (* d e))))))
-  (check-equal? (normalize (together (⊕ (⊘ 7 2) (⊘ 3 5)))) '41/10)
+  (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '41/10)
   (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
   (check-equal? (together (⊕ (⊘ 2 y) (⊘ 1 x))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
@@ -901,7 +903,7 @@
       [1 1]
       [_ (define-values (ss ns)
            (for/fold ([squares '()] [non-squares '()])
-             ([b^e (in-list (factorize n))])
+                     ([b^e (in-list (factorize n))])
              (define-values (b e) (values (first b^e) (second b^e)))
              (if (even? e)
                  (values (cons (expt b (/ e 2)) squares) non-squares)
@@ -909,24 +911,24 @@
          (⊗ (for/product ([s (in-list ss)]) s)
             (match (for/product ([n (in-list ns)]) n) 
               [1 1] [p `(expt ,p 1/2)]))]))
-  (if (lazy-expt?)
-      `(expt ,u ,v)
-      (math-match* (u v)
-                   [(1 v)          1]
-                   [(u 1)          u]
-                   [(0 0)          +nan.0] ; TODO: is this the best we can do?
-                   [(u 0)          1]
-                   ; [(0 v)          0]
-                   [(n 1/2)        (sqrt-natural n)]
-                   [(α p)          (expt α p)]
-                   [(p q)          (expt p q)]
-                   [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
-                   [(r s.0)        (expt r s.0)]
-                   [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
-                   [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
-                   [(u (Log u v))  v]                         ; xxx - is this only true for u real?
-                   [(Exp (Ln v))   v]
-                   [(_ _)          `(expt ,u ,v)])))
+  (math-match* (u v)
+               [(1 v)          1]
+               [(u 1)          u]
+               [(0 0)          +nan.0] ; TODO: is this the best we can do?
+               [(u 0)          1]
+               ; [(0 v)          0]
+               [(n 1/2)        (sqrt-natural n)]
+               [(_ _) #:when (lazy-expt?)
+                               `(expt ,u ,v)]
+               [(α p)          (expt α p)]
+               [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
+               [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
+               [(r s.0)        (expt r s.0)]
+               [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
+               [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
+               [(u (Log u v))  v]                         ; xxx - is this only true for u real?
+               [(Exp (Ln v))   v]
+               [(_ _)          `(expt ,u ,v)]))
 
 (define-match-expander Expt
   (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
