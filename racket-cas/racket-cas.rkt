@@ -3146,7 +3146,7 @@
   (check-equal? (~ '(paren -3)) "${\\left(-3\\right)}$")
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
-  (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
+  (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1 , y_1\\right)}$")
   (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
   ; --- Default
   (use-default-output-style)
