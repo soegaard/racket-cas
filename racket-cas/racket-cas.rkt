@@ -3121,7 +3121,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
-  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "-sqrt(3)*1/2")
+  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)*1/2")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
