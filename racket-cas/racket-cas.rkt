@@ -894,7 +894,9 @@
     [(u 0)          1]
     ; [(0 v)          0]
     [(n 1/2)        (sqrt-natural n)]
-    [(u -1)         `(expt ,u -1)]
+    [(α -1) #:when (not (integer? α))
+                   (/ α)]
+    [(u -1)        `(expt ,u -1)]
     [(p q) #:when (negative? q)
            (let [(reciprocal (expt p (- q)))] (Expt reciprocal -1))]
     [(α β) #:when (and (not (integer? α)) (not (integer? β)))
@@ -909,6 +911,16 @@
     [(u (Log u v))  v]                         ; xxx - is this only true for u real?
     [(Exp (Ln v))   v]
     [(_ _)          `(expt ,u ,v)]))
+
+(define-match-expander Expt
+  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Expt: u v)] [_ (identifier? stx) #'Expt:])))
+
+(module+ test
+  (check-equal? (Expt 2/3 -1) 3/2)
+  (check-equal? (Expt 2 3) 8)
+  (check-equal? (Expt -1 2) 1)
+  )
 
 (define (fractionize u)
   (when debugging? (displayln (list 'fractionize u)))
@@ -998,13 +1010,8 @@
     [(Expt u v)                   (Expt (ec u) (ec v))]
     [u u]))
 
-(define-match-expander Expt
-  (λ (stx) (syntax-parse stx [(_ u v) #'(list 'expt u v)]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(Expt: u v)] [_ (identifier? stx) #'Expt:])))
-
+  
 (module+ test
-  (check-equal? (Expt 2 3) 8)
-  (check-equal? (Expt -1 2) 1)
   (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
   (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
   (check-equal? (polar-to-rect (expand (complex-expt-expand (Expt (⊕ (Sqrt -2) 2) 2)))) '(+ 2 (* 4 (expt 2 1/2) @i)))
