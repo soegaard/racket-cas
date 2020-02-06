@@ -855,26 +855,11 @@
   )
 
 ; unary and binary minus 
-(define (minus . us)
+(define (⊖ . us)
   (match us
     [(list u)   (⊗ -1 u)]
     [(list u v) (⊕ u (⊗ -1 v))]
     [_ (error)]))
-
-(define-match-expander ⊖
-  (λ (stx)
-    (syntax-parse stx
-      [(_ v u)     #'(or (list '+ v (list '* u -1))
-                         (list '+ v (list '* -1 u))
-                         (list '+ (list '* u -1) v)
-                         (list '+ (list '* -1 u) v))]
-      [(_ u)       #'(or (list '* u -1) (list '* -1 u))]))
-  (λ(stx) (syntax-parse stx [(_ u ...) #'(minus u ...)] [_ (identifier? stx) #'minus])))
-
-(module+ test
-  (check-equal? (math-match (⊖ x y) [(⊖ u v) (list u v)]) '(x y))
-  (check-equal? (math-match (⊖ (⊗ y 3) x) [(⊖ u v) (list u v)]) '((* 3 y) x))
-  )
 
 ;; The pattern Exp matches the natural exponential function
 ;;  (Exp u) matches (expt @e a) and binds u->a
