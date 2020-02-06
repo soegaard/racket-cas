@@ -1012,7 +1012,7 @@
     [(Expt u v)          (Expt (ee u) (ee v))]
     [(⊗ u v)             (⊗ (ee u) (ee v))]
     [(⊕ u v)             (⊕ (ee u) (ee v))]
-    (_ u]))
+    (_ u)))
 
 (define (expt-combine u)
   (parameterize
