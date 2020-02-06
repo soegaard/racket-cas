@@ -710,7 +710,7 @@
   )
 
 ; divide u by v
-(define (Oslash: u v)
+(define (⊘ u v)
   (math-match* (u v)
     [(r 0) +nan.0]
     [(r s) (/ r s)]
@@ -718,17 +718,18 @@
     [(u -1) (⊖ u)]
     [(u v) (⊗ u (Expt v -1))]))
 
-(define-match-expander ⊘
-  ; Note: This matches one kind of quotient only
-  (λ (stx) (syntax-parse stx [(_ u v) #'(or (list '* u (list 'expt v -1))
-                                            (list '* (list 'expt v -1) u))]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
-
-(module+ test
-  (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y))
-  ; '(* 3 (expt x -1) y) need to handle (expt x -1) specially, maybe keep Oslash and Minus until forced evaluation.
-  ; (check-equal? (math-match (⊘ (⊗ y 3) x) [(⊘ u v) (list u v)]) '((* 3 y) x))
-  )
+; todo: remove the expander, since it does not always work as expected, for example (⊘ u v) fails to match (⊘ (⊗ y 3) x).
+;(define-match-expander ⊘
+;  ; Note: This matches one kind of quotient only
+;  (λ (stx) (syntax-parse stx [(_ u v) #'(or (list '* u (list 'expt v -1))
+;                                            (list '* (list 'expt v -1) u))]))
+;  (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
+;
+;(module+ test
+;  (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y))
+;  ; '(* 3 (expt x -1) y) need to handle (expt x -1) specially, maybe keep Oslash and Minus until forced evaluation.
+;  ; (check-equal? (math-match (⊘ (⊗ y 3) x) [(⊘ u v) (list u v)]) '((* 3 y) x))
+;  )
 
 (define (Quotient: u v)
   (⊘ u v))
@@ -828,7 +829,6 @@
                (numerator/denominator (fractionize (normalize '(* (/ x y) z 2/3))))])
     (check-equal? n '(* 2 x z))
     (check-equal? d '(* 3 y))
-             
     )
   )
 
@@ -847,14 +847,6 @@
                [(nv dv) (numerator/denominator (t v))])
              (⊘ (⊕ (⊗ nu dv) (⊗ nv du)) (⊗ du dv)))]
              
-    ))
-
-(define (greedy-together-op2 s1 s2)
-  (when debugging? (displayln (list 'greedy-together-op2 s1 s2)))
-  (math-match* (s1 s2)
-    [(   u    (⊘ a b)) #:when (integer? u) (greedy-together-op2 s2 s1)]
-    [((⊘ u v)    a   ) #:when (integer? a) (⊘ (⊕    u    (⊗ a v))    v   )]
-    [(_ _) (⊕ s1 s2)]
     ))
 
 (define (together u)
@@ -1478,7 +1470,7 @@
         [y #:when (eq? x y) x0]
         [y y]
         [(⊕ v w) (⊕ (l v) (l w))]
-        [(⊘ v w) (let loop ([n 1] [v v] [w w])
+        [(⊗ v (Expt w -1)) (let loop ([n 1] [v v] [w w])
                    (let ([lv (l v)] [lw (l w)])
                      ; if both limits are zero, use l'Hôpital's rule
                      (define (again) (loop (+ n 1) (diff v x) (diff w x)))
@@ -2966,7 +2958,7 @@
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
-      [(⊘ u v)        (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+      [(⊗ u (Expt v -1))        (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       
       ; mult
