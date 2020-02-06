@@ -680,9 +680,11 @@
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 ; combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
-; first basic combine, only for fractions.
 (define (combine u)
-  (combine-impl (expt-combine u)))
+  (parameterize
+      [(lazy-expt? #t)]
+    (combine-impl (fractionize (expt-combine u))))
+  )
 
 (define (combine-impl u)
   (when debugging? (displayln (list 'combine-impl u)))
@@ -699,8 +701,12 @@
                      [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
     [u u]))
 
-(module+ test (check-equal? (combine (⊕ (⊘ (⊕ x) z) (⊘ (⊕ y x) z) (⊘ 1 z)))
-                            '(* (expt z -1) (+ 1 (* 2 x) y))))
+(module+ test
+  (check-equal? (combine (⊕ (⊘ (⊕ x) z) (⊘ (⊕ y x) z) (⊘ 1 z)))
+                            '(* (expt z -1) (+ 1 (* 2 x) y)))
+  (check-equal? (combine (⊕ (⊘ (⊕ x) 3) (⊘ (⊕ y x) 3) (⊘ 1 3)))
+                            '(* (expt 3 -1) (+ 1 (* 2 x) y)))
+  )
 
 ; divide u by v
 (define (Oslash: u v)
@@ -821,12 +827,9 @@
 
 (define (together u)
   (when debugging? (displayln (list 'together u)))
-  (if (number? u)
-      u
-      (parameterize
-       [(lazy-expt? #t)]
-       (together-impl (fractionize (combine u))))
-      )
+  (parameterize
+      [(lazy-expt? #t)]
+    (together-impl (fractionize (combine u))))
   )
 
 (define (together-impl u)
@@ -936,11 +939,16 @@
 ; prepare for together.
 ; normalize can be used to cancel its effect, because expt auto simplification can handle it correctly.
 ; when lazy-expt? = #f, some auto simplification of expt will be disabled, so that fractionze and together can work.
-(define (fractionize u)
-  (parameterize
-      [(lazy-expt? #t)]
-    (fractionize-impl u))
+(define (fractionize u [fractionize-single-number? #f])
+  (if (and (not fractionize-single-number?) (number? u))
+      u
+      (parameterize
+          [(lazy-expt? #t)]
+        (fractionize-impl u)
+        )
+      )
   )
+
 
 (define (fractionize-impl s)
   (when debugging? (displayln (list 'fractionize-impl s)))
@@ -1290,17 +1298,30 @@
   (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
   )
 
+(define (list-has-negative-element? s)
+  (displayln (list 'list-has-negative-element? s))
+  (math-match s
+              [r- #t]
+              [(list r- ...) #t]
+              [(list _ u ...) (list-has-negative-element? u)]
+              [_ #f]))
+
+(define (terms-with-negative-coeff? s)
+  (displayln (list 'terms-with-negative-coeff? s))
+  (math-match (normalize s)
+              [r- #t]
+              [(list '* u ...) (list-has-negative-element? u)]
+              [_ #f]))
+
 (define (Asin: u)
   (when debugging? (displayln (list 'Asin: u)))
   (math-match u
     [0 0]
     [1  (⊗ 1/2 @pi)]
     [1/2 (⊗ 1/6 @pi)]
-    [(list '* (list 'expt 2 -1) (list 'expt 3 1/2)) (⊗ 1/3 @pi)]
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/3 @pi)]
-    [r #:when (negative? r) (⊖ (Asin (- r)))]
+    [u #:when (terms-with-negative-coeff? u) (⊖ (Asin (⊖ u)))] ; odd function
     [r.0 (asin r.0)]
-    [(⊖ u) (⊖ (Asin u))] ; odd function
     ; todo
     ;[(Sin u) -> clamp u to [-pi/2, pi/2]
     [_ `(asin ,u)]))
@@ -1317,9 +1338,8 @@
     [1 0]
     [1/2 (⊗ 1/3 @pi)]
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)]
-    [r #:when (negative? r) (⊖ @pi (Acos (- r)))]
+    [u #:when (terms-with-negative-coeff? u) (⊖ @pi (Acos (⊖ u)))]
     [r.0 (acos r.0)]
-    [(⊖ u) (⊖ @pi (Acos u))]
     ; todo
     ;[(Cos u) -> clamp u to [0, pi]
     [_ `(acos ,u)]))
@@ -1333,7 +1353,7 @@
   (check-equal? (Asin -1/2) '(* -1/6 @pi))
   (check-equal? (Acos '(* 1/2 (expt 3 1/2))) '(* 1/6 @pi))
   (check-equal? (Asin '(* 1/2 (expt 3 1/2))) '(* 1/3 @pi))
-  ; (check-equal? (Asin (Sin '(* -1/3 @pi))) '(* -1/3 @pi)) to be fixed.
+  (check-equal? (Asin (Sin '(* -1/3 @pi))) '(* -1/3 @pi))
   (check-equal? (Acos (Cos '(* -1/3 @pi))) '(* 1/3 @pi))
   )
 
