@@ -802,7 +802,7 @@
 
 ; (numerator denominator)
 (define (partition-numerator/denominator us)
-  (displayln (list 'partition us))
+  (when debugging? (displayln (list 'partition-numerator/denominator us)))
   (define (denominator? s)
     (math-match s
                 [(Expt u r-) #t]
@@ -810,7 +810,6 @@
     )
   (define-values (n d) (partition (negate denominator?) us))
   (define (reduce-lst us vs)
-    (displayln (list 'reduce-lst us vs))
     (values (apply ⊗ us) (inverse (apply ⊗ vs)))
     )
   (reduce-lst n d)
@@ -818,7 +817,7 @@
 
 ; Partition a product/terms into numerator and denominator
 (define (numerator/denominator s)
-  (displayln (list 'numerator/denominator s))
+  (when debugging? (displayln (list 'numerator/denominator s)))
   (math-match s
               [(Expt u r-) (values 1 (Expt u (- r-)))]
               [(Prod us) (partition-numerator/denominator us)]
@@ -862,7 +861,7 @@
   (when debugging? (displayln (list 'together u)))
   (parameterize
       [(lazy-expt? #t)]
-   (together-impl (fractionize (combine u) #t)))
+   (together-impl (fractionize (combine u))))
   )
 
 (define (together-impl u)
@@ -874,17 +873,16 @@
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
   (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
-  (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt b -1) (+ a (* b (expt (* d f) -1) (+ (* c f) (* d e))))))
+  (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt (* b d f) -1) (+ (* a d f) (* b (+ (* c f) (* d e))))))
   (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '41/10)
-  (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
+  (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(* (expt (* 5 x) -1) (+ 35 (* x y) (* 5 x))))
   (check-equal? (together (⊕ (⊘ 2 y) (⊘ 1 x))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (plus (⊘ (⊗ y 3) x) (⊘ (⊗ x z 1/3) 5/6))) '(* (expt (* 5 x) -1) (+ (* 2 (expt x 2) z) (* 15 y))))
 
   (parameterize
   [(lazy-expt? #t)]
-  (check-equal? (together-op2        (⊘ y 5) 1) '(+ 1 (* (expt 5 -1) y)))
-  (check-equal? (greedy-together-op2 (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
+  (check-equal? (together-op2        (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
   )
   )
 
@@ -930,16 +928,17 @@
                [(u 0)          1]
                ; [(0 v)          0]
                [(n 1/2)        (sqrt-natural n)]
-               [(_ _) #:when (lazy-expt?)
-                      `(expt ,u ,v)]
+               [(p -1) #:when (lazy-expt?)
+                      `(expt ,p ,-1)]
                [(α β) #:when (and (not (integer? α)) (not (integer? β)))
                   (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
                [(α p)          (expt α p)]
+               [(n α-)         (Expt (Expt n (- α-)) -1)]
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r s.0)        (expt r s.0)]
-               [((⊗ u v) w)    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
-               [((Expt u v) w) (Expt u (⊗ v w))]          ; ditto
+               [((⊗ u v) w) #:when (not (lazy-expt?))    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
+               [((Expt u v) w) #:when (not (lazy-expt?)) (Expt u (⊗ v w))]          ; ditto
                [(u (Log u v))  v]                         ; xxx - is this only true for u real?
                [(Exp (Ln v))   v]
                [(_ _)          `(expt ,u ,v)]))
@@ -958,6 +957,7 @@
 ; prepare for together.
 ; normalize can be used to cancel its effect, because expt auto simplification can handle it correctly.
 ; when lazy-expt? = #f, some auto simplification of expt will be disabled, so that fractionze and together can work.
+; todo clean up fractionize.
 (define (fractionize u [fractionize-single-number? #f])
   (if (and (not fractionize-single-number?) (number? u))
       u
@@ -1228,7 +1228,7 @@
     [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
     [(⊗ α @pi) #:when (or (> α 1) (< α -1))
                (Cos (⊗ (normalize-pi-coeff α) @pi))]
-    [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (⊖ 1 α) @pi)))]
+    [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (- 1 α) @pi)))]
     [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
                (let ([sign (expt -1 (floor (/ (+ α 1) 2)))])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx test sign
@@ -1263,7 +1263,7 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-sqrt(3)*1/2")
+  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-1/2*sqrt(3)")
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   )
 
@@ -1318,12 +1318,11 @@
   )
 
 (require (submod "math-match.rkt" predicates))
-(define (list-has-negative-element? s)
-  (displayln (list 'list-has-negative-element? s))
-  (ormap negative-number? s))
 
 (define (terms-with-negative-coeff? s)
-  (displayln (list 'terms-with-negative-coeff? s))
+  (when debugging? (displayln (list 'terms-with-negative-coeff? s)))
+  (define (list-has-negative-element? s)
+    (ormap negative-number? s))
   (math-match (normalize s)
               [r- #t]
               [(Prod u) (list-has-negative-element? u)]
@@ -3192,7 +3191,7 @@
   (check-equal? (~ '(+ 1 (* -2 x) 3)) "1-2*x+3")
   (check-equal? (parameterize ([output-sqrt? #f]) (~ '(expt x 1/2))) "x^(1/2)")
   (check-equal? (parameterize ([output-sqrt? #t]) (~ '(expt x 1/2))) "sqrt(x)")
-  (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "1+7/x")
+  (check-equal? (~ '(+ 1 (* 7 (expt x -1)))) "(7+x)/x")
   (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7/x")
   (check-equal? (~ '(expt (expt 65 1/2) 2)) "sqrt(65)^2")
   )
