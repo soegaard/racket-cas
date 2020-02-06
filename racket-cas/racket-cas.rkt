@@ -700,7 +700,7 @@
     [(⊕ u v) (let ([cu (c u)] [cv (c v)])
                (cond [(and (equal? u cu) (equal? v cv))    (⊕  u  v)]     ; Trival case
                      [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
-    [u u]))
+    [_ u]))
 
 (module+ test
   (check-equal? (combine (⊕ (⊘ (⊕ x) z) (⊘ (⊕ y x) z) (⊘ 1 z)))
@@ -859,7 +859,7 @@
 (define (together-impl u)
   (math-match u
     [(⊕ u v) (together-op u v)]
-    [u u]))
+    [_ u]))
 
 (module+ test 
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
@@ -1012,7 +1012,7 @@
     [(Expt u v)          (Expt (ee u) (ee v))]
     [(⊗ u v)             (⊗ (ee u) (ee v))]
     [(⊕ u v)             (⊕ (ee u) (ee v))]
-    [u u]))
+    (_ u]))
 
 (define (expt-combine u)
   (parameterize
@@ -1028,7 +1028,7 @@
     [(⊗ u v)                      (⊗ (ec u) (ec v))]
     [(⊕ u v)                      (⊕ (ec u) (ec v))]
     [(Expt u v)                   (Expt (ec u) (ec v))]
-    [u u]))
+    [_ u]))
 
 (module+ test
   (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
@@ -1967,7 +1967,7 @@
   (let ([a 'a] [b 'b]) 
     (check-equal? (polynomial-quotient (Sqr x) (⊕ x a) x) (⊕ (⊖ a) x))
     (check-equal? (polynomial-quotient-remainder '(+ (* x x) x 1) '(+ (* 2 x) 1) x)
-                  (list (⊕ 1/4 (⊗ 1/2 x)) 3/4))
+                  (list (⊕ 1/4 (⊘ x 2)) 3/4))
     (check-equal? (polynomial-quotient (⊕ (⊗ x x) (⊗ b x) 1) (⊕ (⊗ a x) 1) x)
                   '(+ (* -1 (expt a -2)) (* (expt a -1) b) (* (expt a -1) x)))))
 
