@@ -1470,7 +1470,8 @@
         [y #:when (eq? x y) x0]
         [y y]
         [(⊕ v w) (⊕ (l v) (l w))]
-        [(⊗ v (Expt w -1)) (let loop ([n 1] [v v] [w w])
+        [(⊗ v (Expt w -1)) (l (⊗ (Expt w -1) v))] ; Need to replace this with numerator/denominator on (⊗ u v)
+        [(⊗ (Expt w -1) v) (let loop ([n 1] [v v] [w w])
                    (let ([lv (l v)] [lw (l w)])
                      ; if both limits are zero, use l'Hôpital's rule
                      (define (again) (loop (+ n 1) (diff v x) (diff w x)))
