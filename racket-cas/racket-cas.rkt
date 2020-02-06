@@ -503,6 +503,7 @@
 ; normalize will given a non-canonical form u 
 ; return the corresponding canonical form.
 (define (normalize u)
+  (when debugging? (displayln (list 'normalize u)))
   (define n normalize)
   (math-match u
     [r r]
@@ -739,7 +740,7 @@
 
 (module+ test
   (check-equal? (math-match 2/3 [(Quotient u v) (list u v)]) '(2 3))
-  (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
+  (check-equal? (math-match (⊗ x (Expt (⊗ 2 y z) -1)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
 
 (define (denominator u)
   (when debugging? (displayln (list 'denominator u)))
@@ -792,6 +793,46 @@
   (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2))
   (check-equal? (numerator (⊘ x y)) x))
 
+(define (inverse u)
+  (parameterize
+      [(lazy-expt? #f)]
+    (Expt u -1)
+    )
+  )
+
+; (numerator denominator)
+(define (partition-numerator/denominator us)
+  (displayln (list 'partition us))
+  (define (denominator? s)
+    (math-match s
+                [(Expt u r-) #t]
+                [_ #f])
+    )
+  (define-values (n d) (partition (negate denominator?) us))
+  (define (reduce-lst us vs)
+    (displayln (list 'reduce-lst us vs))
+    (values (apply ⊗ us) (inverse (apply ⊗ vs)))
+    )
+  (reduce-lst n d)
+  )
+
+; Partition a product/terms into numerator and denominator
+(define (numerator/denominator s)
+  (displayln (list 'numerator/denominator s))
+  (math-match s
+              [(Expt u r-) (values 1 (Expt u (- r-)))]
+              [(Prod us) (partition-numerator/denominator us)]
+              [_ (values s 1)]))
+
+(module+ test
+  (let-values ([(n d)
+               (numerator/denominator (fractionize (normalize '(* (/ x y) z 2/3))))])
+    (check-equal? n '(* 2 x z))
+    (check-equal? d '(* 3 y))
+             
+    )
+  )
+
 (define (together-op . us) (foldl together-op2 0 us))
 (define (together-op2 s1 s2)
   (when debugging? (displayln (list 'together-op2 s1 s2)))
@@ -802,19 +843,11 @@
     [(u 0) (t u)]
     [(α u) #:when (not (integer? α)) (⊘ (⊗ (t u) (%numerator α)) (%denominator α))]
     [(u α) #:when (not (integer? α)) (t2 α u)]
-    
-    [((Expt b -1) (Expt v -1)) (let ([tb (t b)] [tv (t v)]) (⊘ (⊕ tb tv) (⊗ tv tb)))]
-    [((Expt b -1) (⊘ u v)) (t2 s2 s1)]
-    [((⊘ a b) (Expt v -1)) (let ([ta (t a)] [tb (t b)] [tv (t v)]) (⊘ (⊕ tb (⊗ ta tv)) (⊗ tv tb)))]
-    [((Expt b -1)    u   ) #:when (not (integer? u)) (t2 s2 s1)]
-    [(   a    (Expt v -1)) #:when (not (integer? a)) (let ([ta (t a)] [tv (t v)]) (⊘ (⊕ 1 (⊗ ta tv)) tv))]
-    
-    [((⊘ u v) (⊘ a b)) (let ([ta (t a)] [tb (t b)] [tu (t u)] [tv (t v)]) (⊘ (⊕ (⊗ tu tb) (⊗ ta tv)) (⊗ tv tb)))]
-    [(   u    (⊘ a b)) #:when (not (integer? u)) (t2 s2 s1)]
-    [((⊘ u v)    a   ) #:when (not (integer? a)) (let ([ta (t a)] [tu (t u)] [tv (t v)]) (⊘ (⊕ tu (⊗ ta tv)) tv))]
-    [(u v) (let ([tu (t u)] [tv (t v)])
-               (cond [(and (equal? u tu) (equal? v tv))    (⊕ u v)]       ; Trival case, return the original form
-                     [else                              (t (⊕ tu tv))]))] ; May match special case after inner expansions.
+    [(u v) (let-values
+               ([(nu du) (numerator/denominator (t u))]
+               [(nv dv) (numerator/denominator (t v))])
+             (⊘ (⊕ (⊗ nu dv) (⊗ nv du)) (⊗ du dv)))]
+             
     ))
 
 (define (greedy-together-op2 s1 s2)
@@ -829,7 +862,7 @@
   (when debugging? (displayln (list 'together u)))
   (parameterize
       [(lazy-expt? #t)]
-    (together-impl (fractionize (combine u))))
+   (together-impl (fractionize (combine u) #t)))
   )
 
 (define (together-impl u)
@@ -846,6 +879,7 @@
   (check-equal? (together (⊕ (⊘ 7 x) (⊘ y 5) 1)) '(+ 1 (* (expt (* 5 x) -1) (+ 35 (* x y)))))
   (check-equal? (together (⊕ (⊘ 2 y) (⊘ 1 x))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
+  (check-equal? (together (plus (⊘ (⊗ y 3) x) (⊘ (⊗ x z 1/3) 5/6))) '(* (expt (* 5 x) -1) (+ (* 2 (expt x 2) z) (* 15 y))))
 
   (parameterize
   [(lazy-expt? #t)]
@@ -897,7 +931,7 @@
                ; [(0 v)          0]
                [(n 1/2)        (sqrt-natural n)]
                [(_ _) #:when (lazy-expt?)
-                               `(expt ,u ,v)]
+                      `(expt ,u ,v)]
                [(α β) #:when (and (not (integer? α)) (not (integer? β)))
                   (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
                [(α p)          (expt α p)]
@@ -1283,19 +1317,16 @@
   (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
   )
 
+(require (submod "math-match.rkt" predicates))
 (define (list-has-negative-element? s)
   (displayln (list 'list-has-negative-element? s))
-  (math-match s
-              [r- #t]
-              [(list r- ...) #t]
-              [(list _ u ...) (list-has-negative-element? u)]
-              [_ #f]))
+  (ormap negative-number? s))
 
 (define (terms-with-negative-coeff? s)
   (displayln (list 'terms-with-negative-coeff? s))
   (math-match (normalize s)
               [r- #t]
-              [(list '* u ...) (list-has-negative-element? u)]
+              [(Prod u) (list-has-negative-element? u)]
               [_ #f]))
 
 (define (Asin: u)
@@ -1340,6 +1371,8 @@
   (check-equal? (Asin '(* 1/2 (expt 3 1/2))) '(* 1/3 @pi))
   (check-equal? (Asin (Sin '(* -1/3 @pi))) '(* -1/3 @pi))
   (check-equal? (Acos (Cos '(* -1/3 @pi))) '(* 1/3 @pi))
+  (check-equal? (Asin (Sin '(* -1/6 @pi))) '(* -1/6 @pi))
+  (check-equal? (Acos (Cos '(* -1/6 @pi))) '(* 1/6 @pi))
   )
 
 (define (Tan u)
