@@ -42,12 +42,6 @@
 ; Control Parameters
 (define lazy-expt?            (make-parameter #f))
 
-(define (lazy-mode)
-  (lazy-expt? #t))
-
-(define (eager-mode)
-  (lazy-expt? #f))
-
 (define-syntax (fluid-let stx)
   (syntax-parse stx
     [(_ ([var:id e:expr] ...) body ...)
@@ -825,16 +819,15 @@
     [(_ _) (⊕ s1 s2)]
     ))
 
-; todo define a macro to call functions with lazy-expt? on
 (define (together u)
   (when debugging? (displayln (list 'together u)))
   (if (number? u)
       u
-      (let [(lazy-expt-org (lazy-expt?))]
-       (lazy-expt? #t)
-       (define result (together-impl (fractionize (combine u))))
-       (lazy-expt? lazy-expt-org)
-       result)))
+      (parameterize
+       [(lazy-expt? #t)]
+       (together-impl (fractionize (combine u))))
+      )
+  )
 
 (define (together-impl u)
   (math-match u
@@ -851,11 +844,11 @@
   (check-equal? (together (⊕ (⊘ 2 y) (⊘ 1 x))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y))) '(* (expt (* x y) -1) (+ (* 2 x) y)))
 
-  (define lazy-expt-org (lazy-expt?))
-  (lazy-expt? #t)
+  (parameterize
+  [(lazy-expt? #t)]
   (check-equal? (together-op2        (⊘ y 5) 1) '(+ 1 (* (expt 5 -1) y)))
   (check-equal? (greedy-together-op2 (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
-  (lazy-expt? lazy-expt-org)
+  )
   )
 
 ; unary and binary minus 
@@ -944,11 +937,10 @@
 ; normalize can be used to cancel its effect, because expt auto simplification can handle it correctly.
 ; when lazy-expt? = #f, some auto simplification of expt will be disabled, so that fractionze and together can work.
 (define (fractionize u)
-  (define lazy-expt-org (lazy-expt?))
-  (lazy-expt? #t)
-  (define result (fractionize-impl u))
-  (lazy-expt? lazy-expt-org)
-  result)
+  (parameterize
+      [(lazy-expt? #t)]
+    (fractionize-impl u))
+  )
 
 (define (fractionize-impl s)
   (when debugging? (displayln (list 'fractionize-impl s)))
@@ -1004,11 +996,10 @@
     [u u]))
 
 (define (expt-combine u)
-  (define lazy-expt-org (lazy-expt?))
-  (lazy-expt? #t)
-  (define result (expt-combine-impl u))
-  (lazy-expt? lazy-expt-org)
-  result)
+  (parameterize
+  [(lazy-expt? #t)]
+  (expt-combine-impl u))
+  )
   
 (define (expt-combine-impl u)
   (when debugging? (displayln (list 'expt-combine-impl u)))
