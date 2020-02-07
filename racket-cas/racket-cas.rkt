@@ -693,9 +693,9 @@
   (define c combine-impl)
   (math-match expr
               [(⊕ (⊘ u w) (⊘ v w))         (together expr)]
-              [(⊕ u v) (let ([cu (c u)] [cv (c v)])
-                         (cond [(and (equal? u cu) (equal? v cv))    (⊕  u  v)]     ; Trival case
-                               [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
+              [(⊕ u v) (let ([cv (c v)])
+                         (cond [(equal? v cv)    (⊕  u  cv)]     ; Trival case
+                               [else          (c (⊕ u cv))]))] ; May match special cases after inner combination.
               [_ expr]))
 
 (module+ test
@@ -862,38 +862,31 @@
     )
   )
 
-(define (together-op . us) (foldl together-op2 0 us))
-(define (together-op2 s1 s2)
-  (when debugging? (displayln (list 'together-op2 s1 s2)))
-  (define t together-impl)
-  (define t2 together-op2)
-  (math-match* (s1 s2)
-    [(0 u) (t u)]
-    [(u 0) (t u)]
-    [(α u) #:when (not (integer? α)) (⊘ (⊗ (t u) (%numerator α)) (%denominator α))]
-    [(u α) #:when (not (integer? α)) (t2 α u)]
-    [(u v) (let-values
-               ([(nu du) (numerator/denominator (t u))]
-               [(nv dv) (numerator/denominator (t v))])
+(define (together-op2 u v)
+  (when debugging? (displayln (list 'together-op2 u v)))
+  (let-values
+               ([(nu du) (numerator/denominator (together u))]
+               [(nv dv) (numerator/denominator (together v))])
              (if (equal? du dv)
                  (⊘ (⊕ nu nv) du)
                  (⊘ (⊕ (⊗ nu dv) (⊗ nv du)) (⊗ du dv))
                  )
-             )]
-             
-    ))
+             )
+    )
 
 (define (together u)
   (when debugging? (displayln (list 'together u)))
   (parameterize
       [(lazy-expt? #t)]
-   (together-impl (fractionize u)))
+   (together-impl u))
   )
 
-(define (together-impl u)
-  (math-match u
-    [(⊕ u v) (together-op u v)]
-    [_ u]))
+(define (together-impl expr)
+  (when debugging? (displayln (list 'together-impl expr)))
+  (define t together-impl)
+  (math-match expr
+              [(⊕ u v)         (together-op2 u (t v))]
+              [_ expr]))
 
 (module+ test 
   (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
