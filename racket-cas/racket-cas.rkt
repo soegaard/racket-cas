@@ -896,7 +896,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Expt: @e u)] [_ (identifier? stx) #'Exp:])))
 
 (define (Expt: u v)
-  (when debugging? (displayln (list 'Expt: u v)))
+  (when debugging? (displayln (list 'Expt: u v 'lazy-expt? (lazy-expt?))))
   (define (sqrt-natural n)
     ; suppose n = s^2 * f , where f is square-free
     ; sqrt(n) = s * sqrt(f)
@@ -920,12 +920,13 @@
                [(u 0)          1]
                ; [(0 v)          0]
                [(n 1/2)        (sqrt-natural n)]
-               [(p -1) #:when (lazy-expt?)
-                      `(expt ,p ,-1)]
+               [(u -1) #:when (lazy-expt?)
+                      `(expt ,u ,-1)]
                [(α β) #:when (and (not (integer? α)) (not (integer? β)))
                   (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
                [(α p)          (expt α p)]
-               [(n α-)         (Expt (Expt n (- α-)) -1)]
+               [(n α-) #:when (number? (Expt n (- α-)))
+                               (Expt (Expt n (- α-)) -1)]
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r s.0)        (expt r s.0)]
@@ -943,6 +944,7 @@
   (check-equal? (Expt 2/3 -1) 3/2)
   (check-equal? (Expt 2 3) 8)
   (check-equal? (Expt -1 2) 1)
+  (check-equal? (Expt 4 -1/2) 1/2)
   )
 
 ; move expt -1 to outermost layers.
@@ -3142,7 +3144,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
-  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)*1/2")
+  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "1/2*sqrt(3)")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
