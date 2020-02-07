@@ -600,7 +600,7 @@
   ; expand products and powers with positive integer exponents
   ; expand terms, but don't recurse into sub terms
   ; TODO : implement the above description
-  (expand-all (expt-expand u)))
+  (expand-all u))
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
@@ -640,7 +640,7 @@
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
 
-  (check-equal? (expand '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
+  (check-equal? (normalize '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
   )
 
 (define (logical-expand u)
@@ -682,7 +682,7 @@
 
 ; combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
 (define (combine u)
-    (combine-impl (expt-combine u))
+    (combine-impl u)
   )
 
 (define (combine-impl expr)
@@ -998,7 +998,7 @@
     [(Expt (Expt u v) w) #:when (not (equal? -1 w))
                          (f (Expt u (⊗ v w)))]
     [(Expt (⊗ u v) w) #:when (not (equal? -1 w))
-                         (f (expt-expand s))]
+                         (f (⊗ (Expt u w) (Expt v w)))]
     [(Expt u v) (let ([fu (f u)] [fv (f v)])
                   (cond [(and (equal? u fu) (equal? v fv)) (Expt u v)]     ; Trival case
                         [else                              (f (Expt fu fv))]))] ; May match special cases after inner expansions.
@@ -1029,38 +1029,6 @@
   (check-equal? (fractionize '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
   (check-equal? (normalize (fractionize '(+ 1/7 1/4 x))) '(+ 11/28 x))
   )
-
-(define (expt-expand u)
-  (when debugging? (displayln (list 'expt-expand u)))
-  (define ee expt-expand)
-  (math-match u
-    [(Expt (⊗ u v) w)    (let [(eew (ee w))] (⊗ (Expt (ee u) eew) (Expt(ee v) eew)))]
-    [(Expt u v)          (Expt (ee u) (ee v))]
-    [(⊗ u v)             (⊗ (ee u) (ee v))]
-    [(⊕ u v)             (⊕ (ee u) (ee v))]
-    (_ u)))
-
-(define (expt-combine u)
-  (parameterize
-  [(lazy-expt? #t)]
-  (expt-combine-impl u))
-  )
-  
-(define (expt-combine-impl u)
-  (when debugging? (displayln (list 'expt-combine-impl u)))
-  (define ec expt-combine-impl)
-  (math-match u
-    [(⊗ (Expt u w) (Expt v w))    (Expt (⊗ (ec u) (ec v)) (ec w))]
-    [(⊗ u v)                      (⊗ (ec u) (ec v))]
-    [(⊕ u v)                      (⊕ (ec u) (ec v))]
-    [(Expt u v)                   (Expt (ec u) (ec v))]
-    [_ u]))
-
-(module+ test
-  (check-equal? (expt-combine '(* (expt x y) (expt z y))) '(expt (* x z) y))
-  (check-equal? (expt-expand '(expt (* x z) y)) '(* (expt x y) (expt z y)))
-  (check-equal? (polar-to-rect (expand (complex-expt-expand (Expt (⊕ (Sqrt -2) 2) 2)))) '(+ 2 (* 4 (expt 2 1/2) @i)))
-  (check-equal? (bf-N (normalize '(expt (expt 5 1/2) 2))) (bf 5)))
 
 (define (Sqr: u)
   (Expt u 2))
