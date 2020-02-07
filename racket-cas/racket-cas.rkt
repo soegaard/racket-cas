@@ -684,23 +684,19 @@
 (define (combine u)
   (parameterize
       [(lazy-expt? #t)]
-    (combine-impl (fractionize (expt-combine u))))
+    ; (combine-impl (fractionize (expt-combine u))))
+    (combine-impl (expt-combine u)))
   )
 
-(define (combine-impl u)
-  (when debugging? (displayln (list 'combine-impl u)))
+(define (combine-impl expr)
+  (when debugging? (displayln (list 'combine-impl expr)))
   (define c combine-impl)
-  (math-match u
-    [(⊕      (Expt w -1)  (⊗ v (Expt w -1)))         (⊘ (⊕ 1 v) w)]
-    [(⊕      (Expt w -1)  (⊗ (Expt w -1) v))         (⊘ (⊕ 1 v) w)]
-    [(⊕ (⊗ u (Expt w -1)) (⊗ v (Expt w -1)))         (⊘ (⊕ u v) w)]
-    [(⊕ (⊗ (Expt w -1) u) (⊗ v (Expt w -1)))         (⊘ (⊕ u v) w)]
-    [(⊕ (⊗ u (Expt w -1)) (⊗ (Expt w -1) v))         (⊘ (⊕ u v) w)]
-    [(⊕ (⊗ (Expt w -1) u) (⊗ (Expt w -1) v))         (⊘ (⊕ u v) w)]
-    [(⊕ u v) (let ([cu (c u)] [cv (c v)])
-               (cond [(and (equal? u cu) (equal? v cv))    (⊕  u  v)]     ; Trival case
-                     [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
-    [_ u]))
+  (math-match expr
+              [(⊕ (⊘ u w) (⊘ v w))         (together expr)]
+              [(⊕ u v) (let ([cu (c u)] [cv (c v)])
+                         (cond [(and (equal? u cu) (equal? v cv))    (⊕  u  v)]     ; Trival case
+                               [else                              (c (⊕ cu cv))]))] ; May match special cases after inner combination.
+              [_ expr]))
 
 (module+ test
   (check-equal? (combine (⊕ (⊘ (⊕ x) z) (⊘ (⊕ y x) z) (⊘ 1 z)))
@@ -713,7 +709,6 @@
 (define (Oslash: u v)
   (math-match* (u v)
     [(r 0) +nan.0]
-    [(r s) (/ r s)]
     [(u 1) u]
     [(u -1) (⊖ u)]
     [(u v) (⊗ u (Expt v -1))]))
@@ -748,7 +743,7 @@
   (check-equal? (math-match 2/3 [(Quotient u v) (list u v)]) '(2 3))
   (check-equal? (math-match (⊕ x 2/3) [(Quotient u v) (list u v)]) '((+ 2 (* 3 x)) 3))
   (check-equal? (math-match '(* x 2.3) [(Quotient u v) 'matched] [_ 'unmatched]) 'matched)
-  (check-equal? (math-match (⊗ x (Expt (⊗ 2 y z) -1)) [(Quotient u v) (list u v)]) '(x (* 2 y z)))
+  (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z)))
   (check-equal? (math-match (⊘ x y) [(Quotient u v) (list u v)]) '(x y))
   (check-equal? (math-match (⊘ (⊗ y 3) x) [(Quotient u v) (list u v)]) '((* 3 y) x))
   )
@@ -861,7 +856,7 @@
     )
 
     (let-values ([(n d)
-               (together-numerator/denominator (fractionize (normalize '(+ (/ x y) 2/3))))])
+               (together-numerator/denominator  (normalize '(+ (/ x y) 2/3)))])
     (check-equal? n '(+ (* 3 x) (* 2 y)))
     (check-equal? d '(* 3 y))
     )
@@ -880,7 +875,11 @@
     [(u v) (let-values
                ([(nu du) (numerator/denominator (t u))]
                [(nv dv) (numerator/denominator (t v))])
-             (⊘ (⊕ (⊗ nu dv) (⊗ nv du)) (⊗ du dv)))]
+             (if (equal? du dv)
+                 (⊘ (⊕ nu nv) du)
+                 (⊘ (⊕ (⊗ nu dv) (⊗ nv du)) (⊗ du dv))
+                 )
+             )]
              
     ))
 
@@ -888,7 +887,7 @@
   (when debugging? (displayln (list 'together u)))
   (parameterize
       [(lazy-expt? #t)]
-   (together-impl (fractionize (combine u))))
+   (together-impl (fractionize u)))
   )
 
 (define (together-impl u)
@@ -1002,7 +1001,7 @@
   (when debugging? (displayln (list 'fractionize-impl s)))
   (define f fractionize-impl)
   (math-match s
-    [α #:when (not (integer? α))                           (let [(n (%numerator α)) (d (%denominator α))]  (⊗ n (Expt d -1)))]
+    [α #:when (not (integer? α))                           (let [(n (%numerator α)) (d (%denominator α))]  (⊘ n d))]
     [(Expt u q) #:when (and (negative? q) (not (= -1 q)))  (Expt (Expt (f u) (- q)) -1)]
     [(Expt u (⊗ -1 v))                                     (Expt (Expt (f u) v) -1)]
     [(Expt u (⊗ v -1))                                     (Expt (Expt (f u) v) -1)]
@@ -1112,14 +1111,6 @@
     ; principal value
     [(Expt (Polar-Unit θ) s) #:when (real? s) (let [(new-θ (⊗ s θ))] (Polar-Unit new-θ))]
     [(Expt r s)           #:when (real? s) (let [(ρ (Expt (Magnitude r) s)) (θ (⊗ s (Angle r)))] (⊗ ρ (Polar-Unit θ)))]
-;    [(Expt -1 1/2)       @i]
-;    [(Expt r α)  #:when (and (real? r) (negative? r) (= (%denominator α) 2)) (⊗ (Expt @i (%numerator α)) (Expt (⊖ r) α))]
-;    [(Expt @i n)         (case (remainder n 4)
-;                      [(0) 1]
-;                      [(1) @i]
-;                      [(2) -1]
-;                      [(3) (⊖ @i)]
-;                    )]
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
                (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
                      [else                                       (cee (Expt cee-u cee-v))]))] ; May match special cases after inner expansions.
@@ -1294,7 +1285,7 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "-1/2*sqrt(3)")
+  (check-equal? (verbose~ (Cos '(* 7/6 @pi))) "(-sqrt(3))/2")
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   )
 
@@ -1511,8 +1502,7 @@
         [y #:when (eq? x y) x0]
         [y y]
         [(⊕ v w) (⊕ (l v) (l w))]
-        [(⊗ v (Expt w -1)) (l (⊗ (Expt w -1) v))] ; Need to replace this with numerator/denominator on (⊗ u v)
-        [(⊗ (Expt w -1) v) (let loop ([n 1] [v v] [w w])
+        [(⊘ v w) (let loop ([n 1] [v v] [w w])
                    (let ([lv (l v)] [lw (l w)])
                      ; if both limits are zero, use l'Hôpital's rule
                      (define (again) (loop (+ n 1) (diff v x) (diff w x)))
@@ -2870,7 +2860,6 @@
         [(Equal u v) (~a (par u) " " (~sym '=)   " " (par v))]
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
-        [(Expt u (Expt 2 -1)) #:when (output-sqrt?) ((output-format-sqrt) u)]
         [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (wrap (format/ 1 (par u #:use quotient-sub)))]
         ; unnormalized power of a power
@@ -3000,7 +2989,7 @@
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
-      [(⊗ u (Expt v -1))        (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
+      [(⊘ u v)       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       
       ; mult
@@ -3183,7 +3172,7 @@
    "sin(-7+x)*(asin(-7+x)+cos(-7+x))")
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
-  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "1/2*sqrt(3)")
+  (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)/2")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
