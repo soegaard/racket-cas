@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #f)
+(define debugging? #t)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 (define (verbose-debug!) (set! verbose-debugging? (not verbose-debugging?)) verbose-debugging?)
@@ -710,7 +710,7 @@
   )
 
 ; divide u by v
-(define (⊘ u v)
+(define (Oslash: u v)
   (math-match* (u v)
     [(r 0) +nan.0]
     [(r s) (/ r s)]
@@ -719,29 +719,39 @@
     [(u v) (⊗ u (Expt v -1))]))
 
 ; todo: remove the expander, since it does not always work as expected, for example (⊘ u v) fails to match (⊘ (⊗ y 3) x).
-;(define-match-expander ⊘
-;  ; Note: This matches one kind of quotient only
-;  (λ (stx) (syntax-parse stx [(_ u v) #'(or (list '* u (list 'expt v -1))
-;                                            (list '* (list 'expt v -1) u))]))
-;  (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
-;
-;(module+ test
-;  (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y))
-;  ; '(* 3 (expt x -1) y) need to handle (expt x -1) specially, maybe keep Oslash and Minus until forced evaluation.
-;  ; (check-equal? (math-match (⊘ (⊗ y 3) x) [(⊘ u v) (list u v)]) '((* 3 y) x))
-;  )
+(define-match-expander ⊘
+  ; Note: This matches one kind of quotient, i.e., a prod with non-one denominator.
+  ; use numerator/denominator so that (⊘ u v) can match '(* 3 (expt x -1) y)
+  (λ (stx) (syntax-parse stx [(_ u v) #'(app numerator/denominator u (? (λ(d)(not (equal? 1 d))) v))]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
+
+(module+ test
+  (check-equal? (math-match 2/3 [(⊘ u v) (list u v)]) '(2 3))
+  (check-equal? (math-match '(⊕ x 2/3) [(⊘ u v) 'matched] [_ 'unmatched]) 'unmatched)
+  (check-equal? (math-match '(* x 2/3) [(⊘ u v) (list u v)]) '((* 2 x) 3))
+  (check-equal? (math-match '(* x 2.3) [(⊘ u v) 'matched] [_ 'unmatched]) 'unmatched)
+  (check-equal? (math-match (⊗ x (Expt (⊗ 2 y z) -1)) [(⊘ u v) (list u v)]) '(x (* 2 y z)))
+  (check-equal? (math-match (⊘ x y) [(⊘ u v) (list u v)]) '(x y))
+  (check-equal? (math-match (⊘ (⊗ y 3) x) [(⊘ u v) (list u v)]) '((* 3 y) x))
+  )
 
 (define (Quotient: u v)
   (⊘ u v))
 
 (define-match-expander Quotient
-  ; Note: This matches everything and writes it as a quotient
-  (λ (stx) (syntax-parse stx [(_ u v) #'(and (app numerator u) (app denominator v))]))
+  ; Note: This matches everything and writes it as a quotient, even when denominator equals to 1.
+  (λ (stx) (syntax-parse stx [(_ u v) #'(app together-numerator/denominator u v)]))
+
   (λ (stx) (syntax-parse stx [(_ u v) #'(Quotient: u v)] [_ (identifier? stx) #'Quotient:])))
 
 (module+ test
   (check-equal? (math-match 2/3 [(Quotient u v) (list u v)]) '(2 3))
-  (check-equal? (math-match (⊗ x (Expt (⊗ 2 y z) -1)) [(Quotient u v) (list u v)]) '(x (* 2 y z))))
+  (check-equal? (math-match (⊕ x 2/3) [(Quotient u v) (list u v)]) '((+ 2 (* 3 x)) 3))
+  (check-equal? (math-match '(* x 2.3) [(Quotient u v) 'matched] [_ 'unmatched]) 'matched)
+  (check-equal? (math-match (⊗ x (Expt (⊗ 2 y z) -1)) [(Quotient u v) (list u v)]) '(x (* 2 y z)))
+  (check-equal? (math-match (⊘ x y) [(Quotient u v) (list u v)]) '(x y))
+  (check-equal? (math-match (⊘ (⊗ y 3) x) [(Quotient u v) (list u v)]) '((* 3 y) x))
+  )
 
 (define (denominator u)
   (when debugging? (displayln (list 'denominator u)))
@@ -811,14 +821,18 @@
     )
   (define-values (n d) (partition (negate denominator?) us))
   (define (reduce-lst us vs)
-    (values (apply ⊗ us) (inverse (apply ⊗ vs)))
+    (values (normalize (apply ⊗ us)) (normalize (inverse (apply ⊗ vs))))
     )
   (reduce-lst n d)
   )
 
-; Partition a product/terms into numerator and denominator
 (define (numerator/denominator s)
   (when debugging? (displayln (list 'numerator/denominator s)))
+  (numerator/denominator-impl (fractionize s #t)))
+
+; Partition a product/terms into numerator and denominator
+(define (numerator/denominator-impl s)
+  (when debugging? (displayln (list 'numerator/denominator-impl s)))
   (math-match s
               [(Expt u r-) (values 1 (Expt u (- r-)))]
               [(Prod us) (partition-numerator/denominator us)]
@@ -828,6 +842,27 @@
   (let-values ([(n d)
                (numerator/denominator (fractionize (normalize '(* (/ x y) z 2/3))))])
     (check-equal? n '(* 2 x z))
+    (check-equal? d '(* 3 y))
+    )
+  )
+
+; used for quotient.
+; first call together, then split up the numerator/denominator parts.
+; differences can be indicated by the following tests.
+(define (together-numerator/denominator s)
+  (numerator/denominator (together s))
+  )
+
+(module+ test
+  (let-values ([(n d)
+               (numerator/denominator (fractionize (normalize '(+ (/ x y) 2/3))))])
+    (check-equal? n '(+ (* 2 (expt 3 -1)) (* x (expt y -1))))
+    (check-equal? d 1)
+    )
+
+    (let-values ([(n d)
+               (together-numerator/denominator (fractionize (normalize '(+ (/ x y) 2/3))))])
+    (check-equal? n '(+ (* 3 x) (* 2 y)))
     (check-equal? d '(* 3 y))
     )
   )
