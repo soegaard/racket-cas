@@ -1235,7 +1235,8 @@
     [(⊕ u (⊗ p (Integer _) @pi)) #:when (even? p) (Cos: u)]
     [(⊕ (⊗ p (Integer _) @pi) u) #:when (even? p) (Cos: u)]
     
-    [(Acos u) u]    ; xxx only of -1<u<1 
+    [(Acos u) u]    ; xxx only of -1<u<1
+    [u #:when (terms-with-negative-coeff? u) (Cos(⊖ u))] ; even function
     [_ `(cos ,u)]))
 
 (define-match-expander Cos
@@ -1244,6 +1245,7 @@
 
 (module+ test
   (check-equal? (Cos 0) 1)
+  (check-equal? (Cos -3) (Cos 3))
   (check-equal? (Cos @pi) -1)
   (check-equal? (Cos (⊗ 2 @pi)) 1)
   (check-equal? (Cos 0.5) 0.8775825618903728)
@@ -1291,6 +1293,7 @@
                       [sign   (if (> sign.0 0) 1 -1)])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
+    [u #:when (terms-with-negative-coeff? u) (⊖ (Sin (⊖ u)))] ; odd function
     [_ `(sin ,u)]))
 
 (define-match-expander Sin
@@ -1309,6 +1312,7 @@
   (check-equal? (Sin (⊕ x (⊗ 4 @n @pi)))    (Sin x))
   (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x))
   (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
+  (check-equal? (Sin -3) (⊖ (Sin 3)))
   )
 
 (require (submod "math-match.rkt" predicates))
