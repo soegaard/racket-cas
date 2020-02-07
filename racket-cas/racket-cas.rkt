@@ -682,10 +682,7 @@
 
 ; combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
 (define (combine u)
-  (parameterize
-      [(lazy-expt? #t)]
-    ; (combine-impl (fractionize (expt-combine u))))
-    (combine-impl (expt-combine u)))
+    (combine-impl (expt-combine u))
   )
 
 (define (combine-impl expr)
@@ -835,7 +832,7 @@
 
 (module+ test
   (let-values ([(n d)
-               (numerator/denominator (fractionize (normalize '(* (/ x y) z 2/3))))])
+               (numerator/denominator (normalize '(* (/ x y) z 2/3)))])
     (check-equal? n '(* 2 x z))
     (check-equal? d '(* 3 y))
     )
@@ -850,7 +847,7 @@
 
 (module+ test
   (let-values ([(n d)
-               (numerator/denominator (fractionize (normalize '(+ (/ x y) 2/3))))])
+               (numerator/denominator (normalize '(+ (/ x y) 2/3)))])
     (check-equal? n '(+ (* 2 (expt 3 -1)) (* x (expt y -1))))
     (check-equal? d 1)
     )
