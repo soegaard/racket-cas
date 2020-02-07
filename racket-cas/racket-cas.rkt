@@ -681,13 +681,9 @@
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 ; combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
-(define (combine u)
-    (combine-impl u)
-  )
-
-(define (combine-impl expr)
-  (when debugging? (displayln (list 'combine-impl expr)))
-  (define c combine-impl)
+(define (combine expr)
+  (when debugging? (displayln (list 'combine expr)))
+  (define c combine)
   (math-match expr
               [(⊕ (⊘ u w) (⊘ v w))         (together expr)]
               [(⊕ u v) (let ([cv (c v)])
@@ -820,7 +816,7 @@
 
 (define (numerator/denominator s)
   (when debugging? (displayln (list 'numerator/denominator s)))
-  (numerator/denominator-impl (fractionize s #t)))
+  (numerator/denominator-impl (fractionize-number s)))
 
 ; Partition a product/terms into numerator and denominator
 (define (numerator/denominator-impl s)
@@ -972,62 +968,32 @@
   )
 
 ; move expt -1 to outermost layers.
-; prepare for together.
+; prepare for numerator/denominator.
 ; normalize can be used to cancel its effect, because expt auto simplification can handle it correctly.
 ; when lazy-expt? = #f, some auto simplification of expt will be disabled, so that fractionze and together can work.
-; todo clean up fractionize.
-(define (fractionize u [fractionize-single-number? #f])
-  (if (and (not fractionize-single-number?) (number? u))
-      u
-      (parameterize
-          [(lazy-expt? #t)]
-        (fractionize-impl u)
-        )
-      )
+(define (fractionize-number u)
+  (parameterize
+      [(lazy-expt? #t)]
+    (fractionize-number-impl u)
+    )
   )
 
-
-(define (fractionize-impl s)
-  (when debugging? (displayln (list 'fractionize-impl s)))
-  (define f fractionize-impl)
+(define (fractionize-number-impl s)
+  (when debugging? (displayln (list 'fractionize-number-impl s)))
+  (define f fractionize-number-impl)
   (math-match s
-    [α #:when (not (integer? α))                           (let [(n (%numerator α)) (d (%denominator α))]  (⊘ n d))]
-    [(Expt u q) #:when (and (negative? q) (not (= -1 q)))  (Expt (Expt (f u) (- q)) -1)]
-    [(Expt u (⊗ -1 v))                                     (Expt (Expt (f u) v) -1)]
-    [(Expt u (⊗ v -1))                                     (Expt (Expt (f u) v) -1)]
-    [(Expt (Expt u v) w) #:when (not (equal? -1 w))
-                         (f (Expt u (⊗ v w)))]
-    [(Expt (⊗ u v) w) #:when (not (equal? -1 w))
-                         (f (⊗ (Expt u w) (Expt v w)))]
-    [(Expt u v) (let ([fu (f u)] [fv (f v)])
-                  (cond [(and (equal? u fu) (equal? v fv)) (Expt u v)]     ; Trival case
-                        [else                              (f (Expt fu fv))]))] ; May match special cases after inner expansions.
+    [α #:when (not (integer? α)) (let [(n (%numerator α)) (d (%denominator α))]  (⊘ n d))]
+    [(Expt u v) (let ([fu (f u)] [fv (f v)]) (Expt fu fv))]
     [(⊗ u v)             (⊗ (f u) (f v))]
     [(⊕ u v)             (⊕ (f u) (f v))]
-    [(Sin u) (let ([s-f-u (Sin (f u))])
-               (if (equal? s-f-u (Sin u))
-                   s-f-u
-                   (f s-f-u)))]
-    [(Cos u) (let ([c-f-u (Cos (f u))])
-               (if (equal? c-f-u (Cos u))
-                   c-f-u
-                   (f c-f-u)))]
-    [(Asin u) (let ([a-f-u (Asin (f u))])
-               (if (equal? a-f-u (Asin u))
-                   a-f-u
-                   (f a-f-u)))]
-    [(Acos u) (let ([a-f-u (Acos (f u))])
-               (if (equal? a-f-u (Acos u))
-                   a-f-u
-                   (f a-f-u)))]
     [_ s]))
 
 (module+ test
-  (check-equal? (fractionize (Expt 1/7 y)) '(expt (expt 7 y) -1))
-  (check-equal? (fractionize (Expt -1/3 x)) '(* (expt -1 x) (expt (expt 3 x) -1)))
-  (check-equal? (normalize (fractionize '(* 1/7 (+ 1/4 x)))) '(* 1/7 (+ 1/4 x)))
-  (check-equal? (fractionize '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
-  (check-equal? (normalize (fractionize '(+ 1/7 1/4 x))) '(+ 11/28 x))
+  (check-equal? (fractionize-number (Expt 1/7 y)) '(expt (expt 7 -1) y))
+  (check-equal? (fractionize-number (Expt -1/3 x)) '(expt (* -1 (expt 3 -1)) x))
+  (check-equal? (normalize (fractionize-number '(* 1/7 (+ 1/4 x)))) '(* 1/7 (+ 1/4 x)))
+  (check-equal? (fractionize-number '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
+  (check-equal? (normalize (fractionize-number '(+ 1/7 1/4 x))) '(+ 11/28 x))
   )
 
 (define (Sqr: u)
@@ -1093,8 +1059,8 @@
   )
 
 (module+ test
-  (check-equal? (polar-to-rect (complex-expt-expand '(expt -8 1/3))) '(* (expt 8 1/3) (+ 1/2 (* 1/2 (expt 3 1/2) @i)))) ; todo: handle (expt n alpha) when it can get exact result.
-  (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1.0+1.732i 0.0001)
+  (check-equal? (polar-to-rect '(expt -8 1/3)) '(* (expt 8 1/3) (+ 1/2 (* 1/2 (expt 3 1/2) @i)))) ; todo: handle (expt n alpha) when it can get exact result.
+  (check-= (N (polar-to-rect '(expt -8 1/3))) 1.0+1.732i 0.0001)
   )
 
 (define (Ln: u)
@@ -1207,7 +1173,7 @@
     [(⊗ α @pi) #:when (or (> α 1) (< α -1))
                (Cos (⊗ (normalize-pi-coeff α) @pi))]
     [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (- 1 α) @pi)))]
-    [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
+    [(⊗ α @pi) #:when (even? (%denominator α)) ; half angle formula
                (let ([sign (expt -1 (floor (/ (+ α 1) 2)))])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx test sign
     [(⊗ p (Integer _) @pi) #:when (even? p) 1]
@@ -1271,7 +1237,7 @@
     [(⊗ α @pi) #:when (or (> α 1) (< α -1))
                (Sin (⊗ (normalize-pi-coeff α) @pi))]
     [(⊗ α @pi) #:when (> α 1/2) (Sin (⊗ (⊖ 1 α) @pi))]
-    [(⊗ α @pi) #:when (even? (denominator α)) ; half angle formula
+    [(⊗ α @pi) #:when (even? (%denominator α)) ; half angle formula
                (let* ([θ      (* 2 α pi)]
                       [sign.0 (sgn (+ (- (* 2 pi) θ) (* 4 pi (floor (/ θ (* 4 pi))))))]
                       [sign   (if (> sign.0 0) 1 -1)])
@@ -1301,6 +1267,8 @@
 
 (require (submod "math-match.rkt" predicates))
 
+; only run this on normalize expressions.
+; #t will be returned for '(* -1 -2)
 (define (terms-with-negative-coeff? s)
   (when debugging? (displayln (list 'terms-with-negative-coeff? s)))
   (define (list-has-negative-element? s)
@@ -2214,7 +2182,7 @@
                                                            (solve (Equal u^n/2    sqrt-v)  x)))]))]
           [(Equal (Expt u -1) v) (r (Equal u (Expt v -1)))] ; assumes v<>0 (as does MMA)
           [(Equal (Expt u 1/2) v)     (solve (Equal u (Expt v 2))  x)] ; XXX 
-          [(Equal (Expt u α) v)  #:when (= (numerator α) 1) (r (Equal u (Expt v (⊘ 1 α))))]
+          [(Equal (Expt u α) v)  #:when (= (%numerator α) 1) (r (Equal u (Expt v (⊘ 1 α))))]
           [(Equal (Expt n u) m)  #:when (and (free-of n x) (free-of m x)) (r (Equal u (Log n m)))]
           [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) (r (Equal u (Log v w)))]          
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
@@ -2372,8 +2340,8 @@
 (define (default-output-fraction α) (~a α))
 (define (mma-output-fraction     α) (~a α))
 (define (tex-output-fraction     α) 
-  (if (> (denominator α) 1)
-      (~a "\\frac{" (numerator α) "}{" (denominator α) "}")
+  (if (> (%denominator α) 1)
+      (~a "\\frac{" (%numerator α) "}{" (%denominator α) "}")
       (~a α)))
 
 ;;; Roots
@@ -2734,7 +2702,7 @@
     (define ~frac (output-fraction))
     (define (~num r)
       (define precision (output-floating-point-precision))
-      (cond [(and (exact? r) (> (denominator r) 1)) (~frac r) (~a r)]
+      (cond [(and (exact? r) (> (%denominator r) 1)) (~frac r) (~a r)]
             [(exact? r) (~a r)]
             [(nan? r)   (~a r)]
             [precision  (~r r #:precision precision)]
@@ -2832,7 +2800,7 @@
                                      ((output-format-function-symbol)
                                       (fluid-let ([original? #t])
                                          (par p #:use exponent-sub)))))]
-        [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
+        [(Expt u α)     #:when (= (%numerator α) -1) ; -1/p
                         (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
         [(Expt u v)   (~a (par u #:use base-sub)
@@ -2939,9 +2907,9 @@
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
-      [(Expt u α)     #:when (and (output-root?) (= (numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
+      [(Expt u α)     #:when (and (output-root?) (= (%numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
                       ((output-format-root) u (/ 1 α))] ; only used, if (output-format-root) returns non-#f 
-      [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
+      [(Expt u α)     #:when (= (%numerator α) -1) ; -1/p
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub #:exponent-base? #t))]
       [(Expt u p)     #:when (negative? p)
