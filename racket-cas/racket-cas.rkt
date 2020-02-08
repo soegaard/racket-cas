@@ -789,6 +789,34 @@
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
   )
 
+; todo, extract a common function for partition-positive/negative and partition-numerator/denominator
+; params: pred, inverse/negate function
+; (positive negative)
+(define (partition-positive/negative us)
+  (when debugging? (displayln (list 'partition-positive/negative us)))
+  (define-values (n d) (partition (negate terms-with-negative-coeff?) us))
+  (define (reduce-lst us vs)
+    (values (normalize (apply ⊕ us)) (normalize (⊖ (apply ⊕ vs))))
+    )
+  (reduce-lst n d)
+  )
+
+; Partition a Sum into positive and negative
+(define (positive/negative s)
+  (when debugging? (displayln (list 'positive/negative s)))
+  (math-match s
+              [u #:when (terms-with-negative-coeff? u) (values 0 (⊖ u))]
+              [(Sum us) (partition-positive/negative us)]
+              [_ (values s 0)]))
+
+(module+ test
+  (let-values ([(p n)
+               (positive/negative (normalize '(+ (Exp 5) (* -2 x) z 2/3)))])
+    (check-equal? p '(+ 2/3 z (Exp 5)))
+    (check-equal? n '(* 2 x))
+    )
+  )
+
 (define (inverse u)
   (parameterize
       [(lazy-expt? #f)]
