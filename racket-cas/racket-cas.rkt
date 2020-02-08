@@ -774,6 +774,22 @@
   (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2))
   (check-equal? (numerator (⊘ x y)) x))
 
+; test cases adpated from https://reference.wolfram.com/language/ref/Numerator.html?view=all
+(module+ test
+  (check-equal? (numerator 2/3) 2)
+  (check-equal? (numerator (⊘ (⊗ (⊖ x 1) (⊖ x 2)) (Sqr(⊖ x 3)))) '(* (+ -2 x) (+ -1 x)))
+  (check-equal? (numerator (numerator (⊕ 3/7 (⊗ 1/11 @i)))) '(+ 33 (* 7 @i)))
+  (check-equal? (numerator (⊘ (Sqr (⊖ x 1)) (⊗ (⊖ x 2) (⊖ x 3)))) '(expt (+ -1 x) 2))
+  ; todo: Select terms without syntactically negative exponents.
+  ; should be '(* (expt @e (+ a (* 3 d))) a (expt x n))
+  (check-equal?  (numerator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
+  '(* (expt @e (+ a (* -1 b) (* -2 c) (* 3 d))) a (expt x n) (expt y (* -1 m))))
+  ; to be fixed. should be 1.
+  (check-equal? (numerator (⊘ (Expt 'a (⊖ 'b)) x))
+                '(expt a (* -1 b)))
+  (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
+  )
+
 (define (inverse u)
   (parameterize
       [(lazy-expt? #f)]
