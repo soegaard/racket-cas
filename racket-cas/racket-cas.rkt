@@ -709,8 +709,8 @@
 ; todo: remove the expander, since it does not always work as expected, for example (⊘ u v) fails to match (⊘ (⊗ y 3) x).
 (define-match-expander ⊘
   ; Note: This matches one kind of quotient, i.e., a prod with non-one denominator.
-  ; use numerator/denominator so that (⊘ u v) can match '(* 3 (expt x -1) y)
-  (λ (stx) (syntax-parse stx [(_ u v) #'(app numerator/denominator u (? (λ(d)(not (equal? 1 d))) v))]))
+  ; use term-numerator/denominator so that (⊘ u v) can match '(* 3 (expt x -1) y)
+  (λ (stx) (syntax-parse stx [(_ u v) #'(app term-numerator/denominator u (? (λ(d)(not (equal? 1 d))) v))]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Oslash: u v)] [_ (identifier? stx) #'Oslash:])))
 
 (module+ test
@@ -728,7 +728,7 @@
 
 (define-match-expander Quotient
   ; Note: This matches everything and writes it as a quotient, even when denominator equals to 1.
-  (λ (stx) (syntax-parse stx [(_ u v) #'(app together-numerator/denominator u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(app numerator/denominator u v)]))
 
   (λ (stx) (syntax-parse stx [(_ u v) #'(Quotient: u v)] [_ (identifier? stx) #'Quotient:])))
 
@@ -768,7 +768,7 @@
 
 (define (numerator u)
   (when debugging? (displayln (list 'numerator u)))
-  (normalize (numerator-impl (together u))))
+  (numerator-impl (together u)))
   
 (define (numerator-impl u)
   (when debugging? (displayln (list 'numerator-impl u)))
@@ -800,8 +800,8 @@
   )
 
 ; (numerator denominator)
-(define (partition-numerator/denominator us)
-  (when debugging? (displayln (list 'partition-numerator/denominator us)))
+(define (partition-term-numerator/denominator us)
+  (when debugging? (displayln (list 'partition-term-numerator/denominator us)))
   (define (denominator? s)
     (math-match s
                 [(Expt u r-) #t]
@@ -814,42 +814,42 @@
   (reduce-lst n d)
   )
 
-(define (numerator/denominator s)
-  (when debugging? (displayln (list 'numerator/denominator s)))
-  (numerator/denominator-impl (fractionize-number s)))
+(define (term-numerator/denominator s)
+  (when debugging? (displayln (list 'term-numerator/denominator s)))
+  (term-numerator/denominator-impl (fractionize-number s)))
 
 ; Partition a product/terms into numerator and denominator
-(define (numerator/denominator-impl s)
-  (when debugging? (displayln (list 'numerator/denominator-impl s)))
+(define (term-numerator/denominator-impl s)
+  (when debugging? (displayln (list 'term-numerator/denominator-impl s)))
   (math-match s
               [(Expt u r-) (values 1 (Expt u (- r-)))]
-              [(Prod us) (partition-numerator/denominator us)]
+              [(Prod us) (partition-term-numerator/denominator us)]
               [_ (values s 1)]))
 
 (module+ test
   (let-values ([(n d)
-               (numerator/denominator (normalize '(* (/ x y) z 2/3)))])
+               (term-numerator/denominator (normalize '(* (/ x y) z 2/3)))])
     (check-equal? n '(* 2 x z))
     (check-equal? d '(* 3 y))
     )
   )
 
 ; used for quotient.
-; first call together, then split up the numerator/denominator parts.
+; first call together, then split up the term-numerator/denominator parts.
 ; differences can be indicated by the following tests.
-(define (together-numerator/denominator s)
-  (numerator/denominator (together s))
+(define (numerator/denominator s)
+  (term-numerator/denominator (together s))
   )
 
 (module+ test
   (let-values ([(n d)
-               (numerator/denominator (normalize '(+ (/ x y) 2/3)))])
+               (term-numerator/denominator (normalize '(+ (/ x y) 2/3)))])
     (check-equal? n '(+ (* 2 (expt 3 -1)) (* x (expt y -1))))
     (check-equal? d 1)
     )
 
     (let-values ([(n d)
-               (together-numerator/denominator  (normalize '(+ (/ x y) 2/3)))])
+               (numerator/denominator  (normalize '(+ (/ x y) 2/3)))])
     (check-equal? n '(+ (* 3 x) (* 2 y)))
     (check-equal? d '(* 3 y))
     )
@@ -858,8 +858,8 @@
 (define (together-op2 u v)
   (when debugging? (displayln (list 'together-op2 u v)))
   (let-values
-               ([(nu du) (numerator/denominator (together u))]
-               [(nv dv) (numerator/denominator (together v))])
+               ([(nu du) (term-numerator/denominator (together u))]
+               [(nv dv) (term-numerator/denominator (together v))])
              (if (equal? du dv)
                  (⊘ (⊕ nu nv) du)
                  (⊘ (⊕ (⊗ nu dv) (⊗ nv du)) (⊗ du dv))
@@ -968,7 +968,7 @@
   )
 
 ; move expt -1 to outermost layers.
-; prepare for numerator/denominator.
+; prepare for term-numerator/denominator.
 ; normalize can be used to cancel its effect, because expt auto simplification can handle it correctly.
 ; when lazy-expt? = #f, some auto simplification of expt will be disabled, so that fractionze and together can work.
 (define (fractionize-number u)
@@ -3093,7 +3093,7 @@
                 "3.1415926535897932384626433832793")
   (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)/2")
   (check-equal? (verbose~ '(expt x -1/2)) "1/sqrt(x)")
-  ; maybe we should just output (1/2)^(-2) for unnormalize forms?
+  ; maybe we should just output (1/2)^(-2) for unnormalize forms?g
   (check-equal? (verbose~ '(expt 1/2 -2)) "1/(1/4)")
   ; --- MMA
   (use-mma-output-style)
