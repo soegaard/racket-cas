@@ -864,8 +864,8 @@
               [_ expr]))
 
 (module+ test 
-  (check-equal? (denominator (together (normalize '(+ (/ a b) (/ c d))))) '(* b d))
-  (check-equal? (numerator   (together (normalize '(+ (/ a b) (/ c d))))) '(+ (* a d) (* b c)))
+  (check-equal? (denominator (normalize '(+ (/ a b) (/ c d)))) '(* b d))
+  (check-equal? (numerator (normalize '(+ (/ a b) (/ c d)))) '(+ (* a d) (* b c)))
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x))) '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f))) '(* (expt (* b d f) -1) (+ (* a d f) (* b (+ (* c f) (* d e))))))
   (check-equal? (together (⊕ (⊘ 7 2) (⊘ 3 5))) '41/10)
@@ -878,6 +878,22 @@
   [(lazy-expt? #t)]
   (check-equal? (together-op2        (⊘ y 5) 1) '(* (expt 5 -1) (+ 5 y)))
   )
+  )
+
+; test cases adapted from https://reference.wolfram.com/language/ref/Together.html?view=all
+(module+ test 
+  (check-equal? (together (⊕ (⊘ 'a 'b) (⊘ 'c 'd))) '(* (expt (* b d) -1) (+ (* a d) (* b c))))
+  ; todo: '(* (expt (+ -1 (expt x 2)) -1) (+ x (expt x 2))) should be simplified as (* (expt (+ -1 x) -1) x)
+  (check-equal? (together (⊕ (⊘ (Expt x 2) (⊖ (Expt x 2) 1)) (⊘ x (⊖ (Expt x 2) 1)))) '(* (expt (+ -1 (expt x 2)) -1) (+ x (expt x 2))))
+  ; todo: should simplify numerator. expand -> '(+ 6 (* 22 x) (* 18 (expt x 2)) (* 4 (expt x 3))) -> further factorize 2
+  (check-equal? (together (⊕ (⊘ 1 x) (⊘ 1 (⊕ x 1)) (⊘ 1 (⊕ x 2))  (⊘ 1 (⊕ x 3))))
+                '(* (expt (* x (+ 1 x) (+ 2 x) (+ 3 x)) -1) (+ (* x (+ (* (+ 1 x) (+ 5 (* 2 x))) (* (+ 2 x) (+ 3 x)))) (* (+ 1 x) (+ 2 x) (+ 3 x)))))
+  ; todo: cancels common factors.
+  (check-equal? (together (⊕ (⊘ (Expt x 2) (⊖ x y)) (⊘ (⊖ (⊗ x y)) (⊖ x y))))
+                '(* (expt (+ x (* -1 y)) -1) (+ (expt x 2) (* -1 x y))))
+  ; Together[1 < 1/x + 1/(1 + x) < 2] not supported.
+  ; Apart acts as a partial inverse of Together:
+  ; Cancel only cancels common factors between numerators and denominators:
   )
 
 ; unary and binary minus 
