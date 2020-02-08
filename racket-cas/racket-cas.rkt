@@ -741,6 +741,7 @@
   (check-equal? (math-match (⊘ (⊗ y 3) x) [(Quotient u v) (list u v)]) '((* 3 y) x))
   )
 
+; Select terms with syntactically negative exponents.
 (define (denominator u)
   (when debugging? (displayln (list 'denominator u)))
   (let-values ([(n d)
@@ -756,6 +757,19 @@
   (check-equal? (denominator (Sqrt x)) 1)
   (check-equal? (denominator (⊘ 2 x)) x)
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
+
+
+; test cases adpated from https://reference.wolfram.com/language/ref/Numerator.html?view=all
+(module+ test
+  (check-equal? (denominator 2/3) 3)
+  (check-equal? (denominator (⊘ (⊗ (⊖ x 1) (⊖ x 2)) (Sqr(⊖ x 3)))) '(expt (+ -3 x) 2))
+  (check-equal? (denominator (⊕ 3/7 (⊗ 1/11 @i))) 77)
+  (check-equal? (denominator (⊘ (Sqr (⊖ x 1)) (⊗ (⊖ x 2) (⊖ x 3)))) '(* (+ -3 x) (+ -2 x)))
+  (check-equal? (denominator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
+                '(* (expt @e (* -1 (+ (* -1 b) (* -2 c)))) (expt y m))) ; should be simplified.
+  (check-equal? (denominator (⊘ (Expt 'a (⊖ 'b)) x)) '(* (expt a b) x))
+  (check-equal? (denominator (⊗ 2 (Expt x y) (Expt 'b 2))) 1)
+  )
 
 ; Select terms without syntactically negative exponents, as MMA does.
 (define (numerator u)
@@ -787,8 +801,6 @@
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
   )
 
-; todo, extract a common function for partition-positive/negative and partition-numerator/denominator
-; params: pred, inverse/negate function
 ; (positive negative)
 (define (partition-positive/negative us)
   (when debugging? (displayln (list 'partition-positive/negative us)))
