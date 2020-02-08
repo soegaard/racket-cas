@@ -743,19 +743,10 @@
 
 (define (denominator u)
   (when debugging? (displayln (list 'denominator u)))
-  (normalize (denominator-impl (together u))))
+  (let-values ([(n d)
+                (numerator/denominator u)])
+    d))
   
-(define (denominator-impl u)
-  (when debugging? (displayln (list 'denominator-impl u)))
-  (math-match u
-    [r (%denominator r)]
-    [x 1]
-    [(Expt u r) #:when (negative? r) (Expt u (- r))]
-    [(Expt u r) #:when (positive? r) 1]
-    [(⊗ u v) (⊗ (denominator-impl u) (denominator-impl v))]
-    [(⊕ u v) 1]
-    [_ 1]))
-
 (module+ test
   (check-equal? (denominator 2) 1)
   (check-equal? (denominator 0.5) 1)
@@ -768,18 +759,9 @@
 
 (define (numerator u)
   (when debugging? (displayln (list 'numerator u)))
-  (numerator-impl (together u)))
-  
-(define (numerator-impl u)
-  (when debugging? (displayln (list 'numerator-impl u)))
-  (math-match u
-    [r (%numerator r)]
-    [x x]
-    [(⊗ u v) (⊗ (numerator-impl u) (numerator-impl v))]
-    [(⊕ v w) u]
-    [(Expt v r) #:when (positive? r) u]
-    [(Expt v r) #:when (negative? r) 1]
-    [_ u]))
+  (let-values ([(n d)
+                (numerator/denominator u)])
+    n))
 
 (module+ test
   (check-equal? (numerator 2) 2)
@@ -849,7 +831,7 @@
     )
 
     (let-values ([(n d)
-               (numerator/denominator  (normalize '(+ (/ x y) 2/3)))])
+               (numerator/denominator (normalize '(+ (/ x y) 2/3)))])
     (check-equal? n '(+ (* 3 x) (* 2 y)))
     (check-equal? d '(* 3 y))
     )
