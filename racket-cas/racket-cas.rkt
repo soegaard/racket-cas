@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #t)
+(define debugging? #f)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 (define (verbose-debug!) (set! verbose-debugging? (not verbose-debugging?)) verbose-debugging?)
@@ -969,8 +969,8 @@
 (define (Exp: u) (Expt @e u))
 
 (define-match-expander Exp
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt @e u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Expt: @e u)] [_ (identifier? stx) #'Exp:])))
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt '@e u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Expt: '@e u)] [_ (identifier? stx) #'Exp:])))
 
 (define (Expt: u v)
   (when debugging? (displayln (list 'Expt: u v 'lazy-expt? (lazy-expt?))))
@@ -1012,6 +1012,7 @@
                [((Expt u v) w) #:when (not (lazy-expt?)) (Expt u (⊗ v w))]          ; ditto
                [(u (Log u v))  v]                         ; xxx - is this only true for u real?
                [(Exp (Ln v))   v]
+               [(@i n)         (ExpI (⊗ 1/2 n  @pi))]
                [(_ _)          `(expt ,u ,v)]))
 
 (define-match-expander Expt
@@ -1062,24 +1063,18 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
-(define (Polar-Unit: u)
-  (when debugging? (displayln (list 'Polar-Unit: u)))
-  (math-match u
-    [0     1]
-    [_     `(make-polar 1 ,u)]))
-
-(define-match-expander Polar-Unit
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'make-polar 1 u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Polar-Unit: u)] [_ (identifier? stx) #'Polar-Unit:])))
-
 (define (Magnitude u)
   (when debugging? (displayln (list 'Magnitude u)))
-  (if (real? u) (abs u)
-  (Sqrt (⊕ (Sqr (real-part u)) (Sqr (imag-part u)))))
+  (math-match u
+              [r (Sqrt (⊕ (Sqr (real-part u)) (Sqr (imag-part u))))]
+              [@i 1]
+              [@e @e]
+              [_ (error "Missing case.")]
+              )
   )
 
-(define (Angle u)
-  (when debugging? (displayln (list 'Angle u)))
+(define (Angle-number u)
+  (when debugging? (displayln (list 'Angle-number u)))
   (let [(re (real-part u)) (im (imag-part u))]
   (when (= 0 u) error)
   (cond [(= im 0) (if (> re 0) 0 @pi)]
@@ -1087,13 +1082,30 @@
         [(< im 0) Acos (/ im re)]
   )))
 
+
+(define (Angle u)
+  (when debugging? (displayln (list 'Angle u)))
+  (math-match u
+              [r (Angle-number u)]
+              [@i (⊗ @pi 1/2)]
+              [@e @e]
+              [_ (error "Missing case.")]
+              )
+  )
+
+(define (ExpI θ)
+    (⊕ (Cos θ) (⊗ (Sin θ) @i))
+  )
+  
 (define (complex-expt-expand u)
   (when debugging? (displayln (list 'complex-expt-expand u)))
   (define cee complex-expt-expand)
   (math-match u
     ; principal value
-    [(Expt (Polar-Unit θ) s) #:when (real? s) (let [(new-θ (⊗ s θ))] (Polar-Unit new-θ))]
-    [(Expt r s)           #:when (real? s) (let [(ρ (Expt (Magnitude r) s)) (θ (⊗ s (Angle r)))] (⊗ ρ (Polar-Unit θ)))]
+    [(Exp u) #:when (not (equal? (coefficient u @i) 0))
+             (let [(θ (coefficient u @i))] (ExpI θ))]
+    [(Expt u v) #:when (and (not (equal? u @e)) (or (not (real? u)) (not (positive? u))))
+                (let [(ρ (Expt (Magnitude u) v)) (θ (⊗ v (Angle u)))] (cee (⊗ ρ (Exp (⊗ @i θ)))))] ; ρ θ can be complex.
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
                (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
                      [else                                       (cee (Expt cee-u cee-v))]))] ; May match special cases after inner expansions.
@@ -1102,24 +1114,10 @@
     [_ u]
     ))
 
-(define (polar-to-rect u)
-  (polar-to-rect-impl (complex-expt-expand u)))
-  
-(define (polar-to-rect-impl u)
-  (when debugging? (displayln (list 'polar-to-rect-impl u)))
-  (define ptr polar-to-rect-impl)
-  (math-match u
-    [(Polar-Unit θ) (let [(ptr-θ (ptr θ))] (⊕ (Cos ptr-θ) (⊗ (Sin ptr-θ) @i)))]
-    [(Expt u v)  (Expt (ptr u) (ptr v))]
-    [(⊗ u v)     (⊗ (ptr u) (ptr v))]
-    [(⊕ u v)     (⊕ (ptr u) (ptr v))]
-    [_ u]
-    )
-  )
-
 (module+ test
-  (check-equal? (polar-to-rect '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
-  (check-= (N (polar-to-rect '(expt -8 1/3))) 1.0+1.732i 0.0001)
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
+  (check-= (N (complex-expt-expand '(expt -8 1/3))) 1.0+1.732i 0.0001)
+  (check-equal? (complex-expt-expand (Expt @i @i)) '(expt @e (* -1/2 @pi)))
   )
 
 (define (Ln: u)
@@ -1599,7 +1597,6 @@
     [@pi pi]
     [@e  euler-e]
     [@i  imaginary-unit]
-    [(Polar-Unit r) (make-polar 1 r)]
     [(⊕ u v)     (M2 + ⊕ u v)]
     [(⊗ u v)     (M2 * ⊗ u v)]
     [(Expt u v)  (M2 expt Expt u v)]
@@ -1629,8 +1626,8 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (module+ test
-  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (make-polar 1 (* 1/3 @pi))))
-  (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
+  (check-= (N (complex-expt-expand '(expt -8 1/3))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
   (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
 
@@ -3176,7 +3173,7 @@
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
   (check-equal? (~ (normalize '(/ x (- 13/2 (expt y 15/7))))) "$\\frac{x}{\\frac{13}{2}-y^{{\\frac{15}{7}}}}$")
-  (check-equal? (~ (polar-to-rect (complex-expt-expand (⊗ (Sqrt -2) y @pi `a)))) "$\\sqrt{2}{i{π{ay}}}$")
+  (check-equal? (~ (complex-expt-expand (⊗ (Sqrt -2) y @pi `a))) "$\\sqrt{2}{i{π{ay}}}$")
   (check-equal? (~ '(paren -3)) "${\\left(-3\\right)}$")
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
