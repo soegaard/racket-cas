@@ -1004,7 +1004,8 @@
                [(α p)          (expt α p)]
                [(n α-) #:when (number? (Expt n (- α-)))
                        (Expt (Expt n (- α-)) -1)]
-               [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
+               [(r s) #:when (integer? (expt r s))
+                       (expt r s)]
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r s.0)        (expt r s.0)]
                [((⊗ u v) w) #:when (not (lazy-expt?))    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
@@ -1022,6 +1023,7 @@
   (check-equal? (Expt 2 3) 8)
   (check-equal? (Expt -1 2) 1)
   (check-equal? (Expt 4 -1/2) 1/2)
+  (check-equal? (Expt 8 1/3) 2.0)
   )
 
 ; move expt -1 to outermost layers.
@@ -1116,7 +1118,7 @@
   )
 
 (module+ test
-  (check-equal? (polar-to-rect '(expt -8 1/3)) '(* (expt 8 1/3) (+ 1/2 (* 1/2 (expt 3 1/2) @i)))) ; todo: handle (expt n alpha) when it can get exact result.
+  (check-equal? (polar-to-rect '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
   (check-= (N (polar-to-rect '(expt -8 1/3))) 1.0+1.732i 0.0001)
   )
 
@@ -1627,7 +1629,7 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (module+ test
-  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* (expt 8 1/3) (make-polar 1 (* 1/3 @pi))))
+  (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (make-polar 1 (* 1/3 @pi))))
   (check-= (N (polar-to-rect (complex-expt-expand '(expt -8 1/3)))) 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
   (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
