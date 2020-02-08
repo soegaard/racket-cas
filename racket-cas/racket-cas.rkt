@@ -757,6 +757,7 @@
   (check-equal? (denominator (⊘ 2 x)) x)
   (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
 
+; Select terms without syntactically negative exponents, as MMA does.
 (define (numerator u)
   (when debugging? (displayln (list 'numerator u)))
   (let-values ([(n d)
@@ -778,13 +779,9 @@
 (module+ test
   (check-equal? (numerator 2/3) 2)
   (check-equal? (numerator (⊘ (⊗ (⊖ x 1) (⊖ x 2)) (Sqr(⊖ x 3)))) '(* (+ -2 x) (+ -1 x)))
-  (check-equal? (numerator (numerator (⊕ 3/7 (⊗ 1/11 @i)))) '(+ 33 (* 7 @i)))
+  (check-equal? (numerator (⊕ 3/7 (⊗ 1/11 @i))) '(+ 33 (* 7 @i)))
   (check-equal? (numerator (⊘ (Sqr (⊖ x 1)) (⊗ (⊖ x 2) (⊖ x 3)))) '(expt (+ -1 x) 2))
-  ; todo: Select terms without syntactically negative exponents.
-  ; should be '(* (expt @e (+ a (* 3 d))) a (expt x n))
-  (check-equal?  (numerator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
-  '(* (expt @e (+ a (* -1 b) (* -2 c) (* 3 d))) a (expt x n)))
-  ; to be fixed. should be 1.
+  (check-equal? (numerator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd))))) '(* (expt @e (+ a (* 3 d))) a (expt x n)))
   (check-equal? (numerator (⊘ (Expt 'a (⊖ 'b)) x)) 1)
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
   )
@@ -796,7 +793,7 @@
   (when debugging? (displayln (list 'partition-positive/negative us)))
   (define-values (n d) (partition (negate terms-with-negative-coeff?) us))
   (define (reduce-lst us vs)
-    (values (normalize (apply ⊕ us)) (normalize (⊖ (apply ⊕ vs))))
+    (values (apply ⊕ us) (⊖ (apply ⊕ vs)))
     )
   (reduce-lst n d)
   )
@@ -817,39 +814,22 @@
     )
   )
 
-(define (inverse u)
-  (parameterize
-      [(lazy-expt? #f)]
-    (Expt u -1)
-    )
-  )
-
-; (numerator denominator)
-(define (partition-term-numerator/denominator us)
-  (when debugging? (displayln (list 'partition-term-numerator/denominator us)))
-  (define (denominator? s)
-    (math-match s
-                [(Expt u r-) #t]
-                [(Expt u v) #:when (terms-with-negative-coeff? v) #t] ; follow mma convention.
-                [_ #f])
-    )
-  (define-values (n d) (partition (negate denominator?) us))
-  (define (reduce-lst us vs)
-    (values (normalize (apply ⊗ us)) (normalize (inverse (apply ⊗ vs))))
-    )
-  (reduce-lst n d)
-  )
-
 (define (term-numerator/denominator s)
   (when debugging? (displayln (list 'term-numerator/denominator s)))
-  (term-numerator/denominator-impl (fractionize-number s)))
+  (term-numerator/denominator-impl (fractionize-number s))
+  (let-values ([(n d) (term-numerator/denominator-impl (fractionize-number s))])
+    (values (normalize n) (normalize d))) ; normalize cancels the effect of fractionize-number.
+  )
 
 ; Partition a product/terms into numerator and denominator
 (define (term-numerator/denominator-impl s)
   (when debugging? (displayln (list 'term-numerator/denominator-impl s)))
+  (define nd term-numerator/denominator-impl)
   (math-match s
-              [(Expt u r-) (values 1 (Expt u (- r-)))]
-              [(Prod us) (partition-term-numerator/denominator us)]
+              [(Expt u v) (let-values ([(p n) (positive/negative v)])
+                            (values (Expt u p) (Expt u n)))]
+              [(⊗ u v) (let-values ([(nu du) (nd u)] [(nv dv) (nd v)])
+                         (values (⊗ nu nv) (⊗ du dv)))]
               [_ (values s 1)]))
 
 (module+ test
@@ -870,7 +850,7 @@
 (module+ test
   (let-values ([(n d)
                (term-numerator/denominator (normalize '(+ (/ x y) 2/3)))])
-    (check-equal? n '(+ (* 2 (expt 3 -1)) (* x (expt y -1))))
+    (check-equal? n '(+ 2/3 (* x (expt y -1))))
     (check-equal? d 1)
     )
 
