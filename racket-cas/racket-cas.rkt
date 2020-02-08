@@ -783,10 +783,9 @@
   ; todo: Select terms without syntactically negative exponents.
   ; should be '(* (expt @e (+ a (* 3 d))) a (expt x n))
   (check-equal?  (numerator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
-  '(* (expt @e (+ a (* -1 b) (* -2 c) (* 3 d))) a (expt x n) (expt y (* -1 m))))
+  '(* (expt @e (+ a (* -1 b) (* -2 c) (* 3 d))) a (expt x n)))
   ; to be fixed. should be 1.
-  (check-equal? (numerator (⊘ (Expt 'a (⊖ 'b)) x))
-                '(expt a (* -1 b)))
+  (check-equal? (numerator (⊘ (Expt 'a (⊖ 'b)) x)) 1)
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
   )
 
@@ -803,6 +802,7 @@
   (define (denominator? s)
     (math-match s
                 [(Expt u r-) #t]
+                [(Expt u v) #:when (terms-with-negative-coeff? v) #t] ; follow mma convention.
                 [_ #f])
     )
   (define-values (n d) (partition (negate denominator?) us))
