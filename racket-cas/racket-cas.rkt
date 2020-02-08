@@ -680,7 +680,7 @@
 (module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
                             (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
-; combine (Maxima) : a/c + b/c = (a+b)/c  ... same as collect (MMA) ?
+; combine (Maxima) : a/c + b/c = (a+b)/c
 (define (combine expr)
   (when debugging? (displayln (list 'combine expr)))
   (define c combine)
@@ -998,12 +998,12 @@
                ; [(0 v)          0]
                [(n 1/2)        (sqrt-natural n)]
                [(u -1) #:when (lazy-expt?)
-                      `(expt ,u ,-1)]
+                       `(expt ,u ,-1)]
                [(α β) #:when (and (not (integer? α)) (not (integer? β)))
-                  (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
+                      (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
                [(α p)          (expt α p)]
                [(n α-) #:when (number? (Expt n (- α-)))
-                               (Expt (Expt n (- α-)) -1)]
+                       (Expt (Expt n (- α-)) -1)]
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
                [(r s.0)        (expt r s.0)]
@@ -1344,8 +1344,6 @@
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/3 @pi)]
     [u #:when (terms-with-negative-coeff? u) (⊖ (Asin (⊖ u)))] ; odd function
     [r.0 (asin r.0)]
-    ; todo
-    ;[(Sin u) -> clamp u to [-pi/2, pi/2]
     [_ `(asin ,u)]))
 
 (define-match-expander Asin
@@ -1362,8 +1360,6 @@
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)]
     [u #:when (terms-with-negative-coeff? u) (⊖ @pi (Acos (⊖ u)))]
     [r.0 (acos r.0)]
-    ; todo
-    ;[(Cos u) -> clamp u to [0, pi]
     [_ `(acos ,u)]))
 
 (define-match-expander Acos
