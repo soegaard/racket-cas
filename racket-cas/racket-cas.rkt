@@ -2759,12 +2759,12 @@
              
     (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]
                  #:exponent-base? [exponent-base? #f]) ; wrap if (locally) necessary
-      (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
+      (when debugging? (displayln (list 'par u 'orig original? 'wrap wrap 'exponent-base exponent-base?)))
       (math-match u
         [(list 'red   u) (~red  (par u))]           ; red color
         [(list 'blue  u) (~blue (par u))]           ; blue color
         [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
-        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap (~frac α))] ; XXX
+        [α    #:when (and (or wrap-fractions? (equal? wrap quotient-sub)) (not (integer? α))) (wrap (~frac α))] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -2902,19 +2902,12 @@
       [(Quotient u v) #:when (and  (output-use-quotients?) (not (rational? v)))
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
-      [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par u #:use quotient-sub))]
-      [(Expt u p)     #:when (negative? p)
-                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
       [(Expt u α)     #:when (and (output-root?) (= (%numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
                       ((output-format-root) u (/ 1 α))] ; only used, if (output-format-root) returns non-#f 
       [(Expt u α)     #:when (= (%numerator α) -1) ; -1/p
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub #:exponent-base? #t))]
-      [(Expt u p)     #:when (negative? p)
-                      (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
+      ; The ⊘ pattern will match even when u=1. Quotient and ⊘ will rewrite unnormalized u v.
       [(⊘ u v)       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       
@@ -3099,6 +3092,9 @@
   (check-equal? (parameterize ([bf-precision 100]) (verbose~ pi.bf))
                 "3.1415926535897932384626433832793")
   (check-equal? (verbose~ (Cos (⊗ 1/6 @pi))) "sqrt(3)/2")
+  (check-equal? (verbose~ '(expt x -1/2)) "1/sqrt(x)")
+  ; maybe we should just output (1/2)^(-2) for unnormalize forms?
+  (check-equal? (verbose~ '(expt 1/2 -2)) "1/(1/4)")
   ; --- MMA
   (use-mma-output-style)
   (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
