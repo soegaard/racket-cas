@@ -1107,7 +1107,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
-(define (complex-magnitude u)
+(define (Magnitude-number u)
   (let-values ([(r i) (real/imag u)])
     (Sqrt (⊕ (Sqr r) (Sqr i))))
   )
@@ -1129,14 +1129,14 @@
               [@i 1]
               [@e @e]
               [u #:when (Number? u)
-                 (complex-magnitude u)]
+                 (Magnitude-number u)]
               [_ (error "Missing case.")]
               )
   )
 
 (define (Angle-number u)
   (when debugging? (displayln (list 'Angle-number u)))
-  (let [(re (real-part u)) (im (imag-part u))]
+  (let-values ([(re im) (real/imag u)])
   (when (= 0 u) error)
   (cond [(= im 0) (if (> re 0) 0 @pi)]
         [(> im 0) Asin (/ re im)]
@@ -1147,9 +1147,10 @@
 (define (Angle u)
   (when debugging? (displayln (list 'Angle u)))
   (math-match u
-              [r (Angle-number u)]
               [@i (⊗ @pi 1/2)]
               [@e 0]
+              [u #:when (Number? u)
+                 (Angle-number u)]
               [_ (error "Missing case.")]
               )
   )
