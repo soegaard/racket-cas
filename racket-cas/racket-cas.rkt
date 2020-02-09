@@ -100,6 +100,29 @@
   (check-equal? (match '@n [(Integer x) x]) '@n)
   (check-equal? (match '@foo [(Integer x) x] [_ 'foo]) 'foo))
 
+; expr tha can be evaluated to a real number.
+(define-predicate-matcher Real: Real?)
+
+(module+ test 
+  (check-equal? (match (Sin 41.3) [(Real: x) x]) (Sin 41.3))
+  (check-equal? (match @e [(Real: x) x]) @e)
+  (check-equal? (match (Ln @pi) [(Real: x) x]) (Ln @pi))
+  (check-equal? (match (Ln @i)  [(Real: x) x] [_ 'unmatched]) 'unmatched)
+  (check-equal? (match 1+i [(Real: x) x] [_ 'unmatched]) 'unmatched)
+  )
+
+; expr tha can be evaluated to a number.
+(define-predicate-matcher Number: Number?)
+
+(module+ test 
+  (check-equal? (match (Sin 41.3) [(Number: x) x]) (Sin 41.3))
+  (check-equal? (match @e [(Number: x) x]) @e)
+  (check-equal? (match (Ln @pi) [(Number: x) x]) (Ln @pi))
+  (check-equal? (match (Ln @i)  [(Number: x) x] [_ 'unmatched]) (Ln @i))
+  (check-equal? (match 1+i [(Number: x) x] [_ 'unmatched]) 1+i)
+  (check-equal? (match x [(Number: y) y] [_ 'unmatched]) 'unmatched)
+  )
+
 ;; The pattern ⊕ matches various sums
 ;;  (⊕ x y) matches (+ a b)       and binds x->a, y->b
 ;;  (⊕ x y) matches (+ a b c ...) and binds x->a, y->(+ b c ...)
@@ -610,7 +633,7 @@
 
 (define (expand-all u)
   ; expand products and powers with positive integer exponents, do recurse
-  (when debugging? (displayln (list 'expand-all u)))
+  (when verbose-debugging? (displayln (list 'expand-all u)))
   (define e expand-all)
   (define d distribute)
   (match u
@@ -804,43 +827,6 @@
                 '(* (expt @e (+ a (* 3 d))) a (expt x n)))
   (check-equal? (numerator (⊘ (Expt 'a (⊖ 'b)) x)) 1)
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
-  )
-
-(define (normalize-number r)
-  (⊕ (real-part r) (⊗ (imag-part r) @i))
-  )
-
-; Partition a Sum into real and imag
-; All numbers must have been normalized, i.e. 1+2i -> (+ 1 (* 2 @i))
-(define (real/imag s)
-  (when debugging? (displayln (list 'real/imag s)))
-   (let*
-      ([imag (coefficient s @i 1)] ; optimize this by using other than coefficient.
-       [real (expand (⊖ s (⊗ imag @i)))]
-       )
-    (values real imag)
-    )
-  )
-
-(module+ test
-  (let-values ([(r i)
-                (real/imag (normalize '(+ (Exp 5) (* -2 @i) z 2/3)))])
-    (check-equal? r '(+ 2/3 z (Exp 5)))
-    (check-equal? i -2)
-    )
-  (let-values ([(r i)
-                (real/imag -1)])
-    (check-equal? r -1)
-    (check-equal? i 0))
-  (let-values ([(r i)
-                (real/imag (normalize '(+ (* -2 @i) (* z 1+i @i))))])
-    (check-equal? r '(* -1 z))
-    (check-equal? i '(+ -2 z))
-    )
-  (let-values ([(r i)
-                (real/imag (normalize '(* 1+i @i)))])
-    (check-equal? r -1)
-    (check-equal? i 1))
   )
 
 ; (positive negative)
@@ -1059,6 +1045,11 @@
                [(u (Log u v))  v]                         ; xxx - is this only true for u real?
                [(@e (Ln v))   v]
                [(@i n)         (ExpI (⊗ 1/2 n  @pi))]
+               [(r s) #:when (or (not (real? r)) (not (real? s)))
+                      (complex-expt-expand (Expt (normalize-number r) (normalize-number s)))]
+               ; Fixme, infinite recursions.
+               ; [((Complex a b) (Complex c d)) #:when (or (not (equal? b 0)) (not (equal? d 0)))
+               ;                                (complex-expt-expand `(expt ,u ,v))]
                [(_ _)          `(expt ,u ,v)]))
 
 (define-match-expander Expt
@@ -1071,7 +1062,12 @@
   (check-equal? (Expt -1 2) 1)
   (check-equal? (Expt 4 -1/2) 1/2)
   (check-equal? (Expt 8 1/3) 2.0)
-  (check-equal? (Expt 1+i 1+i) '(expt 1+1i 1+1i))
+  (check-equal? (Expt 1+i 1+i)
+                '(*
+                  (expt @e (* -1/4 @pi))
+                  (+ 1 @i)
+                  (+ (* @i (sin (ln (expt 2 1/2)))) (cos (ln (expt 2 1/2)))))
+                )
   (check-equal? (Exp (Ln 3)) 3)
   )
 
@@ -1111,14 +1107,62 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
-(define (Magnitude-number u)
-  (let-values ([(r i) (real/imag u)])
-    (Sqrt (⊕ (Sqr r) (Sqr i))))
+
+(define (normalize-number r)
+  (⊕ (real-part r) (⊗ (imag-part r) @i))
+  )
+
+; Partition a Sum into real and imag
+; All numbers must have been normalized, i.e. 1+2i -> (+ 1 (* 2 @i))
+(define (real/imag s)
+  (when debugging? (displayln (list 'real/imag s)))
+   (let*
+      ([imag (coefficient s @i 1)] ; optimize this by using other than coefficient.
+       [real (expand (⊖ s (⊗ imag @i)))] ; or (coefficient s @i 0), which is better?
+       )
+    (values real imag)
+    )
+  )
+
+(module+ test
+  (let-values ([(r i)
+                (real/imag (normalize '(+ (Exp 5) (* -2 @i) z 2/3)))])
+    (check-equal? r '(+ 2/3 z (Exp 5)))
+    (check-equal? i -2)
+    )
+  (let-values ([(r i)
+                (real/imag -1)])
+    (check-equal? r -1)
+    (check-equal? i 0))
+  (let-values ([(r i)
+                (real/imag (normalize '(+ (* -2 @i) (* z 1+i @i))))])
+    (check-equal? r '(* -1 z))
+    (check-equal? i '(+ -2 z))
+    )
+  (let-values ([(r i)
+                (real/imag (normalize '(* 1+i @i)))])
+    (check-equal? r -1)
+    (check-equal? i 1))
+  )
+
+(define (Complex: u v)
+  (⊕ u (⊗ v @i))
+  ) 
+
+(define-match-expander Complex
+  ; Note: This matches everything and writes it as a complex, even when real or imag equals to 0.
+  (λ (stx) (syntax-parse stx [(_ u v) #'(app real/imag u v)]))
+  (λ (stx) (syntax-parse stx [(_ u v) #'(Complex: u v)] [_ (identifier? stx) #'Complex:]))
+  )
+
+(module+ test
+  (check-equal? (math-match 2/3 [(Complex u v) (list u v)]) '(2/3 0))
+  (check-equal? (math-match '(+ 1 (* @i (ln @i)) (sin (* 1/5 @pi))) [(Complex u v) (list u v)]) '((+ 1 (sin (* 1/5 @pi))) (ln @i)))
+  (check-equal? (math-match '(+ @i (ln @i)) [(Complex u v) (list u v)]) '((ln @i) 1))
   )
 
 (define (Number? u)
-  (let-values ([(r i) (real/imag u)])
-    (and (Real? r) (Real? i)))
+  (number? (N u))
   )
 
 (define (Non-Real-Number? u)
@@ -1137,29 +1181,33 @@
   (real? (N u))
   )
 
+(define (Magnitude-number re im)
+    (Sqrt (⊕ (Sqr re) (Sqr im)))
+  )
+
 (define (Magnitude u)
   (when debugging? (displayln (list 'Magnitude u)))
   (math-match u
               [@i 1]
               [@e @e]
-              [u #:when (Number? u)
-                 (Magnitude-number u)]
+              [(Complex (Real: u-re) (Real: u-im))
+                 (Magnitude-number u-re u-im)]
               [_ (error "Missing case.")]
               )
   )
 
-(define (Angle-number u)
-  (when debugging? (displayln (list 'Angle-number u)))
-  (when (equal? 0 u) (error "Angle undefined for 0"))
-  (let-values ([(re im) (real/imag u)])
-    (let ([mag (Sqrt (⊕ (Sqr re) (Sqr im)))])
-  (cond [(= im 0) (if (> re 0) 0 @pi)]
-        [(> im 0) (Asin (⊘ re mag))]
-        [(< im 0) (Acos (⊘ im mag))]
-  ))))
+(define (Angle-number re im)
+  (when debugging? (displayln (list 'Angle-number re im)))
+  (when (and (equal? 0 re) (equal? 0 im)) (error "Angle undefined for 0"))
+  (let ([mag (Sqrt (⊕ (Sqr re) (Sqr im)))])
+    (cond [(= im 0) (if (> re 0) 0 @pi)]
+          [(> im 0) (Acos (⊘ re mag))]
+          [(< im 0) (Asin (⊘ im mag))]
+  )))
 
 (module+ test
-  (check-equal? (Angle-number '(+ 2 @i)) '(asin (* 2 (expt 5 -1/2))))
+  (check-equal? (Angle-number 2 1) '(acos (* 2 (expt 5 -1/2))))
+  (check-equal? (Angle-number 0 1) '(* 1/2 @pi))
   )
 
 (define (Angle u)
@@ -1167,8 +1215,8 @@
   (math-match u
               [@i (⊗ @pi 1/2)]
               [@e 0]
-              [u #:when (Number? u)
-                 (Angle-number u)]
+              [(Complex (Real: u-re) (Real: u-im))
+                 (Angle-number u-re u-im)]
               [_ (error "Missing case.")]
               )
   )
@@ -1187,14 +1235,10 @@
   (math-match u
     ; principal value
     [(Expt r+ s) u] ; stop for real exponents.
-    ; todo, define an expander Rect(real, imag)
-    [(Exp    v) #:when (Imag-Number? v)
-                (let ([im (⊗ v -1 @i)]) ; only works for Imag-Number.
-                  (ExpI im))]
-    [(Expt u v) #:when (and (Number? u) (Non-Real-Number? v))
-                (let-values ([(re im) (real/imag v)])
-                  (cee (⊗ (Expt u re) (cee (Exp (⊗ im @i (Ln u)))))))]
-    [(Expt u v) #:when (and (Number? u) (Real? v))
+    [(Exp (Complex 0 (Real: v-im))) (ExpI v-im)]
+    [(Expt (Number: u) (Complex (Real: v-re) (Real: v-im))) #:when (not (equal? 0 v-im))
+                  (cee (⊗ (Expt u v-re) (cee (Exp (⊗ v-im @i (Ln u))))))]
+    [(Expt (Number: u) (Real: v))
                 (let [(ρ (Expt (Magnitude u) v)) (θ (⊗ v (Angle u)))] (⊗ ρ (cee (Exp (⊗ θ @i)))))]
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
                (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
@@ -1202,7 +1246,8 @@
     [(⊗ u v)                      (⊗ (cee u) (cee v))]
     [(⊕ u v)                      (⊕ (cee u) (cee v))]
     [_ u]
-    ))
+    )
+  )
 
 (module+ test
   (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
@@ -1223,6 +1268,7 @@
                   )
   (check-= (N (complex-expt-expand (Expt 1+i 1+i))) (expt 1+i 1+i) 0.0001)
   (check-= (N (complex-expt-expand (Expt 1+i 1-i))) (expt 1+i 1-i) 0.0001)
+  (check-= (N (complex-expt-expand (Expt 1+i '(+ 1 @i)))) (expt 1+i 1+i) 0.0001)
   )
 
 (define (Ln: u)
@@ -1232,7 +1278,8 @@
     ; [0  +nan.0] ; TODO: error?
     [r. #:when (%positive? r.)  (%ln r.)]
     [@e  1]
-    [u #:when (Non-Real-Number? u) (⊕ (Ln (Magnitude u)) (⊗ @i (Angle u)))]
+    [(Complex (Real: v-re) (Real: v-im)) #:when (not (equal? 0 v-im))
+                   (⊕ (Ln (Magnitude-number v-re v-im)) (⊗ @i (Angle-number v-re v-im)))]
     [(Expt @e v) v]
     [(⊗ u v)  (⊕ (Ln: u) (Ln: v))]
     [_ `(ln ,u)]))
