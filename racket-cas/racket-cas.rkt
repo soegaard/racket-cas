@@ -1004,6 +1004,10 @@
     [(list u v) (⊕ u (⊗ -1 v))]
     [_ (error)]))
 
+; todo: define an expander (Pos-Neg: pos, neg-abs) for Sum
+;                          (Neg: neg-abs) for Prod/term
+;                          seperate name or mixed as ⊖. (⊖ u) (⊖ u v)
+
 ;; The pattern Exp matches the natural exponential function
 ;;  (Exp u) matches (expt @e a) and binds u->a
 ;; The symbol @e is symbolic representation of Euler's constant.
@@ -1183,6 +1187,7 @@
   (math-match u
     ; principal value
     [(Expt r+ s) u] ; stop for real exponents.
+    ; todo, define an expander Rect(real, imag)
     [(Exp    v) #:when (Imag-Number? v)
                 (let ([im (⊗ v -1 @i)]) ; only works for Imag-Number.
                   (ExpI im))]
