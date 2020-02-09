@@ -1117,11 +1117,21 @@
     (and (Real? r) (Real? i)))
   )
 
+(define (Non-Real-Number? u)
+  (let-values ([(r i) (real/imag u)])
+    (and (Real? r) (Real? i) (not (equal? 0 i)))
+  )
+  )
+
+(define (Imag-Number? u)
+  (let-values ([(r i) (real/imag u)])
+    (and (equal? 0 r) (Real? i) (not (equal? 0 i)))
+  )
+  )
+
 (define (Real? u)
-  (case u
-    [(@e @pi) #t]
-    [else (real? u)]
-    ))
+  (real? (N u))
+  )
 
 (define (Magnitude u)
   (when debugging? (displayln (list 'Magnitude u)))
@@ -1138,11 +1148,15 @@
   (when debugging? (displayln (list 'Angle-number u)))
   (when (equal? 0 u) (error "Angle undefined for 0"))
   (let-values ([(re im) (real/imag u)])
+    (let ([mag (Sqrt (⊕ (Sqr re) (Sqr im)))])
   (cond [(= im 0) (if (> re 0) 0 @pi)]
-        [(> im 0) Asin (/ re im)]
-        [(< im 0) Acos (/ im re)]
-  )))
+        [(> im 0) (Asin (⊘ re mag))]
+        [(< im 0) (Acos (⊘ im mag))]
+  ))))
 
+(module+ test
+  (check-equal? (Angle-number '(+ 2 @i)) '(asin (* 2 (expt 5 -1/2))))
+  )
 
 (define (Angle u)
   (when debugging? (displayln (list 'Angle u)))
@@ -1168,15 +1182,15 @@
   (define cee complex-expt-expand-impl)
   (math-match u
     ; principal value
-    [(Exp u) #:when (not (equal? (coefficient u @i) 0))
-             (let [(θ (coefficient u @i))] (ExpI θ))]
-    [(Expt u r) #:when (not (real? r)) (⊗ (cee (Expt u (real-part r))) (cee (Expt u (⊗ (imag-part r) @i))))]
-    ; todo handle u with (+ (* a @i) b)
-    ; similar to positive/negative, but with coefficient @i, not -1
-    [(Expt r u) #:when (not (equal? (coefficient u @i) 0))
-                (Expt (ExpI (coefficient u @i)) (Ln r))]
-    [(Expt u v) #:when (and (not (equal? u @e)) (or (not (real? u)) (not (positive? u))))
-                (let [(ρ (Expt (Magnitude u) v)) (θ (⊗ v (Angle u)))] (cee (⊗ ρ (Exp (⊗ @i θ)))))] ; ρ θ can be complex.
+    [(Expt r+ s) u] ; stop for real exponents.
+    [(Exp    v) #:when (Imag-Number? v)
+                (let ([im (⊗ v -1 @i)]) ; only works for Imag-Number.
+                  (ExpI im))]
+    [(Expt u v) #:when (and (Number? u) (Non-Real-Number? v))
+                (let-values ([(re im) (real/imag v)])
+                  (cee (⊗ (Expt u re) (cee (Exp (⊗ im @i (Ln u)))))))]
+    [(Expt u v) #:when (and (Number? u) (Real? v))
+                (let [(ρ (Expt (Magnitude u) v)) (θ (⊗ v (Angle u)))] (⊗ ρ (cee (Exp (⊗ θ @i)))))]
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
                (cond [(and (equal? u cee-u) (equal? v cee-v))    (Expt  u  v)]     ; Trival case
                      [else                                       (cee (Expt cee-u cee-v))]))] ; May match special cases after inner expansions.
@@ -1189,7 +1203,21 @@
   (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
   (check-= (N (complex-expt-expand '(expt -8 1/3))) 1.0+1.732i 0.0001)
   (check-equal? (complex-expt-expand (Expt @i @i)) '(expt @e (* -1/2 @pi)))
-  (check-equal? (complex-expt-expand (Expt 1+i 1+i)) '(* (expt (+ (* @i (sin 1/2)) (cos 1/2)) (ln 2)) (+ (* @i (sin 1)) (cos 1))))
+  (check-equal? (complex-expt-expand (Expt 1+i 1+i))
+                '(*
+                  (expt @e (* -1/4 @pi))
+                  (+ 1 @i)
+                  (+ (* @i (sin (ln (expt 2 1/2)))) (cos (ln (expt 2 1/2)))))
+                  )
+  (check-equal? (complex-expt-expand (Exp '(* @i @pi))) -1)
+  (check-equal? (complex-expt-expand (Expt 1+i 1-i))
+                '(*
+                  (expt @e (* 1/4 @pi))
+                  (+ 1 @i)
+                  (+ (* -1 @i (sin (ln (expt 2 1/2)))) (cos (ln (expt 2 1/2)))))
+                  )
+  (check-= (N (complex-expt-expand (Expt 1+i 1+i))) (expt 1+i 1+i) 0.0001)
+  (check-= (N (complex-expt-expand (Expt 1+i 1-i))) (expt 1+i 1-i) 0.0001)
   )
 
 (define (Ln: u)
@@ -1198,8 +1226,8 @@
     [1  0]
     ; [0  +nan.0] ; TODO: error?
     [r. #:when (%positive? r.)  (%ln r.)]
-    [r  #:when (not (real? r)) (⊕ (Ln (Magnitude r)) (⊗ @i (Angle r)))]
     [@e  1]
+    [u #:when (Non-Real-Number? u) (⊕ (Ln (Magnitude u)) (⊗ @i (Angle u)))]
     [(Expt @e v) v]
     [(⊗ u v)  (⊕ (Ln: u) (Ln: v))]
     [_ `(ln ,u)]))
@@ -1416,6 +1444,8 @@
     [1  (⊗ 1/2 @pi)]
     [1/2 (⊗ 1/6 @pi)]
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/3 @pi)]
+    [(Expt 2 -1/2) (⊗ 1/4 @pi)]
+    [(list '* 1/2 (list 'expt 2 1/2)) (⊗ 1/4 @pi)]
     [u #:when (terms-with-negative-coeff? u) (⊖ (Asin (⊖ u)))] ; odd function
     [r.0 (asin r.0)]
     [_ `(asin ,u)]))
@@ -1432,6 +1462,8 @@
     [1 0]
     [1/2 (⊗ 1/3 @pi)]
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)]
+    [(Expt 2 -1/2) (⊗ 1/4 @pi)]
+    [(list '* 1/2 (list 'expt 2 1/2)) (⊗ 1/4 @pi)]
     [u #:when (terms-with-negative-coeff? u) (⊖ @pi (Acos (⊖ u)))]
     [r.0 (acos r.0)]
     [_ `(acos ,u)]))
