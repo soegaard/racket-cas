@@ -814,8 +814,8 @@
 ; All numbers must have been normalized, i.e. 1+2i -> (+ 1 (* 2 @i))
 (define (real/imag s)
   (when debugging? (displayln (list 'real/imag s)))
-  (let*
-      ([imag (coefficient s @i 1)]
+   (let*
+      ([imag (coefficient s @i 1)] ; optimize this by using other than coefficient.
        [real (expand (⊖ s (⊗ imag @i)))]
        )
     (values real imag)
@@ -1107,12 +1107,29 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
+(define (complex-magnitude u)
+  (let-values ([(r i) (real/imag u)])
+    (Sqrt (⊕ (Sqr r) (Sqr i))))
+  )
+
+(define (Number? u)
+  (let-values ([(r i) (real/imag u)])
+    (and (Real? r) (Real? i)))
+  )
+
+(define (Real? u)
+  (case u
+    [(@e @pi) #t]
+    [else (real? u)]
+    ))
+
 (define (Magnitude u)
   (when debugging? (displayln (list 'Magnitude u)))
   (math-match u
-              [r (Sqrt (⊕ (Sqr (real-part u)) (Sqr (imag-part u))))]
               [@i 1]
               [@e @e]
+              [u #:when (Number? u)
+                 (complex-magnitude u)]
               [_ (error "Missing case.")]
               )
   )
@@ -1143,7 +1160,11 @@
   
 (define (complex-expt-expand u)
   (when debugging? (displayln (list 'complex-expt-expand u)))
-  (define cee complex-expt-expand)
+  (complex-expt-expand-impl (normalize u)))
+  
+(define (complex-expt-expand-impl u)
+  (when debugging? (displayln (list 'complex-expt-expand-impl u)))
+  (define cee complex-expt-expand-impl)
   (math-match u
     ; principal value
     [(Exp u) #:when (not (equal? (coefficient u @i) 0))
