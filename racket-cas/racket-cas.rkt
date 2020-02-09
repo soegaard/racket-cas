@@ -1136,8 +1136,8 @@
 
 (define (Angle-number u)
   (when debugging? (displayln (list 'Angle-number u)))
+  (when (equal? 0 u) (error "Angle undefined for 0"))
   (let-values ([(re im) (real/imag u)])
-  (when (= 0 u) error)
   (cond [(= im 0) (if (> re 0) 0 @pi)]
         [(> im 0) Asin (/ re im)]
         [(< im 0) Acos (/ im re)]
@@ -1189,7 +1189,7 @@
   (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
   (check-= (N (complex-expt-expand '(expt -8 1/3))) 1.0+1.732i 0.0001)
   (check-equal? (complex-expt-expand (Expt @i @i)) '(expt @e (* -1/2 @pi)))
-  (check-equal? (complex-expt-expand (Expt 1+i 1+i)) '(* 1+1i (expt (+ (* @i (sin 1)) (cos 1)) (+ @i (ln (expt 2 1/2))))))
+  (check-equal? (complex-expt-expand (Expt 1+i 1+i)) '(* (expt (+ (* @i (sin 1/2)) (cos 1/2)) (ln 2)) (+ (* @i (sin 1)) (cos 1))))
   )
 
 (define (Ln: u)
