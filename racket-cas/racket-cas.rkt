@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #f)
+(define debugging? #t)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 (define (verbose-debug!) (set! verbose-debugging? (not verbose-debugging?)) verbose-debugging?)
@@ -234,7 +234,13 @@
   ; (displayln (list '<<= s1 s2)) ; uncomment in case of infinite loop
   (math-match* (s1 s2)
     ; Case: at least one number
-    [(r s) (< r s)]
+    [(r s) (or
+            (< (real-part r) (real-part s))
+            (and (= (real-part r) (real-part s))
+                 (< (imag-part r) (imag-part s))
+                 )
+            )
+           ]
     [(r _) #t]
     [(u r) #f]
     ; Case: at least one big float
@@ -999,7 +1005,7 @@
                [(n 1/2)        (sqrt-natural n)]
                [(u -1) #:when (lazy-expt?)
                        `(expt ,u ,-1)]
-               [(α β) #:when (and (not (integer? α)) (not (integer? β)))
+               [(α β) #:when (and (real? α) (not (integer? α)) (not (integer? β)))
                       (let [(n (%numerator α)) (d (%denominator α))]  (⊗ (Expt n β) (Expt d (⊖ β))))]
                [(α p)          (expt α p)]
                [(n α-) #:when (number? (Expt n (- α-)))
@@ -1011,7 +1017,7 @@
                [((⊗ u v) w) #:when (not (lazy-expt?))    (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
                [((Expt u v) w) #:when (not (lazy-expt?)) (Expt u (⊗ v w))]          ; ditto
                [(u (Log u v))  v]                         ; xxx - is this only true for u real?
-               [(Exp (Ln v))   v]
+               [(@e (Ln v))   v]
                [(@i n)         (ExpI (⊗ 1/2 n  @pi))]
                [(_ _)          `(expt ,u ,v)]))
 
@@ -1025,6 +1031,8 @@
   (check-equal? (Expt -1 2) 1)
   (check-equal? (Expt 4 -1/2) 1/2)
   (check-equal? (Expt 8 1/3) 2.0)
+  (check-equal? (Expt 1+i 1+i) '(expt 1+1i 1+1i))
+  (check-equal? (Exp (Ln 3)) 3)
   )
 
 ; move expt -1 to outermost layers.
@@ -1088,7 +1096,7 @@
   (math-match u
               [r (Angle-number u)]
               [@i (⊗ @pi 1/2)]
-              [@e @e]
+              [@e 0]
               [_ (error "Missing case.")]
               )
   )
@@ -1104,6 +1112,10 @@
     ; principal value
     [(Exp u) #:when (not (equal? (coefficient u @i) 0))
              (let [(θ (coefficient u @i))] (ExpI θ))]
+    [(Expt u r) #:when (not (real? r)) (⊗ (cee (Expt u (real-part r))) (cee (Expt u (⊗ (imag-part r) @i))))]
+    ; todo handle u with (+ (* a @i) b)
+    [(Expt r u) #:when (not (equal? (coefficient u @i) 0))
+                (Expt (ExpI (coefficient u @i)) (Ln r))]
     [(Expt u v) #:when (and (not (equal? u @e)) (or (not (real? u)) (not (positive? u))))
                 (let [(ρ (Expt (Magnitude u) v)) (θ (⊗ v (Angle u)))] (cee (⊗ ρ (Exp (⊗ @i θ)))))] ; ρ θ can be complex.
     [(Expt u v) (let ([cee-u (cee u)] [cee-v (cee v)])
@@ -1118,13 +1130,16 @@
   (check-equal? (complex-expt-expand '(expt -8 1/3)) '(* 2.0 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
   (check-= (N (complex-expt-expand '(expt -8 1/3))) 1.0+1.732i 0.0001)
   (check-equal? (complex-expt-expand (Expt @i @i)) '(expt @e (* -1/2 @pi)))
+  (check-equal? (complex-expt-expand (Expt 1+i 1+i)) '(* 1+1i (expt (+ (* @i (sin 1)) (cos 1)) (+ @i (ln (expt 2 1/2))))))
   )
 
 (define (Ln: u)
+  (when debugging? (displayln (list 'Ln: u)))
   (math-match u
     [1  0]
     ; [0  +nan.0] ; TODO: error?
     [r. #:when (%positive? r.)  (%ln r.)]
+    [r  #:when (not (real? r)) (⊕ (Ln (Magnitude r)) (⊗ @i (Angle r)))]
     [@e  1]
     [(Expt @e v) v]
     [(⊗ u v)  (⊕ (Ln: u) (Ln: v))]
