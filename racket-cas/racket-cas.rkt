@@ -512,7 +512,7 @@
   (when debugging? (displayln (list 'normalize u)))
   (define n normalize)
   (math-match u
-    [r r]
+    [r (normalize-number r)]
     [r.bf r.bf]
     [#t #t]
     [#f #f]
@@ -712,7 +712,6 @@
     [(u -1) (⊖ u)]
     [(u v) (⊗ u (Expt v -1))]))
 
-; todo: remove the expander, since it does not always work as expected, for example (⊘ u v) fails to match (⊘ (⊗ y 3) x).
 (define-match-expander ⊘
   ; Note: This matches one kind of quotient, i.e., a prod with non-one denominator.
   ; use term-numerator/denominator so that (⊘ u v) can match '(* 3 (expt x -1) y)
@@ -805,6 +804,43 @@
                 '(* (expt @e (+ a (* 3 d))) a (expt x n)))
   (check-equal? (numerator (⊘ (Expt 'a (⊖ 'b)) x)) 1)
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
+  )
+
+(define (normalize-number r)
+  (⊕ (real-part r) (⊗ (imag-part r) @i))
+  )
+
+; Partition a Sum into real and imag
+; All numbers must have been normalized, i.e. 1+2i -> (+ 1 (* 2 @i))
+(define (real/imag s)
+  (when debugging? (displayln (list 'real/imag s)))
+  (let*
+      ([imag (coefficient s @i 1)]
+       [real (expand (⊖ s (⊗ imag @i)))]
+       )
+    (values real imag)
+    )
+  )
+
+(module+ test
+  (let-values ([(r i)
+                (real/imag (normalize '(+ (Exp 5) (* -2 @i) z 2/3)))])
+    (check-equal? r '(+ 2/3 z (Exp 5)))
+    (check-equal? i -2)
+    )
+  (let-values ([(r i)
+                (real/imag -1)])
+    (check-equal? r -1)
+    (check-equal? i 0))
+  (let-values ([(r i)
+                (real/imag (normalize '(+ (* -2 @i) (* z 1+i @i))))])
+    (check-equal? r '(* -1 z))
+    (check-equal? i '(+ -2 z))
+    )
+  (let-values ([(r i)
+                (real/imag (normalize '(* 1+i @i)))])
+    (check-equal? r -1)
+    (check-equal? i 1))
   )
 
 ; (positive negative)
@@ -1114,6 +1150,7 @@
              (let [(θ (coefficient u @i))] (ExpI θ))]
     [(Expt u r) #:when (not (real? r)) (⊗ (cee (Expt u (real-part r))) (cee (Expt u (⊗ (imag-part r) @i))))]
     ; todo handle u with (+ (* a @i) b)
+    ; similar to positive/negative, but with coefficient @i, not -1
     [(Expt r u) #:when (not (equal? (coefficient u @i) 0))
                 (Expt (ExpI (coefficient u @i)) (Ln r))]
     [(Expt u v) #:when (and (not (equal? u @e)) (or (not (real? u)) (not (positive? u))))
@@ -2085,7 +2122,7 @@
 (define-match-expander Greater
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '> u v)]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Greater: u v)] [_ (identifier? stx) #'Greater:])))
-
+ 
 (define-match-expander GreaterEqual
   (λ (stx) (syntax-parse stx [(_ u v) #'(list '>= u v)]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(GreaterEqual: u v)] [_ (identifier? stx) #'GreaterEqual:])))
