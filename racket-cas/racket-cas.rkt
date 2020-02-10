@@ -595,7 +595,33 @@
                 (⊘ (⊖ x) (⊕ (⊖ x y) (Exp x) (Sqr x) (⊕ 3))))
   (check-equal? (normalize '(bf 3)) (bf 3))
   (check-equal? (normalize '(f (- x y))) `(f ,(⊖ x y)))
-  (check-equal? (normalize '(log 3)) '(log 10 3)))
+  (check-equal? (normalize '(log 3)) '(log 10 3))
+  (check-equal? (normalize 1+i) '(+ 1 @i))
+  )
+
+;; from: https://blog.racket-lang.org/2012/08/dynamic-programming-versus-memoization.html
+(define (memoize f)
+  (when debugging? (displayln (list 'memoize f)))
+  (local ([define table (make-hash)])
+    (lambda args
+    (when debugging? (displayln (list 'memoized f args)))
+      ;; Look up the arguments.
+      ;; If they’re present, just give back the stored result.
+      ;; If they’re not present, calculate and store the result.
+      ;; Note that the calculation will not be expensive as long
+      ;; as f uses this memoized version for its recursive call,
+      ;; which is the natural way to write it!
+      ;; (But more memory will be used.)
+      (dict-ref! table args
+                 (lambda ()
+                   (apply f args))))))
+
+(define memoized-normalize (memoize normalize))
+(module+ test
+  (check-equal? (memoized-normalize '(f (- x y))) `(f ,(⊖ x y)))
+  (check-equal? (memoized-normalize '(log 3)) '(log 10 3))
+  (check-equal? (memoized-normalize 1+i) '(+ 1 @i))
+  )
 
 ; Compile turns an expression into a Racket function.
 (define (compile u [x 'x])
@@ -670,6 +696,12 @@
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
 
   (check-equal? (normalize '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
+  )
+
+(define memoized-expand (memoize expand))
+(module+ test
+  (check-equal? (memoized-expand '(* (expt (+ 1 x) 2) (sin 2))) 
+                '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
   )
 
 (define (logical-expand u)
@@ -859,7 +891,7 @@
   (when debugging? (displayln (list 'term-numerator/denominator s)))
   (term-numerator/denominator-impl (fractionize-number s))
   (let-values ([(n d) (term-numerator/denominator-impl (fractionize-number s))])
-    (values (normalize n) (normalize d))) ; normalize cancels the effect of fractionize-number.
+    (values (memoized-normalize n) (memoized-normalize d))) ; normalize cancels the effect of fractionize-number.
   )
 
 ; Partition a product/terms into numerator and denominator
@@ -1066,7 +1098,7 @@
                 '(*
                   (expt @e (* -1/4 @pi))
                   (+ 1 @i)
-                  (+ (* @i (sin (ln (expt 2 1/2)))) (cos (ln (expt 2 1/2)))))
+                  (+ (* @i (sin (* 1/2 (ln 2)))) (cos (* 1/2 (ln 2)))))
                 )
   (check-equal? (Exp (Ln 3)) 3)
   )
@@ -1117,8 +1149,9 @@
 (define (real/imag s)
   (when debugging? (displayln (list 'real/imag s)))
    (let*
-      ([imag (coefficient s @i 1)] ; optimize this by using other than coefficient.
-       [real (expand (⊖ s (⊗ imag @i)))] ; or (coefficient s @i 0), which is better?
+      ([expanded-s (memoized-expand s)]
+       [imag (memoized-coefficient expanded-s @i 1)] ; use memoized-coefficient, so that calling real/imag repeatedly is ok.
+       [real (memoized-coefficient expanded-s @i 0)]
        )
     (values real imag)
     )
@@ -1162,23 +1195,11 @@
   )
 
 (define (Number? u)
-  (number? (N u))
-  )
-
-(define (Non-Real-Number? u)
-  (let-values ([(r i) (real/imag u)])
-    (and (Real? r) (Real? i) (not (equal? 0 i)))
-  )
-  )
-
-(define (Imag-Number? u)
-  (let-values ([(r i) (real/imag u)])
-    (and (equal? 0 r) (Real? i) (not (equal? 0 i)))
-  )
+  (number? (memoized-N u))
   )
 
 (define (Real? u)
-  (real? (N u))
+  (real? (memoized-N u))
   )
 
 (define (Magnitude-number re im)
@@ -1227,7 +1248,7 @@
   
 (define (complex-expt-expand u)
   (when debugging? (displayln (list 'complex-expt-expand u)))
-  (complex-expt-expand-impl (normalize u)))
+  (complex-expt-expand-impl (memoized-normalize u)))
   
 (define (complex-expt-expand-impl u)
   (when debugging? (displayln (list 'complex-expt-expand-impl u)))
@@ -1257,15 +1278,15 @@
                 '(*
                   (expt @e (* -1/4 @pi))
                   (+ 1 @i)
-                  (+ (* @i (sin (ln (expt 2 1/2)))) (cos (ln (expt 2 1/2)))))
-                  )
+                  (+ (* @i (sin (* 1/2 (ln 2)))) (cos (* 1/2 (ln 2)))))
+                )
   (check-equal? (complex-expt-expand (Exp '(* @i @pi))) -1)
   (check-equal? (complex-expt-expand (Expt 1+i 1-i))
                 '(*
                   (expt @e (* 1/4 @pi))
                   (+ 1 @i)
-                  (+ (* -1 @i (sin (ln (expt 2 1/2)))) (cos (ln (expt 2 1/2)))))
-                  )
+                  (+ (* -1 @i (sin (* 1/2 (ln 2)))) (cos (* 1/2 (ln 2)))))
+                )
   (check-= (N (complex-expt-expand (Expt 1+i 1+i))) (expt 1+i 1+i) 0.0001)
   (check-= (N (complex-expt-expand (Expt 1+i 1-i))) (expt 1+i 1-i) 0.0001)
   (check-= (N (complex-expt-expand (Expt 1+i '(+ 1 @i)))) (expt 1+i 1+i) 0.0001)
@@ -1484,7 +1505,7 @@
   (when debugging? (displayln (list 'terms-with-negative-coeff? s)))
   (define (list-has-negative-element? s)
     (ormap negative-number? s))
-  (math-match (normalize s)
+  (math-match (memoized-normalize s)
               [r- #t]
               [(Prod u) (list-has-negative-element? u)]
               [_ #f]))
@@ -1743,6 +1764,7 @@
 (define imaginary-unit (sqrt -1))
 ; Given an expression without variables, N will evalutate the expression
 ; using Racket's standard mathematical operations.
+
 (define (N u)
   (when debugging? (displayln (list 'N u)))
   (define (M  f F u)   (math-match (N u) [r (f r)] [v (F v)]))
@@ -1789,6 +1811,11 @@
   (check-= (N (complex-expt-expand '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
   )
 
+(define memoized-N (memoize N))
+(module+ test
+  (check-equal? (memoized-N '(expt @i 3)) (expt (expt -1 1/2) 3))
+  )
+  
 (require math/bigfloat)
 (bf-precision 100)
 ; Given an expression without variables, N will evalutate the expression
@@ -1959,6 +1986,7 @@
 ; (coefficient u v n) find coefficient of v^n in u
 ; (coeffecient u v 0) returns the sum of all terms not of the form c*v^n, n>0
 (define (coefficient u v [n 1])
+  (when debugging? (displayln (list 'coefficient u v 'n n)))
   (define (c u)
     (math-match u
       [r                            (if (= n 0) r    0)]
@@ -1992,6 +2020,12 @@
     (check-equal? (coefficient (⊘ 3 x) x 1) 0)
     (check-equal? (coefficient (⊘ 3 x) x -1) 3)
     (check-equal? (coefficient (Sqrt x) x 0) (Sqrt x))))
+
+(define memoized-coefficient (memoize coefficient))
+(module+ test
+  (check-equal? (memoized-coefficient '(+ (* @i 3)) @i) 3)
+  (check-equal? (memoized-coefficient (normalize '(+ 1 x (sqr x) (sin x))) x 0) '(+ 1 (sin x)))
+ )
 
 ; (polynomial? u x)  is u a univariate polynomial in x ?
 (define (polynomial? u x)
