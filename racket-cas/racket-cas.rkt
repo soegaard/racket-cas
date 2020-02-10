@@ -100,7 +100,7 @@
   (check-equal? (match '@n [(Integer x) x]) '@n)
   (check-equal? (match '@foo [(Integer x) x] [_ 'foo]) 'foo))
 
-; expr tha can be evaluated to a real number.
+; expr that can be evaluated to a real number.
 (define-predicate-matcher Real: Real?)
 
 (module+ test 
@@ -111,7 +111,7 @@
   (check-equal? (match 1+i [(Real: x) x] [_ 'unmatched]) 'unmatched)
   )
 
-; expr tha can be evaluated to a number.
+; expr that can be evaluated to a number.
 (define-predicate-matcher Number: Number?)
 
 (module+ test 
@@ -787,15 +787,14 @@
   (⊘ u v))
 
 (define-match-expander Quotient
-  ; Note: This matches everything and writes it as a quotient, even when denominator equals to 1.
-  (λ (stx) (syntax-parse stx [(_ u v) #'(app numerator/denominator u v)]))
-
+  ; Note: This matches everything and writes it as a quotient, unless the denominator equals to 1.
+  (λ (stx) (syntax-parse stx [(_ u v) #'(app numerator/denominator u (? (λ(d)(not (equal? 1 d))) v))]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Quotient: u v)] [_ (identifier? stx) #'Quotient:])))
 
 (module+ test
   (check-equal? (math-match 2/3 [(Quotient u v) (list u v)]) '(2 3))
   (check-equal? (math-match (⊕ x 2/3) [(Quotient u v) (list u v)]) '((+ 2 (* 3 x)) 3))
-  (check-equal? (math-match '(* x 2.3) [(Quotient u v) 'matched] [_ 'unmatched]) 'matched)
+  (check-equal? (math-match '(* x 2.3) [(Quotient u v) 'matched] [_ 'unmatched]) 'unmatched)
   (check-equal? (math-match (⊘ x (⊗ 2 y z)) [(Quotient u v) (list u v)]) '(x (* 2 y z)))
   (check-equal? (math-match (⊘ x y) [(Quotient u v) (list u v)]) '(x y))
   (check-equal? (math-match (⊘ (⊗ y 3) x) [(Quotient u v) (list u v)]) '((* 3 y) x))
@@ -861,10 +860,30 @@
   (check-equal? (numerator (⊗ 2 (Expt x y) (Expt 'b 2))) '(* 2 (expt b 2) (expt x y)))
   )
 
+(require (submod "math-match.rkt" predicates))
+
+; only run this on normalize expressions.
+; #t will be returned for '(* -1 -2)
+(define (term-with-negative-coeff? s)
+  (when debugging? (displayln (list 'term-with-negative-coeff? s)))
+  (define (list-has-negative-element? s)
+    (ormap negative-number? s))
+  (math-match (memoized-normalize s)
+              [r- #t]
+              [(Prod u) (list-has-negative-element? u)]
+              [_ #f]))
+
+(define memoized-term-with-negative-coeff? (memoize term-with-negative-coeff?))
+(module+ test
+  (check-equal? (memoized-term-with-negative-coeff? '(* -2 x log 3)) #t)
+  (check-equal? (memoized-term-with-negative-coeff? 1+i) #f)
+  (check-equal? (memoized-term-with-negative-coeff? '(+ x -10)) #f)
+  )
+
 ; (positive negative)
 (define (partition-positive/negative us)
   (when debugging? (displayln (list 'partition-positive/negative us)))
-  (define-values (n d) (partition (negate terms-with-negative-coeff?) us))
+  (define-values (n d) (partition (negate memoized-term-with-negative-coeff?) us))
   (define (reduce-lst us vs)
     (values (apply ⊕ us) (⊖ (apply ⊕ vs)))
     )
@@ -875,7 +894,7 @@
 (define (positive/negative s)
   (when debugging? (displayln (list 'positive/negative s)))
   (math-match s
-              [u #:when (terms-with-negative-coeff? u) (values 0 (⊖ u))]
+              [(⊖ u) (values 0 u)]
               [(Sum us) (partition-positive/negative us)]
               [_ (values s 0)]))
 
@@ -889,7 +908,7 @@
 
 (define (term-numerator/denominator s)
   (when debugging? (displayln (list 'term-numerator/denominator s)))
-  (term-numerator/denominator-impl (fractionize-number s))
+  (term-numerator/denominator-impl (memoized-fractionize-number s))
   (let-values ([(n d) (term-numerator/denominator-impl (fractionize-number s))])
     (values (memoized-normalize n) (memoized-normalize d))) ; normalize cancels the effect of fractionize-number.
   )
@@ -899,8 +918,7 @@
   (when debugging? (displayln (list 'term-numerator/denominator-impl s)))
   (define nd term-numerator/denominator-impl)
   (math-match s
-              [(Expt u v) (let-values ([(p n) (positive/negative v)])
-                            (values (Expt u p) (Expt u n)))]
+              [(Expt u (⊖ vp vn)) (values (Expt u vp) (Expt u vn))]
               [(⊗ u v) (let-values ([(nu du) (nd u)] [(nv dv) (nd v)])
                          (values (⊗ nu nv) (⊗ du dv)))]
               [_ (values s 1)]))
@@ -1016,15 +1034,32 @@
   )
 
 ; unary and binary minus 
-(define (⊖ . us)
+(define (minus . us)
   (match us
     [(list u)   (⊗ -1 u)]
     [(list u v) (⊕ u (⊗ -1 v))]
     [_ (error)]))
 
-; todo: define an expander (Pos-Neg: pos, neg-abs) for Sum
-;                          (Neg: neg-abs) for Prod/term
-;                          seperate name or mixed as ⊖. (⊖ u) (⊖ u v)
+(define-match-expander ⊖
+  (λ (stx)
+    (syntax-parse stx
+      ; This matches terms with negative coeff.
+      [(_ u) #'(app minus (? (negate memoized-term-with-negative-coeff?) u))]
+      ; Note: This matches everything and writes it as a form of (subtrahend - minuend), unless the minuend equals to 0.
+      [(_ u v) #'(app positive/negative u (? (λ(n)(not (equal? 0 n))) v))]
+      )
+    )
+  (λ(stx) (syntax-parse stx [(_ u ...) #'(minus u ...)] [_ (identifier? stx) #'minus]))
+  )
+
+(module+ test
+  ; ⊖ u
+  (check-equal? (match -41.3 [(⊖ x) x]) 41.3)
+  (check-equal? (match '(* 41.3 x -2) [(⊖ x) x]) '(* -41.3 x -2))
+  ; ⊖ u v
+  (check-equal? (math-match -3 [(⊖ u v) (list u v)]) '(0 3))
+  (check-equal? (math-match '(+ @i (* x -3)) [(⊖ u v) (list u v)]) '(@i (* -1 x -3)))
+  )
 
 ;; The pattern Exp matches the natural exponential function
 ;;  (Exp u) matches (expt @e a) and binds u->a
@@ -1132,6 +1167,11 @@
   (check-equal? (normalize (fractionize-number '(+ 1/7 1/4 x))) '(+ 11/28 x))
   )
 
+(define memoized-fractionize-number (memoize fractionize-number))
+(module+ test
+  (check-equal? (memoized-fractionize-number '(+ 1/7 1/4 x)) '(+ (expt 4 -1) (expt 7 -1) x))
+  )
+  
 (define (Sqr: u)
   (Expt u 2))
 
@@ -1418,7 +1458,7 @@
     [(⊕ (⊗ p (Integer _) @pi) u) #:when (even? p) (Cos: u)]
     
     [(Acos u) u]    ; xxx only of -1<u<1
-    [u #:when (terms-with-negative-coeff? u) (Cos(⊖ u))] ; even function
+    [(⊖ u) (Cos u)] ; even function
     [_ `(cos ,u)]))
 
 (define-match-expander Cos
@@ -1475,7 +1515,7 @@
                       [sign   (if (> sign.0 0) 1 -1)])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
-    [u #:when (terms-with-negative-coeff? u) (⊖ (Sin (⊖ u)))] ; odd function
+    [(⊖ u) (⊖ (Sin u))] ; odd function
     [_ `(sin ,u)]))
 
 (define-match-expander Sin
@@ -1497,19 +1537,6 @@
   (check-equal? (Sin -3) (⊖ (Sin 3)))
   )
 
-(require (submod "math-match.rkt" predicates))
-
-; only run this on normalize expressions.
-; #t will be returned for '(* -1 -2)
-(define (terms-with-negative-coeff? s)
-  (when debugging? (displayln (list 'terms-with-negative-coeff? s)))
-  (define (list-has-negative-element? s)
-    (ormap negative-number? s))
-  (math-match (memoized-normalize s)
-              [r- #t]
-              [(Prod u) (list-has-negative-element? u)]
-              [_ #f]))
-
 (define (Asin: u)
   (when debugging? (displayln (list 'Asin: u)))
   (math-match u
@@ -1519,7 +1546,7 @@
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/3 @pi)]
     [(Expt 2 -1/2) (⊗ 1/4 @pi)]
     [(list '* 1/2 (list 'expt 2 1/2)) (⊗ 1/4 @pi)]
-    [u #:when (terms-with-negative-coeff? u) (⊖ (Asin (⊖ u)))] ; odd function
+    [(⊖ u) (⊖ (Asin u))] ; odd function
     [r.0 (asin r.0)]
     [_ `(asin ,u)]))
 
@@ -1537,7 +1564,7 @@
     [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)]
     [(Expt 2 -1/2) (⊗ 1/4 @pi)]
     [(list '* 1/2 (list 'expt 2 1/2)) (⊗ 1/4 @pi)]
-    [u #:when (terms-with-negative-coeff? u) (⊖ @pi (Acos (⊖ u)))]
+    [(⊖ u) (⊖ @pi (Acos u))]
     [r.0 (acos r.0)]
     [_ `(acos ,u)]))
 
