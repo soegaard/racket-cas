@@ -3209,16 +3209,13 @@
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
 
       ; Use explicit multiplication for fractions
-      ; todo: (and (real? r) (negative? r)) -> new function
-      [(⊗ r (⊗ u v))  #:when (and (real? r) (negative? r) (not (equal? '(*) v)))
-                      (~a "-" (~num (abs r)) (implicit* r u) (v~ (argcons '* u v)))]
-      [(⊗ r (⊗ u v))  #:when (and (real? r) (positive? r) (not (equal? '(*) v))) 
-                      (~a    (~num (abs r))  (implicit* r u) (v~ (argcons '* u v)))] ; XXX
-      [(⊗ r v)        #:when (and (real? r) (negative? r))
-                      (define w (if original? values paren))
-                      (~a  (w (~a "-" (~num (abs r)))) (implicit* r v) (par v #:use paren))] ; XXX
-      [(⊗ r v)        #:when (and (real? r) (positive? r))
-                      (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
+      [(⊗ r- (⊗ u v))  #:when (not (equal? '(*) v))
+                      (~a "-" (~num (abs r-)) (implicit* r- u) (v~ (argcons '* u v)))]
+      [(⊗ r+ (⊗ u v))  #:when (not (equal? '(*) v))
+                      (~a    (~num (abs r+))  (implicit* r+ u) (v~ (argcons '* u v)))] ; XXX
+      [(⊗ r- v)       (define w (if original? values paren))
+                      (~a  (w (~a "-" (~num (abs r-)))) (implicit* r- v) (par v #:use paren))] ; XXX
+      [(⊗ r+ v)       (~a     (~num (abs r+)) (implicit* r+ v) (par v #:use paren))] ; XXX
       
       [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
       ; plus
