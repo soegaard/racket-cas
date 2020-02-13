@@ -1,7 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
-(define debugging? #t)
+(define debugging? #f)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
 (define (verbose-debug!) (set! verbose-debugging? (not verbose-debugging?)) verbose-debugging?)
@@ -62,7 +62,7 @@
 ;;; SYMBOLIC CONSTANTS
 (define @e  '@e)  ; Euler's constant
 (define @pi '@pi) ; pi
-(define @i '@i)   ; the unit imaginary number
+(define @i  '@i)   ; the unit imaginary number
 (define @n  '@n)  ; stands for an arbitrary natural number
 (define @p  '@p)  ; stands for an arbitrary integer
 
