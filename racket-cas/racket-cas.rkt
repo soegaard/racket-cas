@@ -2442,6 +2442,7 @@
         [(list 'blue  u) (~blue (par u))]           ; blue color
         [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
         [α    #:when (and wrap-fractions? (not (integer? α))) (wrap (~frac α))] ; XXX
+        [α    #:when (not (integer? α)) (~frac α)] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
