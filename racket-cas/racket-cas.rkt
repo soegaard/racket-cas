@@ -2966,7 +2966,7 @@
   (define (~relop x) ((output-relational-operator) x))
   (define (~red str)  (~a "{\\color{red}" str "\\color{black}}"))
   (define (~blue str) (~a "{\\color{blue}" str "\\color{black}}"))
-  (define (~explicit-paren strs) (~a "{\\left(" (string-join (add-between strs ",")) "\\right)}"))
+  (define (~explicit-paren strs) (~a "{\\left(" (string-append* (add-between strs ",")) "\\right)}"))
 
   (define (v~ u [original? #f])
     (when debugging? (displayln (list 'v~ u 'orig original?)))
@@ -3035,7 +3035,8 @@
         [(list 'red   u) (~red  (par u))]           ; red color
         [(list 'blue  u) (~blue (par u))]           ; blue color
         [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
-        [α    #:when (and (or wrap-fractions? (equal? wrap quotient-sub)) (not (integer? α))) (wrap (~frac α))] ; XXX
+        [α    #:when (and wrap-fractions? (not (integer? α))) (wrap (~frac α))] ; XXX
+        [α    #:when (not (integer? α)) (~frac α)] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -3149,8 +3150,8 @@
                   [(⊗ r (and (Expt (num: s) u) v)) #:when (negative? r) (~a "-" (~num (abs r)) (~sym '*) (v~ v))] ; XXX
                   [(⊗ r (and (Expt (num: s) u) v)) #:when (positive? r) (~a     (~num (abs r)) (~sym '*) (v~ v))]
                   
-                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
-                  [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (v~ u))] ; XXX
+                  [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (implicit* r u) (par u))] ; XXX
+                  [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX
                   [u                                                           (v~ u) ]))
     (math-match u
       [(? string? u) u]
@@ -3185,8 +3186,8 @@
       ; mult
       [(⊗  1 v)                                               (~a             (v~ v))]
       [(⊗ -1 α) #:when (negative? α)                          (~a "-" (paren  (v~ α)))]
-      [(⊗ -1 v)   #:when      original?                       (~a "-"         (v~ v))]
-      [(⊗ -1 v)                                               (~a "-" (par  (v~ v)))]
+      [(⊗ -1 x)                                               (~a "-"         (v~ x))]
+      [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]      
       [(⊗ -1 p v) #:when (and original? (negative? p))        (displayln (list "A" p v (⊗ p v)))
                                                               (~a "-" (paren  (v~ (⊗ p v) #f)))] ; wrong
       ; [(⊗ -1 p v) #:when                (negative? p)         (~a "-" (paren  (v~ (⊗ p v) #f)))]                 ; wrong
@@ -3365,12 +3366,12 @@
   (check-equal? (verbose~ '(expt 1/2 -2)) "1/(1/4)")
   ; --- MMA
   (use-mma-output-style)
-  (check-equal? (verbose~ (Sin (⊕ x -7))) "Sin[-7+x]")
+  (check-equal? (~ (Sin (⊕ x -7))) "Sin[-7+x]")
   (use-default-output-style)
-  (check-equal? (verbose~ (Sin (⊕ x -7))) "sin(-7+x)")
-  (check-equal? (verbose~ '(* -1 x)) "-x")
-  (check-equal? (verbose~ '(+ (* -1 x) 3)) "-x+3")
-  (check-equal? (verbose~ '(+ (expt x 2) (* -1 x) 3)) "x^2-x+3")
+  (check-equal? (~ (Sin (⊕ x -7))) "sin(-7+x)")
+  (check-equal? (~ '(* -1 x)) "-x")
+  (check-equal? (~ '(+ (* -1 x) 3)) "-x+3")
+  (check-equal? (~ '(+ (expt x 2) (* -1 x) 3)) "x^2-x+3")
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "x/(1-y^2)")
   (check-equal? (~ '(* 2 x y)) "2*x*y")
   ; —–- TeX
@@ -3393,11 +3394,15 @@
   (check-equal? (~ '(paren -3)) "${\\left(-3\\right)}$")
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
-  (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1 , y_1\\right)}$")
+  (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
   (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
   ; --- Default
   (use-default-output-style)
+  (check-equal? (~ '(* -1 x)) "-x")
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "4*(-7-a)")
+  (check-equal? (~ '(+ (* -3 (- x -2)) -4)) "-3*(x-(-2))-4")
+  (check-equal? (~ '(+ (*  3 (- x -2)) -4)) "3*(x-(-2))-4")
+  (check-equal? (~ '(+ (*  3 (- x 2)) -4)) "3*(x-2)-4")
   (check-equal? (~ `(+ (expt 2 3) (* 5 2) -3)) "2^3+5*2-3")
   (check-equal? (~ '(+ (expt -1 2) (* 3 -1) -2)) "(-1)^2+3*(-1)-2")
   (check-equal? (~ '(+ 1 -2 3)) "1-2+3")
