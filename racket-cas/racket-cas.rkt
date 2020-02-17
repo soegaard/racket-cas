@@ -780,6 +780,11 @@
 ; Maxima:
 ;   Returns the numerator of expr if it is a ratio. If expr is not a ratio, expr is returned.
 
+; In comparison Mathematica will use `together` before returning the numerator/denominator.
+
+; The pattern Quotient will use numerator/denominator.
+; The pattern QuotientTogether will call `together` first.
+
 ; divide u by v
 (define (Oslash: u v)
   (math-match* (u v)
@@ -825,35 +830,24 @@
 
 (define (numerator u)
   (math-match u
-    [r                               (%numerator u)]
-    [r.bf                            (%numerator u)]
-    [(Expt u p) #:when (negative? p) 1]
-    [(⊗ u v)                         (⊗ (numerator u) (numerator v))]
-    [_                               u]))
+    [r                                      (%numerator u)]
+    [r.bf                                   (%numerator u)]
+    [(Expt u p)        #:when (negative? p) 1]
+    [(Expt u (⊗ p us)) #:when (negative? p) 1]
+    [(⊗ u v)                                (⊗ (numerator u) (numerator v))]
+    [_                                      u]))
 
 (define (denominator u)
   (math-match u
-    [r                               (%denominator u)]
-    [r.bf                            (%denominator u)]
-    [(Expt u p) #:when (negative? p) (Expt u (- p))]
-    [(⊗ u v)                         (⊗ (denominator u) (denominator v))]
-    [_                               1]))
+    [r                                      (%denominator u)]
+    [r.bf                                   (%denominator u)]
+    [(Expt u p)        #:when (negative? p) (Expt u (- p))]
+    [(Expt u (⊗ p us)) #:when (negative? p) (Expt u (⊗ (- p) us))]
+    [(⊗ u v)                                (⊗ (denominator u) (denominator v))]
+    [_                                      1]))
 
 (define (numerator/denominator u)
   (values (numerator u) (denominator u)))
-
-; Select terms with syntactically negative exponents.
-;; (define (denominator u)
-;;   (when debugging? (displayln (list 'denominator u)))
-;;   (let-values ([(n d) (numerator/denominator u)])
-;;     d))
-
-; Select terms without syntactically negative exponents, as MMA does.
-;; (define (numerator u)
-;;   (when debugging? (displayln (list 'numerator u)))
-;;   (let-values ([(n d)
-;;                 (numerator/denominator u)])
-;;     n))
 
 (module+ test
   (displayln "TEST - DENOMINATOR")
@@ -864,9 +858,8 @@
   (check-equal? (denominator (bf 1.2))        1)
   (check-equal? (denominator (Sqrt x))        1)
   (check-equal? (denominator (⊘ 2 x))         x)
-  (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x)))
-
-
+  (check-equal? (denominator (⊗ 3/5 (⊘ 2 x))) (⊗ 5 x))
+  (check-equal? (denominator (Expt 'y (⊖ 'm))) (Expt 'y 'm)))
 
 (module+ test
   (displayln "TEST - NUMERATOR")
@@ -878,22 +871,33 @@
   (check-equal? (numerator '(⊕ (⊘ 1 x) (⊘ 1 y))) '(⊕ (⊘ 1 x) (⊘ 1 y)))
   (check-equal? (numerator (⊘ 2 x)) 2)
   (check-equal? (numerator (⊗ 3/5 (⊘ 2 x))) (⊗ 3 2))
-  (check-equal? (numerator (⊘ x y)) x))
+  (check-equal? (numerator (⊘ x y)) x)
+  (check-equal? (numerator (Expt 'y (⊖ 'm))) 1))
 
-(define (mma-denominator s) (denominator (together s)))
-(define (mma-numerator   s) (numerator   (together s)))
+
+(define (together-denominator s) (denominator (together s)))
+(define (together-numerator   s) (numerator   (together s)))
+
+(define-match-expander QuotientTogether
+  ; Note: This matches everything and writes it as a quotient.
+  (λ (stx) (syntax-parse stx [(_ u v) #'(and (app together-numerator u) (app together-denominator v))])))
+
 
 ; test cases adapted from https://reference.wolfram.com/language/ref/Numerator.html?view=all
 (module+ test
   (real-mode) 
-  (check-equal? (denominator 2/3) 3)
-  (check-equal? (denominator (⊘ (⊗ (⊖ x 1) (⊖ x 2)) (Sqr(⊖ x 3)))) '(expt (+ -3 x) 2))
-  (check-equal? (mma-denominator (⊕ 3/7 (⊗ 1/11 @i))) 77)
-  (check-equal? (mma-denominator (⊘ (Sqr (⊖ x 1)) (⊗ (⊖ x 2) (⊖ x 3)))) '(* (+ -3 x) (+ -2 x)))
-  (check-equal? (mma-denominator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
+  (check-equal? (together-denominator 2/3) 3)  
+  (check-equal? (together-denominator (⊘ (⊗ (⊖ x 1) (⊖ x 2))
+                                         (Sqr (⊖ x 3))))
+                (Sqr (⊖ x 3)))
+  (check-equal? (together-denominator (⊕ 3/7 (⊗ 1/11 @i))) 77)
+  (check-equal? (together-denominator (⊘ (Sqr (⊖ x 1))
+                                         (⊗ (⊖ x 2) (⊖ x 3))))
+                (⊗ (⊖ x 2) (⊖ x 3)))
+  (check-equal? (together-denominator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
                 '(* (expt @e (* -1 (+ (* -1 b) (* -2 c)))) (expt y m))) ; should be simplified.
-  (check-equal? (mma-denominator (⊘ (Expt 'a (⊖ 'b)) x)) '(* (expt a b) x))
-  (check-equal? (denominator (⊗ 2 (Expt x y) (Expt 'b 2))) 1))
+  (check-equal? (together-denominator (⊘ (Expt 'a (⊖ 'b)) x)) '(* (expt a b) x))
+  (check-equal? (together-denominator (⊗ 2 (Expt x y) (Expt 'b 2))) 1))
 
 
 
@@ -1022,6 +1026,7 @@
 ; The `together` operations rewrites a sum into a single fraction.
 ; A common denominator the terms in the sum is found.
 
+
 (define (together u)
   (when debugging? (displayln (list 'together u)))
   (parameterize ([lazy-expt? #t])
@@ -1034,8 +1039,8 @@
     [_       expr]))
 
 (define (together-op2 u v)
-  (define-values (nu du) (term-numerator/denominator u))
-  (define-values (nv dv) (term-numerator/denominator v))
+  (define-values (nu du) (numerator/denominator u))
+  (define-values (nv dv) (numerator/denominator v))
   (if (equal? du dv)
       (⊘ (⊕ nu nv) du)
       (⊘ (⊕ (⊗ nu dv) (⊗ nv du))
