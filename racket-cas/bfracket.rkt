@@ -176,16 +176,16 @@
 
 (provide numerator)
 (define (numerator x) ; this follows Maxima and MMA 
-  (if (number? x)
-      (if (or (inexact? x) (bigfloat? x))
+  (if (or (number? x) (bigfloat? x))
+      (if (or (bigfloat? x) (inexact? x))
           x
           (%numerator x))
       (error 'numerator (~a "number or bigfloat expected, got: " x))))
 
 (provide denominator)
 (define (denominator x) ; this follows Maxima and MMA
-  (if (number? x)
-      (if (or (inexact? x) (bigfloat? x))
+  (if (or (number? x) (bigfloat? x))
+      (if (or (bigfloat? x) (inexact? x))
           1
           (%denominator x))
       (error 'denominator (~a "number or bigfloat expected, got: " x))))

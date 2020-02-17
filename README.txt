@@ -85,5 +85,15 @@ symbolic expressions.
 For functions such as expt, sin etc. the corresponding functions that handle symbolic
 expressions are Expt, Sin, etc.
 
+
+Thanks to all for contributing code and sending in bugs.
+In particular, thanks to the following contributors:
+
+Contributors
+------------
+ - Bowen Fu  (complex numbers, together, combine and more)
+
+
+
 Enjoy
 /soegaard

@@ -6,7 +6,7 @@
 (module+ test (require rackunit))
 
 (module predicates racket 
-  (provide exact-natural? @e? @pi? inexact-number? exact-number? bigfloat-number? 
+  (provide exact-natural? @e? @pi?  @i? inexact-number? exact-number? bigfloat-number? positive-number? negative-number?
            inexact-number-or-bigloat?)
   (require math/bigfloat)
   (define (exact-number? x)   (and (number? x) (exact? x)))
@@ -14,8 +14,11 @@
   (define (inexact-number? x) (and (number? x) (inexact? x)))
   (define (inexact-number-or-bigloat? x) (or (and (number? x) (inexact? x)) (bigfloat? x)))
   (define (bigfloat-number? x) (bigfloat? x))
+  (define (positive-number? x) (and (real? x) (positive? x)))
+  (define (negative-number? x) (and (real? x) (negative? x)))
   (define (@e? u)  (eq? u '@e))   ; Euler's constant
-  (define (@pi? u) (eq? u '@pi))) ; pi
+  (define (@pi? u) (eq? u '@pi)) ; pi
+  (define (@i? u) (eq? u '@i))) ; i
 
 (module conventions racket
   (provide find-convention-type conventions  (struct-out convention))
@@ -32,6 +35,9 @@
   (define (make-ends-with-pred s)
     (λ (t) (regexp-match (~a s "$") t)))
   
+  (define (make-ends-with-not-equal-pred s)
+    (λ (t) (and (not (equal? t s)) (regexp-match (~a (regexp-quote s) "$") t))))
+  
   (define (ends-with-dot? t)
     (and (regexp-match "\\.$" t) (not (equal? t "..."))))
   
@@ -39,25 +45,28 @@
     (λ (t) (equal? s t)))
   
   (define conventions
-    (list (convention ends-with-dot?              #'inexact-number-or-bigloat?)
-          (convention (make-ends-with-pred ".0")  #'inexact-number?)
-          (convention (make-ends-with-pred ".bf") #'bigfloat-number?)
-          (convention (make-begins-with-pred "x") #'symbol?)
-          (convention (make-begins-with-pred "y") #'symbol?)
-          (convention (make-begins-with-pred "z") #'symbol?)
-          (convention (make-begins-with-pred "r") #'number?)
-          (convention (make-begins-with-pred "s") #'number?)
-          (convention (make-begins-with-pred "m") #'exact-natural?)
-          (convention (make-begins-with-pred "n") #'exact-natural?)
-          (convention (make-begins-with-pred "p") #'integer?)
-          (convention (make-begins-with-pred "q") #'integer?)
-          (convention (make-begins-with-pred "α") #'exact-number?)
-          (convention (make-begins-with-pred "β") #'exact-number?)
+    (list (convention ends-with-dot?                      #'inexact-number-or-bigloat?)
+          (convention (make-ends-with-pred ".0")          #'inexact-number?)
+          (convention (make-ends-with-pred ".bf")         #'bigfloat-number?)
+          (convention (make-ends-with-not-equal-pred "+") #'positive-number?)
+          (convention (make-ends-with-not-equal-pred "-") #'negative-number?)
+          (convention (make-begins-with-pred "x")         #'symbol?)
+          (convention (make-begins-with-pred "y")         #'symbol?)
+          (convention (make-begins-with-pred "z")         #'symbol?)
+          (convention (make-begins-with-pred "r")         #'number?)
+          (convention (make-begins-with-pred "s")         #'number?)
+          (convention (make-begins-with-pred "m")         #'exact-natural?)
+          (convention (make-begins-with-pred "n")         #'exact-natural?)
+          (convention (make-begins-with-pred "p")         #'integer?)
+          (convention (make-begins-with-pred "q")         #'integer?)
+          (convention (make-begins-with-pred "α")         #'exact-number?)
+          (convention (make-begins-with-pred "β")         #'exact-number?)
           ; note: a and b are used to match general expressions,
           ;       so we need to pick something else to match booleans
           (convention (make-begins-with-pred "bool") #'boolean?)
           (convention (make-is-pred "@e")  #'@e?)
-          (convention (make-is-pred "@pi") #'@pi?)))
+          (convention (make-is-pred "@pi") #'@pi?)
+          (convention (make-is-pred "@i") #'@i?)))
   
   (define (find-convention-type s)
     (for/or ([c (in-list conventions)])
@@ -108,7 +117,8 @@
   (define-syntax (math-match stx)
     (syntax-case stx ()
       [(_ val-expr [pat . more] ...)
-       (with-syntax ([(new-pat ...) 
+       (with-syntax ([so #'stx]
+                     [(new-pat ...) 
                       (for/list ([pat-stx (in-list (syntax->list #'(pat ...)))])
                         (datum->syntax pat-stx `(:pat ,(syntax->datum pat-stx))))])
          (syntax/loc stx (match/derived val-expr stx [new-pat . more] ...)))]))
@@ -116,7 +126,8 @@
   (define-syntax (math-match* stx)
     (syntax-case stx ()
       [(_ (val-expr ...) [pats . more] ...)
-       (with-syntax ([((new-pat ...) ...) 
+       (with-syntax ([so #'stx]
+                     [((new-pat ...) ...) 
                       (for/list ([ps (in-list (syntax->list #'(pats ...)))])
                         (for/list ([pat (in-list (syntax->list ps))])
                           (datum->syntax ps `(:pat ,(syntax->datum pat)))))])
