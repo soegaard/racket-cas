@@ -2640,14 +2640,15 @@
                  [#f             vs]
                  [(list* 'or ws) (append vs (map flatten ws))]
                  [_              (cons u vs)]))))
-          (match (flatten us)
+          (match (remove-duplicates (flatten us))
             ['()        #f]
             [(list v)   v]
             [vs         `(or ,@(sort vs <<))]))]))
       
 
 (module+ test 
-  (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 1) (= x 2) (= x 3))))
+  (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 1) (= x 2) (= x 3)))
+  (check-equal? (normalize '(or (= x 1) (= x 2) (= x 1))) '(or (= x 1) (= x 2))))
 
 (define-match-expander And
   (λ (stx)
@@ -2668,13 +2669,14 @@
                  [#f              (return #f)]
                  [(list* 'and ws) (append vs (map flatten ws))]
                  [_               (cons u vs)]))))
-          (match (flatten us)
+          (match (remove-duplicates (flatten us))
             ['()        #t]
             [(list v)   v]
             [vs         `(and ,@(sort vs <<))]))]))
 
 (module+ test 
-  (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3))))
+  (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3)))
+  (check-equal? (normalize '(and (= x 1) (= x 2) (= x 1))) '(and (= x 1) (= x 2))))
 
 ; Tuples (aka column vectors)
 (define-match-expander Up
@@ -2738,7 +2740,9 @@
   (when debugging? (displayln (list 'solve eqn x)))
   (let/ec return
     (define (solve-by-inverse w)
+      (when debugging? (displayln (list 'solve-by-inverse w)))
       (define (remove-invertibles w)
+        (when debugging? (displayln (list 'remove-invertibles w)))
         ; Input:  w = (Equal u v) where v is free of x
         ; Output: If w=f(u) then (remove-invertibles u (f^-1 v))
         ;         otherwise w.
@@ -2748,6 +2752,12 @@
           [(Equal (⊕ u w) v)     #:when (free-of w x) (r (Equal u (⊖ v w)))]
           [(Equal (⊗ w u) v)     #:when (free-of w x) (r (Equal u (⊘ v w)))]
           [(Equal (⊗ u w) v)     #:when (free-of w x) (r (Equal u (⊘ v w)))]
+          [(Equal (Ln v) w)      #:when (free-of w x)
+                                 (r (Equal v (Exp w)))]
+          [(Equal (Log v) w)      #:when (free-of w x)
+                                 (r (Equal v (Expt 10 w)))]
+          [(Equal (Log u v) w)   #:when (free-of w x)
+                                 (r (Equal v (Expt u w)))]
           [(Equal (Expt @e u) s) #:when (> s 0)        (r (Equal u (Ln s)))]
           [(Equal (Expt @e u) s) (return #f)]
           [(Equal (Expt @e u) v) (r (Equal u (Ln v)))]  ; xxx TODO message: only correct if v>0 
@@ -2790,6 +2800,7 @@
            [else          w])]
         [w w]))
     (define (solve1 eqn) ; where eqn is returned from solve-by-inverse
+      (when debugging? (displayln (list 'solve1 eqn)))
       (match eqn
         ; rewrite u=v to u-v=0
         [(Equal u v) #:when (not (equal? v 0)) (solve1 (Equal (⊖ u v) 0))]
@@ -2847,7 +2858,12 @@
                 '(or (= x 1) (= x 2) (= x 3)))
   (check-equal? (solve (normalize '(= 8.0 (expt 2.0 x))) x) '(= x 3.0))
   (check-equal? (solve '(= 8 (expt 2 x)) x) '(= x 3))
-  (check-equal? (solve (normalize '(= (- (- x) 6) 0)) 'x) '(= x -6)))
+  (check-equal? (solve (normalize '(= (- (- x) 6) 0)) 'x) '(= x -6))
+  (check-equal? (solve '(= (log x 2) 2) 'x) '(or (= x (* -1 (expt 2 1/2))) (= x (expt 2 1/2))))
+  (check-equal? (solve '(= (log 5 x) 2) 'x) '(= x 25))
+  (check-equal? (solve '(= (log x) 2) 'x) '(= x 100))
+  (check-equal? (solve '(= (ln x) 2) 'x) '(= x (expt @e 2)))
+  (check-equal? (solve '(= (sin x) 1) x) '(= x (+ (* 2 @n @pi) (* 1/2 @pi)))))
 
 
 (define (roots u x)
@@ -2855,9 +2871,14 @@
   (define (extract u)
     (match u
       [(list 'or e ...) (map solution e)]
-      [(list _ '= x0)   (list x0)]
+      [(list '= y x0) #:when (equal? y x)
+                      (list x0)]
       [_                '()]))
   (extract (solve (Equal u 0) x)))
+
+
+(module+ test
+  (check-equal? (roots '(+ (expt x 2) -1) x) '(-1 1)))
 
 ; > (let () ; Example: The discriminant of a second degree polynomial
 ;     (match-define (list x1 x2) (roots '(+ (* x x) (* b x) c) x))
