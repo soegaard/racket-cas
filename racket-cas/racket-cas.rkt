@@ -1769,6 +1769,7 @@
     [(⊕ (⊗ p (Integer _) @pi) u) #:when (even? p) (Cos: u)]
     
     [(Acos u) u]    ; xxx only of -1<u<1
+    [(Asin u) (⊖ (⊗ 1/2 @pi) u)]
     [(⊖ u) (Cos u)] ; even function
     [_ `(cos ,u)]))
 
@@ -1792,7 +1793,9 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (Cos (⊗ 4/3 @pi)) -1/2))
+  (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
+  (check-equal? (Cos (Acos x)) 'x)
+  (check-equal? (Cos (Asin x)) '(+ (* 1/2 @pi) (* -1 x))))
 
 (define (Sin: u)
   (when debugging? (displayln (list 'Sin: u)))
@@ -1824,6 +1827,7 @@
                       [sign   (if (> sign.0 0) 1 -1)])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
+    [(Acos u) (⊖ (⊗ 1/2 @pi) u)]
     [(⊖ u) (⊖ (Sin u))] ; odd function
     [_ `(sin ,u)]))
 
@@ -1844,8 +1848,8 @@
   (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x))
   (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
   (check-equal? (Sin -3) (⊖ (Sin 3)))
-  )
-
+  (check-equal? (Sin (Asin x)) 'x)
+  (check-equal? (Sin (Acos x)) '(+ (* 1/2 @pi) (* -1 x))))
 
 (define (Asin: u)
   (when debugging? (displayln (list 'Asin: u)))
