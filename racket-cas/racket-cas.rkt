@@ -832,6 +832,7 @@
     [(Equal u v)      (Equal (e u) (e v))]
     [(Or u v)         (Or (e u) (e v))]
     [(And u v)        (And (e u) (e v))]
+    [(app: f us) (cons f (map e us))]
     [_ u]))
 
 (module+ test
@@ -918,6 +919,7 @@
     [(r  0) +nan.0]
     [(u  1) u]
     [(u -1) (⊖ u)]
+    [(u u) 1]
     [(u  v) (⊗ u (Expt v -1))]))
 
 (define (not-one? x) (not (equal? x 1)))
@@ -1021,10 +1023,9 @@
   (check-equal? (together-denominator (⊘ (Sqr (⊖ x 1))
                                          (⊗ (⊖ x 2) (⊖ x 3))))
                 (⊗ (⊖ x 2) (⊖ x 3)))
-  ; Not sure what the result of the test should be:
-  #;(check-equal? (together-denominator (⊘ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) 
-                                           (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
-                  '(* (expt @e (* -1 (+ (* -1 b) (* -2 c)))) (expt y m))) ; should be simplified.
+  ; not consistent with mma, e^(a-b) 's together-denominator is 1, mma will return e^b, i.e. negative exponent powers.
+  ; (check-equal? (together-denominator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
+  ;               '(* (expt @e (* -1 (+ (* -1 b) (* -2 c)))) (expt y m))) ; should be simplified.
   (check-equal? (together-denominator (⊘ (Expt 'a (⊖ 'b)) x)) '(* (expt a b) x))
   (check-equal? (together-denominator (⊗ 2 (Expt x y) (Expt 'b 2))) 1))
 
@@ -1374,11 +1375,11 @@
         (math-match* (u v)
           [((Complex a b) (Complex c d))
            (cond
-             [(and (= b 0) (= d 0)) `(expt ,u ,v)] ; u might be a product
+             [(and (equal? b 0) (equal? d 0)) `(expt ,u ,v)] ; u might be a product
              ; avoid computing the partition into real and imaginary multiple times,
              ; so pass the a, b c and along.
-             [(= d 0)               (ComplexRealExpt a b c)]
-             [(= b 0)               (RealComplexExpt a c d)]
+             [(equal? d 0)               (ComplexRealExpt a b c)]
+             [(equal? b 0)               (RealComplexExpt a c d)]
              [else                  (ComplexComplexExpt a b c d)])]
           [(_ _)          `(expt ,u ,v)])])]))
 
@@ -2609,7 +2610,9 @@
     (check-equal? (polynomial-quotient-remainder '(+ (* x x) x 1) '(+ (* 2 x) 1) x)
                   (list (⊕ 1/4 (⊘ x 2)) 3/4))
     (check-equal? (polynomial-quotient (⊕ (⊗ x x) (⊗ b x) 1) (⊕ (⊗ a x) 1) x)
-                  '(+ (* -1 (expt a -2)) (* (expt a -1) b) (* (expt a -1) x)))))
+                  '(+ (* -1 (expt a -2)) (* (expt a -1) b) (* (expt a -1) x))))
+  (check-equal? (polynomial-quotient-remainder '(+ (* 2+4i x x) (* -1-8i x) -3+3i) '(+ (* 1+2i x) 1-i) x)
+                '((+ -3 (* 2 x)) 0)))
 
 (define (polynomial-expansion u v x t)
   ; u GPE in x, v GPE in x with deg(v,x)>0, x and t symbols
