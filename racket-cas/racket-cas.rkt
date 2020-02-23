@@ -585,6 +585,7 @@
     [(⊕ u v)            (⊕ (n u) (n v))]
     [(⊗ u)              (n u)]
     [(⊗ u v)            (⊗ (n u) (n v))]
+    [(Imaginary u)      (Imaginary (n u))]
     [(And u v)          (And (n u) (n v))]
     [(Or u v)           (Or (n u) (n v))]
     [(And u)            (And (n u))]
@@ -1477,7 +1478,8 @@
     [@e  0]
     [@pi 0]
     [0   'error]
-    [r   0]
+    [r+   0]
+    [r-   @pi]
     ; TODO: Use (Rectangular a b) here - cheaper
     [(Complex a b) (math-match* (a b)
                      [(r s) (define m (Sqrt (+ (sqr r) (sqr s))))
@@ -1490,7 +1492,9 @@
   (displayln "TEST - Angle")
   (complex-mode)
   (check-equal? (normalize '(angle (+ 2 @i))) '(acos (* 2 (expt 5 -1/2))))
-  (check-equal? (normalize '(angle       @i)) '(* 1/2 @pi)))
+  (check-equal? (normalize '(angle       @i)) '(* 1/2 @pi))
+  (check-equal? (Angle -1) @pi)
+  (check-equal? (Angle 1) 0))
 
 (define-match-expander Angle
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'angle u)]))
@@ -1684,11 +1688,11 @@
   (math-match u
     [1  0]
     ; [0  +nan.0] ; TODO: error?
-    [r. #:when (%positive? r.)  (%ln r.)]
+    [r.  (%ln r.)]
     [@e  1]
-    [(Complex a b) #:when (not (equal? 0 b))
+    [(Complex a b) #:when (or (negative-term? a) (not (equal? 0 b)))
                    (⊕ (Ln (Sqrt (⊕ (Sqr a) (Sqr b)))) 
-                      (⊗ @i (Angle (Complex a b))))]
+                      (⊗ @i (Angle u)))]
     [(Expt @e v) v]
     [(⊗ u v)  (⊕ (Ln: u) (Ln: v))]
     [_ `(ln ,u)]))
@@ -1700,8 +1704,11 @@
 (module+ test
   (check-equal? (Ln 1)  0)
   (check-equal? (Ln 1.) 0.)
+  (check-equal? (Ln -1) '(*@i @pi))
+  (check-equal? (Ln -1.0) 0.0+3.141592653589793i)
   (check-equal? (Ln (bf 1)) 0.bf)
   (check-equal? (Ln @e) 1)
+  (check-equal? (Ln '(+ 1 @i)) '(+ (ln (expt 2 1/2)) (*@i (* 1/4 @pi))))
   (check-equal? (Ln (Exp 1.0)) 1.0)
   (check-true   (bf<  (bfabs (bf- (bflog (bfexp (bf 1))) (bf 1)))  (bfexpt (bf 10) (bf -30))))
   (check-equal? (Ln (Exp x)) x)
