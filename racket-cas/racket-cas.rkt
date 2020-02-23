@@ -45,15 +45,13 @@
   (newline) (newline) (displayln "-------------------------------") (newline) (newline))
 
 ; Control Parameters
-(define lazy-expt?    (make-parameter #f))
+(define lazy-expt?    (make-parameter #f))   ; disable certain rules in Expt
 (define real-mode?    (make-parameter #t))
 (define complex-mode? (make-parameter #f))
 (define (complex-mode)
-  (lazy-expt?    #t)  ; disable certain rules in Expt
   (real-mode?    #f)
   (complex-mode? #t))
 (define (real-mode)
-  (lazy-expt?    #f) ; enable certain rules in Expt
   (real-mode?    #t)
   (complex-mode? #f))
 
@@ -1059,7 +1057,6 @@
 
 (module+ test 
   (displayln "TEST - together")
-  (lazy-expt? #t)
   (check-equal? (together (⊕ (⊘ `a `b) (⊕ y x)))                    '(* (expt b -1) (+ a (* b (+ x y)))))
   (check-equal? (together (⊕ (⊘ `a `b) (⊘ `c `d) (⊘ `e `f)))        '(* (expt (* b d f) -1)
                                                                         (+ (* a d f)
@@ -1070,9 +1067,7 @@
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y)))                      '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (plus (⊘ (⊗ y 3) x) (⊘ (⊗ x z 1/3) 5/6))) '(* (expt (* 5 x) -1)
                                                                         (+ (* 2 (expt x 2) z) (* 15 y))))
-
-  (parameterize ([lazy-expt? #t])
-    (check-equal? (together (normalize '(+ (/ y 5) 1))) '(* 1/5 (+ 5 y))))
+  (check-equal? (together (normalize '(+ (/ y 5) 1))) '(* 1/5 (+ 5 y)))
   (real-mode))
 
 ; test cases adapted from https://reference.wolfram.com/language/ref/Together.html?view=all
@@ -1239,7 +1234,8 @@
     [(@i (Complex a b)) (ComplexComplexExpt 0 1 a b)]
     ; we need to handle all @i cases before x is met (otherwise thus catches @i^_ 
     [(x  v)  #:when (not (eq? x '@e))    `(expt ,x ,v)]
-    
+    [((⊗ u v) p) #:when (not (lazy-expt?))
+                 (⊗ (Expt u p) (Expt v p))]
     [((Expt u v) p) (Expt u (⊗ p v))]
     [(u v)
      (cond
@@ -1508,23 +1504,22 @@
 
 (define (ComplexRealExpt a b c) ; d=0
   (when debugging? (displayln (list 'ComplexRealExpt a b c)))
-  (math-match* (a b c)
-    [(r1 r2 s)     
+  (define (cre r1 r2 s)
      (define r (Sqrt (⊕ (Sqr r1) (Sqr r2))))
      (define θ (if (> r2 0) (Acos (⊘ r1 r)) (Asin (⊘ r1 r))))
-     (⊗ (Expt r s) (ExpI (⊗ θ s)))]
+     (⊗ (Expt r s) (ExpI (⊗ θ s))))
+  (math-match* (a b c)
+    [(r1 r2 p) (trig-expand (cre r1 r2 p))]
+    [(r1 r2 s) (cre r1 r2 s)]
     [(a b c)
      `(expt ,(⊕ a (⊗ b @i)) ,c)]))
-                   
+
 (module+ test
   (displayln "TEST - ComplexRealExpt")
   (complex-mode)
   (check-equal? (ComplexRealExpt  1 1 -1) '(+ 1/2 (*@i -1/2)))
-  '(+
-    2/5
-    (*@i
-     (* -1 (expt 5 -1/2) (expt (+ 1 (* -1 (expt (* 2 (expt 5 -1/2)) 2))) 1/2))))
-expected:   '(+ 1/2 (*@i -1/2)))
+  (check-equal? (ComplexRealExpt  2 1 -1) '(+ 2/5 (*@i -1/5)))
+  (check-equal? (ComplexRealExpt  2 1 2) '(+ 3 (*@i 4))))
 
 (define (RealComplexExpt r a b)
   (when debugging? (displayln (list 'RealComplexExpt r a b)))
