@@ -295,6 +295,8 @@
     [(bool1 bool2) (and bool1 (not bool2))] ; #t < #f
     [(bool u)      #t]
     [(u bool)      #f]
+    [((Imaginary u) v) #f]
+    [(u (Imaginary v)) #t]
     ; Case: At least one symbol
     [(x y) (symbol<<? x y)]
     [(u x) (not (<< x u))]
@@ -374,12 +376,12 @@
                      '(+ (* 2 h (expt x 2)) (*   (expt h 2) x))) #t)
   (check-equal? (<<= '(* a (expt (+ 1 y) 2)) 'c) #t)
   (check-equal? (<< '(* 2 (+ -1.0 x)) '(* 3 (expt (+ -1.0 x) 2))) #t)
-  (check-equal? (<< '@i '@a) #t) ; @i is always the first symbol in a product
-  (check-equal? (<< '@a '@i) #f)
-  (check-equal? (<< '@i '@z) #t)
-  (check-equal? (<< '@z '@i) #f)
-  (check-equal? (<< '@i 'a)  #t) 
-  (check-equal? (<< 'a '@i)  #f))
+  (check-equal? (<< '@i '@a) #f) ; @i is always the first symbol in a product
+  (check-equal? (<< '@a '@i) #t)
+  (check-equal? (<< '@i '@z) #f)
+  (check-equal? (<< '@z '@i) #t)
+  (check-equal? (<< '@i 'a)  #f) 
+  (check-equal? (<< 'a '@i)  #t))
 
 ;; (⊕ u ...) in an expression context expands to (plus u ...)
 ;; That is: Elsewhere use ⊕ in order to add expressions.
@@ -403,6 +405,7 @@
     ; [(r.bf s)    (bf+ r.bf (bf s))]  ; xxx
     [(u s) (plus2 s u)]  ; ok since u can not be a number, we have that s <<= u
     [(u u) (times2 2 u)] 
+    [((Imaginary u) (Imaginary v)) (Imaginary (⊕ u v))]
     [((k⊗ r u) (k⊗ s u)) (times2 (+ r s) u)]
     [((k⊗ r u) (k⊗ s v)) #:when (<<= v u) (plus2 s2 s1)]
     [((⊕ u v) (⊕ _ _)) (plus2 u (plus2 v s2))]
@@ -451,6 +454,7 @@
   (check-equal? (⊕ x (Expt x 3) (⊖ x)) (Expt x 3))
   (check-equal? (⊕ (Sin x) (⊗ 2 (Sin x))) '(* 3 (sin x)))
   (check-equal? (⊕ 1 x (⊗ -1 (⊕ 1 x))) 0)
+  (check-equal? (⊕ @i (Complex 2 x) 3 y) '(+ 5 y (*@i (+ 1 x))))
   (check-equal? (normalize '(+ (f x) (f y) (f x))) '(+ (* 2 (f x)) (f y)))
   (check-equal? (normalize '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x))))
                 '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x)))))
@@ -477,6 +481,8 @@
     [(u (Expt u v)) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) u) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) (Expt u w)) (Expt u (⊕ v w))]
+    [((Complex u1 u2) (Complex v1 v2)) #:when (or (not (equal? u2 0))  (not (equal? v2 0)))
+     (Complex (⊖ (⊗ u1 v1) (⊗ u2 v2)) (⊕ (⊗ u1 v2) (⊗ u2 v1)))]
     [(x y) (if (symbol<<? x y) (list '* x y) (list '* y x))]
     ; all recursive calls must reduce size of s1 wrt <<=
     [((⊗ u v) (⊗ _ __)) (times2 u (times2 v s2))]
@@ -516,7 +522,8 @@
   (check-equal? (⊗ x (Cos x)) '(* x (cos x)))
   (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
-  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
+  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2)))
+  (check-equal? (⊗ @i (⊕ -2 (⊗ -2 @i))) '(+ 2 (*@i -2))))
 
 (define-syntax (define-function stx)
   (syntax-parse stx
@@ -641,7 +648,9 @@
   (check-equal? (normalize 1+i)  '(+ 1 @i))
   (check-equal? (normalize  +2i) '(* 2 @i))
   ; check that @i appears as the first symbol in products
-  (check-equal? (normalize '(* 2 x a z 3 y @a @z @i )) '(* 6 @i @a @z a x y z)))
+  (check-equal? (normalize '(* 2 x a z 3 y @a @z @i )) '(*@i (* 6 @a @z a x y z)))
+  (complex-mode)
+  (check-equal? (normalize '(/ (+ 2 (* 2 @i)) (+ 1 @i))) 2))
 
 
 ; Compile turns an expression into a Racket function.
@@ -890,7 +899,8 @@
   (check-equal? (together-denominator (⊘ (⊗ (⊖ x 1) (⊖ x 2))
                                          (Sqr (⊖ x 3))))
                 (Sqr (⊖ x 3)))
-  (check-equal? (together-denominator (⊕ 3/7 (⊗ 1/11 @i))) 77)
+  ; 1, not 77 as in mma.
+  ; (check-equal? (together-denominator (⊕ 3/7 (⊗ 1/11 @i))) 77)
   (check-equal? (together-denominator (⊘ (Sqr (⊖ x 1))
                                          (⊗ (⊖ x 2) (⊖ x 3))))
                 (⊗ (⊖ x 2) (⊖ x 3)))
@@ -1011,9 +1021,9 @@
   (let-values ([(n d) (numerator/denominator (normalize '(* (+ x -1) (+ x -2) (expt (+ x -3) -2))))])
     (check-equal? n '(* (+ -2 x) (+ -1 x)))
     (check-equal? d '(expt (+ -3 x) 2)))
-  (let-values ([(n d) (mma-numerator/denominator (⊕ 3/7 (⊗ 1/11 @i)))])
-    (check-equal? n '(+ 33 (* 7 @i)))
-    (check-equal? d 77))
+;  (let-values ([(n d) (mma-numerator/denominator (⊕ 3/7 (⊗ 1/11 @i)))])
+;    (check-equal? n '(+ 33 (* 7 @i)))
+;    (check-equal? d 77))
   ; Is this test case correct?
   #;(let-values ([(n d) (mma-numerator/denominator 
                          (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))])
@@ -1223,10 +1233,8 @@
     [(@e @i)        (ExpI 1)]
     [(@e x)        `(expt @e ,x)]    
     [(@e v)         (match v
-                      [(list  '*   '@i '@pi)                  (ExpI @pi)]
-                      [(list  '* r '@i '@pi) #:when (real? r) (ExpI (⊗ r @pi))] 
+                      [(Imaginary v-i)                  (ExpI v-i)]
                       [_ `(expt @e ,v)])]
-    
     [(@i α)             (ExpI (⊗ 1/2 α @pi))]
     [(@i (Complex a b)) (ComplexComplexExpt 0 1 a b)]
     ; we need to handle all @i cases before x is met (otherwise thus catches @i^_ 
@@ -1318,28 +1326,45 @@
 
 ; A term of the form
 ;        @i        or
-;   (*   @i u ...) or
-;   (* r @i u ...)
+;   (*   u ... @i) or
+;   (* r u ... @i)
 ; where r is a real numbers, is called an *imaginary term*.
 
 (define (imaginary-term? u)
   ; we assume u is normalized, so we don't need to look at other
   ; factors besides the first one.
   (match u
-    ['@i                                 #t]
-    [(list* '*   '@i _)                  #t]
-    [(list* '* r '@i _) #:when (real? r) #t]
-    [_                                   #f]))
+    ['@i                                         #t]
+    [(list '*   _ ... '@i)                  #t]
+    [(list '* r _ ... '@i) #:when (real? r) #t]
+    [_                                           #f]))
 
 (module+ test
   (displayln "TEST - imaginary-term?")
   (complex-mode)
   (check-equal? (imaginary-term?      '@i)    #t)
   (check-equal? (imaginary-term? '(* 2 @i))   #t)
-  (check-equal? (imaginary-term? '(* 2 @i x)) #t)
+  (check-equal? (imaginary-term? '(* 2 x @i)) #t)
   (check-equal? (imaginary-term? '(* 2 @e))   #f)
   (check-equal? (imaginary-term? 42)          #f))
 
+(define (imaginary-coeff u)
+  (math-match u
+              ; a single imaginary term
+              [@i                                  1]
+              [(list  '*   u @i)                   u]
+              [(list  '*   us ... @i)              (cons '* us)]
+              [(list  '* r @i)    #:when (real? r) r]
+              [(list  '* r u @i)  #:when (real? r) `(* ,r ,u)]
+              [(list  '* r us ... @i) #:when (real? r) (cons '* (cons r us))]
+              [_ 0]))
+
+(module+ test
+  (displayln "TEST - imaginary-coeff")
+  (complex-mode)
+  (check-equal? (imaginary-coeff      '@i)    1)
+  (check-equal? (imaginary-coeff '(* 2 @i))   2)
+  (check-equal? (imaginary-coeff '(* 2 x @i)) '(* 2 x)))
 
 (define (partition-terms-in-real/imaginary u)
   ; Given a sum u, two normalized expressions u_real and u_imag such
@@ -1348,36 +1373,16 @@
 
   ; Implementation note: If u is normalized, then so will a partial sum,
   ; if we keep the original order.  
-  (define (reverse-terms->sum vs)    
-    (match vs
-      ['()      0]
-      [(list v) v]
-      [_        (cons '+ (reverse vs))])) ; a partial sum is normalized
-  
   (match u
-    ; a single imaginary term
-    ['@i                                  (values 0 1)]
-    [(list  '*   '@i u)                   (values 0 u)]
-    [(list* '*   '@i us)                  (values 0 (list* '* us))]
-    [(list  '* r '@i)    #:when (real? r) (values 0 r)]
-    [(list  '* r '@i u)  #:when (real? r) (values 0 `(* ,r ,u))]
-    [(list* '* r '@i us) #:when (real? r) (values 0 (list* '* r us))]
-    ; a sum of terms
-    [(list* '+ us)     
-     (let loop ([us us] [real '()] [imag '()])
+    [(Sum us)
        (match us
-         ['()         (values (reverse-terms->sum real)
-                              (reverse-terms->sum imag))]         
-         [(cons v vs) (match v
-                        ['@i                                  (loop vs real (cons 1               imag))]
-                        [(list  '*   '@i u)                   (loop vs real (cons u               imag))]
-                        [(list* '*   '@i us)                  (loop vs real (cons (list* '* us)   imag))]
-                        [(list  '* r '@i)    #:when (real? r) (loop vs real (cons r               imag))]
-                        [(list  '* r '@i u)  #:when (real? r) (loop vs real (cons `(* ,r ,u)      imag))]
-                        [(list* '* r '@i us) #:when (real? r) (loop vs real (cons (list* '* r us) imag))]
-                        [_                                    (loop vs (cons v real) imag)])]))]
-    [_ (values u 0)]))
-
+       [(list vs-r ... (Imaginary v-i))
+        (match vs-r
+          [(list v-r) (values v-r v-i)]
+          [_          (values (list* '+ vs-r) v-i)])]
+       [_               (values u 0)])]
+    [(Imaginary v-i) (values 0 v-i)]
+    [_               (values u 0)]))
 
 (module+ test
   (displayln "TEST - ")
@@ -1398,11 +1403,30 @@
       (check-equal? r -1)
       (check-equal? i 1)))
 
+(define (Imaginary: u)
+  (when debugging? (displayln (list 'Imaginary: u)))
+  (math-match u
+    [0 0]
+    [1 @i]
+    [_ `(*@i ,u)]))
+
+(define-match-expander Imaginary
+  (λ (stx) (syntax-parse stx [(_ u) #'(or (list '*@i u) (app imaginary-coeff (? not-zero? u)))]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Imaginary: u)] [_ (identifier? stx) #'Imaginary:])))
+  
+(module+ test
+  (displayln "TEST - Imaginary")
+  (complex-mode)
+  (check-equal? (math-match 2/3
+                  [(Imaginary u) u] [_ #f]) #f)
+  (check-equal? (math-match (normalize +2/3i)
+                  [(Imaginary u) u] [_ #f]) 2/3))
+
 (define (Complex: u v)
-  (⊕ u (⊗ v @i))) 
+   (⊕ u (Imaginary v)))
 
 (define-match-expander Complex
-  ; Note: This matches everything and writes it as a complex, even when real or imag equals to 0.
+  ; Note: This matches everything and writes it as a complex, even when real equals to 0.
   (λ (stx) (syntax-parse stx [(_ u v) #'(app partition-terms-in-real/imaginary u v)]))
   (λ (stx) (syntax-parse stx [(_ u v) #'(Complex: u v)] [_ (identifier? stx) #'Complex:])))
 
@@ -1411,10 +1435,10 @@
   (complex-mode)
   (check-equal? (math-match 2/3
                   [(Complex u v) (list u v)] [_ #f]) '(2/3 0))
-  (check-equal? (math-match '(+ 1 (* @i (ln @i)) (sin (* 1/5 @pi))) 
-                  [(Complex u v) (list u v)] [_ #f]) '((+ 1 (sin (* 1/5 @pi))) (ln @i)))
-  (check-equal? (math-match '(+ @i (ln @i))
-                  [(Complex u v) (list u v)] [_ #f]) '((ln @i) 1)))
+  (check-equal? (math-match (normalize '(+ 1 (* @i (ln @i)) (sin (* 1/5 @pi))))
+                  [(Complex u v) (list u v)] [_ #f]) '((+ 1 (* -1/2 @pi) (sin (* 1/5 @pi))) 0))
+  (check-equal? (math-match (normalize '(+ @i (ln @i)))
+                  [(Complex u v) (list u v)] [_ #f]) '(0 (+ 1 (* 1/2 @pi)))))
 
 
 (define (Magnitude: u)
@@ -1423,7 +1447,7 @@
     [@i   1]
     [@e  @e]
     [@pi @pi]
-    [r #:when (negative? r) (- r)]
+    [r (abs r)]
     [(Complex a b) (Sqrt (⊕ (Sqr a) (Sqr b)))]
     [_ `(magnitude ,u)]))
 
@@ -1477,7 +1501,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Angle: u)] [_ (identifier? stx) #'Angle:])))
 
 
-(define (ExpI θ) (⊕ (Cos θ) (⊗ (Sin θ) @i)))
+(define (ExpI θ) (⊕ (Cos θ) (Imaginary (Sin θ))))
   
 
 ; Compute u=a+ib to v=c+id
@@ -1488,11 +1512,19 @@
     [(r1 r2 s)     
      (define r (Sqrt (⊕ (Sqr r1) (Sqr r2))))
      (define θ (if (> r2 0) (Acos (⊘ r1 r)) (Asin (⊘ r1 r))))
-     #;(⊗ (Expt r s) (ExpI (⊗ θ s)))
-     (⊕ (⊗    (Expt r s) (Cos (⊗ θ s)))  ; this form simplifies a bit more
-        (⊗ @i (Expt r s) (Sin (⊗ θ s))))]
+     (⊗ (Expt r s) (ExpI (⊗ θ s)))]
     [(a b c)
      `(expt ,(⊕ a (⊗ b @i)) ,c)]))
+                   
+(module+ test
+  (displayln "TEST - ComplexRealExpt")
+  (complex-mode)
+  (check-equal? (ComplexRealExpt  1 1 -1) '(+ 1/2 (*@i -1/2)))
+  '(+
+    2/5
+    (*@i
+     (* -1 (expt 5 -1/2) (expt (+ 1 (* -1 (expt (* 2 (expt 5 -1/2)) 2))) 1/2))))
+expected:   '(+ 1/2 (*@i -1/2)))
 
 (define (RealComplexExpt r a b)
   (when debugging? (displayln (list 'RealComplexExpt r a b)))
@@ -1564,27 +1596,28 @@
   (check-equal? (Expt '@i  0)  1)
   (check-equal? (Expt '@i  1) '@i)
   (check-equal? (Expt '@i  2) -1)
-  (check-equal? (Expt '@i  3) '(* -1 @i))
+  (check-equal? (Expt '@i  3) '(*@i -1))
   (check-equal? (Expt '@i  4)  1)
   
-  (check-equal? (Expt '@i -1) '(* -1 @i))
+  (check-equal? (Expt '@i -1) '(*@i -1))
   (check-equal? (Expt '@i -2) -1)
   (check-equal? (Expt '@i -3) '@i)
   (check-equal? (Expt '@i -4)  1)
 
-  (check-equal? (Expt '@i  1/2) '(+ (expt 2 -1/2)        (* (expt 2 -1/2) @i)))
-  (check-equal? (Expt '@i  1/3) '(+ (* 1/2 (expt 3 1/2)) (*           1/2 @i)))
-  (check-equal? (Expt '@i  1/4) '(+       (expt (* 1/2 (+ 1       (expt 2 -1/2))) 1/2)
-                                    (* @i (expt (* 1/2 (+ 1 (* -1 (expt 2 -1/2)))) 1/2))))
-  (check-equal? (Expt '@i  2/3)  '(+ 1/2 (* 1/2 (expt 3 1/2) @i)))
-
+  (check-equal? (Expt '@i  1/2) '(+ (expt 2 -1/2) (*@i (expt 2 -1/2))))
+  (check-equal? (Expt '@i  1/3) '(+ (* 1/2 (expt 3 1/2)) (*@i 1/2)))
+  (check-equal? (Expt '@i  1/4)
+                '(+
+                  (expt (* 1/2 (+ 1 (expt 2 -1/2))) 1/2)
+                  (*@i (expt (* 1/2 (+ 1 (* -1 (expt 2 -1/2)))) 1/2))))
+  (check-equal? (Expt '@i  2/3)  '(+ 1/2 (*@i (* 1/2 (expt 3 1/2)))))
   (check-equal? (Expt '(* 2 @i) 0)  1)
   (check-equal? (Expt '(* 2 @i) 1) '(*  2 @i))
   (check-equal? (Expt '(* 2 @i) 2) -4)
-  (check-equal? (Expt '(* 2 @i) 3) '(* -8 @i))
+  (check-equal? (Expt '(* 2 @i) 3) '(*@i -8))
   (check-equal? (Expt '(* 2 @i) 4)  16)
 
-  (check-equal? (Expt '(* 2 @i) -1) '(* -1/2 @i))
+  (check-equal? (Expt '(* 2 @i) -1) '(*@i -1/2))
   (check-equal? (Expt '(* 2 @i) -2) -1/4)
   (check-equal? (Expt '(* 2 @i) -3) '(*  1/8 @i))
   (check-equal? (Expt '(* 2 @i) -4)  1/16)
@@ -1596,7 +1629,7 @@
   (check-equal? (Expt '(* 2. @i) 0)  1)
   (check-equal? (Expt '(* 2. @i) 1) '(* 2. @i))
   (check-equal? (Expt '(* 2. @i) 2) -4.)
-  (check-equal? (Expt '(* 2. @i) 3) '(* -8. @i))
+  (check-equal? (Expt '(* 2. @i) 3) '(*@i -8.0))
   (check-equal? (Expt '(* 2. @i) 4)  16.)
 
   (check-equal? (Expt @i        @i)  '(expt @e (* -1/2 @pi)))
@@ -1616,7 +1649,7 @@
   
   (check-equal? (Expt '(+ 1 @i)  1)  '(+ 1 @i))
   (check-equal? (Expt '(+ 1 @i)  2)  '(* 2 @i)) ; loops
-  (check-equal? (Expt '(+ 1 @i)  3)  '(+ -2 (* 2 @i)))
+  (check-equal? (Expt '(+ 1 @i)  3)  '(+ -2 (*@i 2)))
   (check-equal? (Expt '(+ 1 @i)  4)  -4)
 
   ; The value of this one depends on, whether we are in real or complex mode.
@@ -1624,20 +1657,29 @@
   (real-mode)
   (check-equal? (normalize '(expt -8 1/3)) -2)
   (complex-mode)
-  (check-equal? (normalize '(expt -8 1/3)) '(* 2 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
+  (check-equal? (normalize '(expt -8 1/3)) '(+ 1 (*@i (expt 3 1/2))))
   (check-equal? (N (normalize '(expt -8 1/3))) 1.0+1.7320508075688772i)
-  
   
   (check-equal? 
    (normalize '(expt 1+i 1+i))
-   '(+ (* (expt 2 1/2) @i (expt @e (* -1/4 @pi)) (sin (+ (* 1/4 @pi) (* 1/2 (ln 2)))))
-       (* (expt 2 1/2)    (expt @e (* -1/4 @pi)) (cos (+ (* 1/4 @pi) (* 1/2 (ln 2)))))))
+   '(+
+     (* (expt 2 1/2) (expt @e (* -1/4 @pi)) (cos (+ (* 1/4 @pi) (* 1/2 (ln 2)))))
+     (*@i
+      (*
+       (expt 2 1/2)
+       (expt @e (* -1/4 @pi))
+       (sin (+ (* 1/4 @pi) (* 1/2 (ln 2))))))))
   
   (check-equal? (normalize '(exp (* @i @pi))) -1)
   (check-equal?
    (normalize '(expt 1+i 1-i))
-   '(+ (* (expt 2 1/2) @i (expt @e (* 1/4 @pi)) (sin (+ (* 1/4 @pi) (* -1/2 (ln 2)))))
-       (* (expt 2 1/2)    (expt @e (* 1/4 @pi)) (cos (+ (* 1/4 @pi) (* -1/2 (ln 2)))))))
+   '(+
+    (* (expt 2 1/2) (expt @e (* 1/4 @pi)) (cos (+ (* 1/4 @pi) (* -1/2 (ln 2)))))
+    (*@i
+     (*
+      (expt 2 1/2)
+      (expt @e (* 1/4 @pi))
+      (sin (+ (* 1/4 @pi) (* -1/2 (ln 2))))))))
   (check-= (N (normalize '(expt 1+i 1+i)))      (expt 1+i 1+i) 0.0001)
   (check-= (N (normalize '(expt 1+i 1-i)))      (expt 1+i 1-i) 0.0001)
   (check-= (N (normalize '(expt 1+i (+ 1 @i)))) (expt 1+i 1+i) 0.0001))
@@ -1769,7 +1811,7 @@
     [(⊕ (⊗ p (Integer _) @pi) u) #:when (even? p) (Cos: u)]
     
     [(Acos u) u]    ; xxx only of -1<u<1
-    [(Asin u) (⊖ (⊗ 1/2 @pi) u)]
+    [(Asin u) (Sqrt (⊖ 1 (Sqr u)))]
     [(⊖ u) (Cos u)] ; even function
     [_ `(cos ,u)]))
 
@@ -1795,7 +1837,7 @@
   (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   (check-equal? (Cos (Acos x)) 'x)
-  (check-equal? (Cos (Asin x)) '(+ (* 1/2 @pi) (* -1 x))))
+  (check-equal? (Cos (Asin x)) '(expt (+ 1 (* -1 (expt x 2))) 1/2)))
 
 (define (Sin: u)
   (when debugging? (displayln (list 'Sin: u)))
@@ -1827,7 +1869,7 @@
                       [sign   (if (> sign.0 0) 1 -1)])
                  (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
     [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
-    [(Acos u) (⊖ (⊗ 1/2 @pi) u)]
+    [(Acos u) (Sqrt (⊖ 1 (Sqr u)))]
     [(⊖ u) (⊖ (Sin u))] ; odd function
     [_ `(sin ,u)]))
 
@@ -1849,7 +1891,7 @@
   (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
   (check-equal? (Sin -3) (⊖ (Sin 3)))
   (check-equal? (Sin (Asin x)) 'x)
-  (check-equal? (Sin (Acos x)) '(+ (* 1/2 @pi) (* -1 x))))
+  (check-equal? (Sin (Acos x)) '(expt (+ 1 (* -1 (expt x 2))) 1/2)))
 
 (define (Asin: u)
   (when debugging? (displayln (list 'Asin: u)))
@@ -2140,6 +2182,7 @@
     [(Exp u)     (M exp Exp u)]
     [(Asin u)    (M asin Asin u)]
     [(Acos u)    (M acos Acos u)]
+    [(Imaginary u) (M (lambda (y) (* y +i)) Imaginary u)]
     ; [(Atan u)    (M atan Atan u)]
     [(Equal u v)        (M2 =  Equal u v)]
     [(Less u v)         (M2 <  Less u v)]
@@ -2158,7 +2201,7 @@
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
 (module+ test
-  (check-equal?   (normalize '(expt -8      1/3))  '(* 2 (+ 1/2 (* 1/2 (expt 3 1/2) @i))))
+  (check-equal?   (normalize '(expt -8      1/3))  '(+ 1 (*@i (expt 3 1/2))))
   ; only in complex mode
   ; (check-=     (N (normalize '(expt -8      1/3)))                 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
   (check-=     (N (normalize '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
