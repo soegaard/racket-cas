@@ -833,7 +833,7 @@
     [r                                      (%numerator u)]
     [r.bf                                   (%numerator u)]
     [(Expt u p)        #:when (negative? p) 1]
-    [(Expt u (⊗ p us)) #:when (negative? p) 1]
+    [(Expt u (⊗ p us)) #:when (negative? p) 1]    
     [(⊗ u v)                                (⊗ (numerator u) (numerator v))]
     [_                                      u]))
 
@@ -894,7 +894,8 @@
   (check-equal? (together-denominator (⊘ (Sqr (⊖ x 1))
                                          (⊗ (⊖ x 2) (⊖ x 3))))
                 (⊗ (⊖ x 2) (⊖ x 3)))
-  (check-equal? (together-denominator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
+  (check-equal? (together-denominator (⊗ 'a (Expt 'x 'n) (Expt 'y (⊖ 'm)) 
+                                         (Exp (⊕ 'a (⊖ 'b) (⊗ -2 'c) (⊗ 3 'd)))))
                 '(* (expt @e (* -1 (+ (* -1 b) (* -2 c)))) (expt y m))) ; should be simplified.
   (check-equal? (together-denominator (⊘ (Expt 'a (⊖ 'b)) x)) '(* (expt a b) x))
   (check-equal? (together-denominator (⊗ 2 (Expt x y) (Expt 'b 2))) 1))
