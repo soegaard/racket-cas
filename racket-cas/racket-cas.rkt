@@ -204,6 +204,58 @@
 (define-match-expander Prod
   (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
 
+
+;; The pattern (Complex u v) matches expressions that syntactically are imaginary:
+;;   (Complex u v) matches       @i                   and binds u->1,             v->0
+;;   (Complex u v) matches    (* @i a)                and binds u->a,             v->0
+;;   (Complex u v) matches    (* @i a b ...)          and binds u->(* a b ...)  , v->0
+;;   (Complex u v) matches (+    @i          c)       and binds u->1,             v->c
+;;   (Complex u v) matches (+    @i          c d ...) and binds u->1,             v->(+ c d ...)
+;;   (Complex u v) matches (+ (* @i a)       c)       and binds u->a,             v->c
+;;   (Complex u v) matches (+ (* @i a)       c d ...) and binds u->a,             v->(+ c d ...)
+;;   (Complex u v) matches (+ (* @i a b ...) c d ...) and binds u->(* a b ...),   v->(+ c d ...)
+;;   (Complex u v) matches _                          and binds u->0,             v->a)
+;; In short:
+;;    After a match  (⊕ (⊗ @i u) v) is equal to the matched expression.
+
+(define (Complex: u v)
+  (⊕ (⊗ @i u) v))
+
+(define-match-expander Complex
+  ; Note: This matches everything and writes it as a complex, even when real or imag equals to 0.
+  (λ (stx)
+    (syntax-parse stx
+      [(_ u v)
+       (syntax/loc stx
+         (or (and           '@i                                 (bind: u 1)  (bind: v 0))
+             (and (list  '* '@i u)                                           (bind: v 0))
+             (and (list* '* '@i (app (λ(ys) (cons '* ys)) u))                (bind: v 0))
+             (and (list  '+ '@i v)                              (bind: u 1))
+             (and (list  '+ '@i (app (λ(ys) (cons '+ ys)) v))   (bind: u 1))
+             (and (list  '+ (list  '* '@i u)                                                        v))
+             (and (list* '+ (list  '* '@i u)                              (app (λ(ys) (cons '+ ys)) v)))
+             (and (list  '+ (list* '* '@i (app (λ(ys) (cons '* ys)) u))                             v))
+             (and (list* '+ (list* '* '@i (app (λ(ys) (cons '* ys)) u))   (app (λ(ys) (cons '+ ys)) v)))
+             (and v (bind: u 0))))]))
+  (λ (stx)
+    (syntax-parse stx [(_ u v) #'(Complex: u v)] [_ (identifier? stx) #'Complex:])))
+
+(define (ImaginaryTerm: u)
+  (⊗ @i u)) 
+
+(define-match-expander ImaginaryTerm
+  ; Note: This matches everything only if the imaginary part is non-zero.  
+  (λ (stx)
+    (syntax-parse stx
+      [(_ u)
+       (syntax/loc stx
+         (or (and           '@i      (bind: u 1))
+             (and (list  '* '@i u))
+             (and (list* '* '@i (app (λ(ys) (cons '* ys)) u)))))]))
+  (λ (stx)
+    (syntax-parse stx [(_ u) #'(ImaginaryTerm: u)] [_ (identifier? stx) #'ImaginaryTerm:])))
+
+
 ;;; The pattern (Piecewise us vs) matches a piecewise expression of
 ;;; the form (piecewise [u v] ...) 
 ;;; and binds us to (list u ...) 
@@ -268,8 +320,8 @@
       (<< u v)))
 
 (define (symbol<<? x y)
-  ; The symbol @i gets special treatment to make it the
-  ; first symbol in a product.
+  ; The symbol @i gets special treatment.
+  ; Note: Not needed for <<, but symbol<<? might be useful elsewhere.
   (cond
     [(eq? x y)   #f]
     [(eq? x '@i) #t]
@@ -279,6 +331,18 @@
 (define (<< s1 s2)
   ; (displayln (list '<<= s1 s2)) ; uncomment in case of infinite loop
   (math-match* (s1 s2)
+    ;; [(@i  @i) #f]
+    ;; [(@i  u)  #t] ; @i is always first both sums and products
+    
+    ;; [((⊗ @i u) (⊗ @i v)) (<< u v)]
+    ;; [((⊗ @i u) v)                       #t]
+    ;; [((⊕ (⊗ @i u) us)  (⊗ @i v))        #f]
+    ;; [((⊕ (⊗ @i u) us)  (⊕ (⊗ @i v) vs)) (or (<< u v) (and (equal? u v) (<< us vs)))]
+    ;; [((⊗ @i u) v)                       #t]
+    [((ImaginaryTerm u) (ImaginaryTerm v)) (<< u v)]
+    [((ImaginaryTerm u) v)                 #t]
+    [(u (ImaginaryTerm v))                 #f]
+    
     ; Case: at least one number
     [(r s) #:when (and (real? r) (real? s)) (< r s)] ; fast path for two reals
     ; This is not needed - we remove complex numbers in normalize
@@ -374,12 +438,22 @@
                      '(+ (* 2 h (expt x 2)) (*   (expt h 2) x))) #t)
   (check-equal? (<<= '(* a (expt (+ 1 y) 2)) 'c) #t)
   (check-equal? (<< '(* 2 (+ -1.0 x)) '(* 3 (expt (+ -1.0 x) 2))) #t)
-  (check-equal? (<< '@i '@a) #t) ; @i is always the first symbol in a product
+  ; @i is always the first symbol
+  (check-equal? (<< '@i '@a) #t) 
   (check-equal? (<< '@a '@i) #f)
   (check-equal? (<< '@i '@z) #t)
   (check-equal? (<< '@z '@i) #f)
   (check-equal? (<< '@i 'a)  #t) 
-  (check-equal? (<< 'a '@i)  #f))
+  (check-equal? (<< 'a '@i)  #f)
+  (check-equal? (<< '@i '@i) #f)
+  ; @i precedes all other types of expressions
+  (check-equal? (<< '@i 1)           #t)
+  (check-equal? (<< '@i 1.2)         #t)
+  (check-equal? (<< '@i '(+ 1 x))    #t)
+  (check-equal? (<< '@i '(* 1 x))    #t)
+  (check-equal? (<< '@i '(f x))      #t)
+  (check-equal? (<< '@i '(sin x))    #t)
+  (check-equal? (<< '@i '(expt x 2)) #t))
 
 ;; (⊕ u ...) in an expression context expands to (plus u ...)
 ;; That is: Elsewhere use ⊕ in order to add expressions.
@@ -394,15 +468,29 @@
   ;   r and s matches only numbers
   ;   x and y matches only symbols
   ;   @e and @pi matches only '@e and '@pi  
-  (math-match* (s1 s2)  
+  (math-match* (s1 s2)
+    ; handle reals
     [(0 u) u]
     [(u 0) u]
     [(r s)    (+ r s)]
-    ; [(r.bf s.bf) (bf+ r.bf s.bf)] ; xxx
+    ; [(r.bf s.bf) (bf+ r.bf s.bf)]    ; xxx
     ; [(r s.bf)    (bf+ (bf r) s.bf)]  ; xxx
     ; [(r.bf s)    (bf+ r.bf (bf s))]  ; xxx
-    [(u s) (plus2 s u)]  ; ok since u can not be a number, we have that s <<= u
-    [(u u) (times2 2 u)] 
+    ; handle at least one complex 
+    [((Complex u1 v1) (Complex u2 v2)) #:when (not (and (equal? u1 0) (equal? u2 0)))
+                                       (define u1+u2 (plus2 u1 u2))
+                                       (define v1+v2 (plus2 v1 v2))
+                                       (displayln (list 'complex u1+u2 v1+v2))
+                                       (match* (u1+u2 v1+v2)
+                                         [(0 0) 0]
+                                         [(0 v) v]
+                                         [(1 0) @i]
+                                         [(u 0) (⊗ @i u)]
+                                         [(1 v) `(+ @i ,v)]
+                                         [(u v) `(+ ,(⊗ @i u) ,v)])]
+    ; other
+    [(u s) (plus2 s u)]  ; ok since u can not be a number nor @i, we have that s <<= u
+    [(u u) (times2 2 u)]    
     [((k⊗ r u) (k⊗ s u)) (times2 (+ r s) u)]
     [((k⊗ r u) (k⊗ s v)) #:when (<<= v u) (plus2 s2 s1)]
     [((⊕ u v) (⊕ _ _)) (plus2 u (plus2 v s2))]
@@ -453,7 +541,30 @@
   (check-equal? (⊕ 1 x (⊗ -1 (⊕ 1 x))) 0)
   (check-equal? (normalize '(+ (f x) (f y) (f x))) '(+ (* 2 (f x)) (f y)))
   (check-equal? (normalize '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x))))
-                '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x)))))
+                '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x))))
+  ;;; complex
+  (check-equal? (⊕ @i)                            @i)
+  (check-equal? (⊕ @i @i)                     `(* @i 2))
+  (check-equal? (⊕ @i @i @i)                  `(* @i 3))
+  (check-equal? (⊕ @i 0)                          @i)
+  (check-equal? (⊕ 0 @i)                          @i)  
+  (check-equal? (⊕ @i 1)                `(+       @i 1))  
+  (check-equal? (⊕ @i 1.0)              `(+       @i 1.))
+  
+  (check-equal? (⊕ @i `(* @i 3))              `(* @i 4))
+  (check-equal? (⊕ `(* @i  3) `(* @i 4))      `(* @i 7))
+  (check-equal? (⊕ `(* @i  3)     @i)         `(* @i 4))
+  (check-equal? (⊕ `(* @i  3)     @i 2)   `(+  (* @i 4) 2))
+  (check-equal? (⊕ `(* @i -1)     @i)                   0)
+  (check-equal? (⊕     @i     `(* @i -1))               0)
+  (check-equal? (⊕ (⊕ `(* @i 3 a) 1) @i)  `(+ (* @i (+ 1 (* 3 a))) 1)) 
+  (check-equal? (⊕ (⊕        @i 1)    (⊕     @i      2)) `(+ (* @i 2) 3))
+  (check-equal? (⊕ (⊕ `(* @i 3) 1)    (⊕     @i      2)) `(+ (* @i 4) 3))
+  (check-equal? (⊕ (⊕ `(* @i 3) 1)    (⊕ `(* @i 5)   2)) `(+ (* @i 8) 3))
+  (check-equal? (⊕ (⊕     @i 2)       (⊕ `(* @i 3)   1)) `(+ (* @i 4) 3))
+  (check-equal? (⊕ (⊕ `(* @i 3 a) 1)  (⊕ `(* @i 4 a) 3)) `(+ (* @i 7 a) 4))
+  (check-equal? (⊕ (⊕ `(* @i 3 a) 1)  (⊕ `(* @i 4 b) 3))
+                `(+ (* @i (+ (* 3 a) (* 4 b)) 4))))
 
 ;; (⊗ u ...) in an expression context expands to (times u ...)
 ;; That is: Elsewhere use ⊗ in order to multiply expressions.
@@ -464,7 +575,13 @@
   (math-match* (s1 s2)
     [(0 u) 0] [(u 0) 0]
     [(1 u) u] [(u 1) u]
-    [(r s) (* r s)]
+    [(r s)    (* r s)]
+    
+    [(@i @i)  -1]
+    [(@i 1)   @i]
+    [(@i r)   `(* @i ,r)]
+    [(u  @i)  (displayln "VVV") (times2 @i u)]
+    
     ; [(r.bf s.bf) (bf* r.bf s.bf)]    ; xxx
     ; [(r s.bf)    (bf* (bf r) s.bf)]  ; xxx
     ; [(r.bf s)    (bf* r.bf (bf s))]  ; xxx
@@ -492,6 +609,7 @@
     [(_ _) (if (<<= s1 s2) (list '* s1 s2) (list '* s2 s1))]))
 
 (module+ test
+  (displayln "TEST - times")
   (check-equal? (⊗) 1)
   (check-equal? (⊗ 2) 2)
   (check-equal? (⊗ 2 3) 6)
@@ -567,7 +685,7 @@
   (define (normalize-complex-number r)
     (define a (real-part r))
     (define b (imag-part r))
-    (if (zero? a) (⊗ b @i) (⊕ a (⊗ b @i))))
+    (if (zero? a) (⊗ @i b) (⊕ (⊗ @i b) a)))
   (define n normalize)
   (math-match u
     [r #:when (real? r) r]    ; fast path
@@ -629,6 +747,7 @@
                             (n `(,f ,@nus))))])]))
 
 (module+ test
+  (displayln "TEST - normalize")
   (check-equal? (normalize '(+ 1 x (* (expt (sin (ln (cos (asin (acos (sqrt (tan x))))))) 2))))
                 (⊕ 1 x (⊗ (Expt (Sin (Ln (Cos (Asin (Acos (Sqrt (Tan x))))))) 2))))
   (check-equal? (normalize '(/ (- x) (+ (- x y) (exp x) (sqr x) (+ 3)))) 
@@ -637,11 +756,11 @@
   (check-equal? (normalize '(f (- x y))) `(f ,(⊖ x y)))
   (check-equal? (normalize '(log 3)) '(log 10 3))
   ; check that complex numbers are normalized to the form (+ a (* b @i))
-  (check-equal? (normalize  +i)       '@i)
-  (check-equal? (normalize 1+i)  '(+ 1 @i))
-  (check-equal? (normalize  +2i) '(* 2 @i))
+  (check-equal? (normalize  +i)     '@i)
+  (check-equal? (normalize 1+i)  '(+ @i 1))
+  (check-equal? (normalize  +2i) '(* @i 2))
   ; check that @i appears as the first symbol in products
-  (check-equal? (normalize '(* 2 x a z 3 y @a @z @i )) '(* 6 @i @a @z a x y z)))
+  (check-equal? (normalize '(* 2 x a z 3 y @a @z @i )) '(* @i 6 @a @z a x y z)))
 
 
 ; Compile turns an expression into a Racket function.
@@ -665,6 +784,7 @@
     [_ s]))
 
 (module+ test
+  (displayln "TEST - distribute")
   (check-equal? (distribute (⊗ 2 (⊕ 3 x y))) '(+ 6 (* 2 x) (* 2 y)))
   (check-equal? (distribute (⊗ (⊕ x y) (Cos x))) '(+ (* x (cos x)) (* y (cos x))))
   (check-equal? (distribute (⊗ (⊕ 3 x y) 2)) '(+ 6 (* 2 x) (* 2 y)))
@@ -1342,7 +1462,7 @@
   (check-equal? (imaginary-term? 42)          #f))
 
 
-(define (partition-terms-in-real/imaginary u)
+#;(define (partition-terms-in-real/imaginary u)
   ; Given a sum u, two normalized expressions u_real and u_imag such
   ; that u = u_real + i u_imag are returned.
   ; The sum u_imag consists of all terms in u in which @i is a factor.
@@ -1380,7 +1500,7 @@
     [_ (values u 0)]))
 
 
-(module+ test
+#;(module+ test
   (displayln "TEST - ")
 
   (let-values ([(r i) (partition-terms-in-real/imaginary (normalize '(+ (Exp 5) (* -2 @i) z 2/3)))])
@@ -1399,13 +1519,13 @@
       (check-equal? r -1)
       (check-equal? i 1)))
 
-(define (Complex: u v)
-  (⊕ u (⊗ v @i))) 
+;; (define (Complex: u v)
+;;   (⊕ u (⊗ v @i))) 
 
-(define-match-expander Complex
-  ; Note: This matches everything and writes it as a complex, even when real or imag equals to 0.
-  (λ (stx) (syntax-parse stx [(_ u v) #'(app partition-terms-in-real/imaginary u v)]))
-  (λ (stx) (syntax-parse stx [(_ u v) #'(Complex: u v)] [_ (identifier? stx) #'Complex:])))
+;; (define-match-expander Complex
+;;   ; Note: This matches everything and writes it as a complex, even when real or imag equals to 0.
+;;   (λ (stx) (syntax-parse stx [(_ u v) #'(app partition-terms-in-real/imaginary u v)]))
+;;   (λ (stx) (syntax-parse stx [(_ u v) #'(Complex: u v)] [_ (identifier? stx) #'Complex:])))
 
 (module+ test
   (displayln "TEST - Complex")

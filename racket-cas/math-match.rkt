@@ -16,9 +16,9 @@
   (define (bigfloat-number? x) (bigfloat? x))
   (define (positive-number? x) (and (real? x) (positive? x)))
   (define (negative-number? x) (and (real? x) (negative? x)))
-  (define (@e? u)  (eq? u '@e))   ; Euler's constant
+  (define (@e?  u) (eq? u '@e))  ; Euler's constant
   (define (@pi? u) (eq? u '@pi)) ; pi
-  (define (@i? u) (eq? u '@i))) ; i
+  (define (@i?  u) (eq? u '@i))) ; i
 
 (module conventions racket
   (provide find-convention-type conventions  (struct-out convention))
@@ -66,7 +66,7 @@
           (convention (make-begins-with-pred "bool") #'boolean?)
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)
-          (convention (make-is-pred "@i") #'@i?)))
+          (convention (make-is-pred "@i")  #'@i?)))
   
   (define (find-convention-type s)
     (for/or ([c (in-list conventions)])
