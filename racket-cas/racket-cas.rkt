@@ -1,6 +1,7 @@
 #lang racket
 (provide (all-defined-out))
 (require (prefix-in % "bfracket.rkt"))
+(require (only-in math/base cosh sinh))
 (define debugging? #f)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
@@ -1919,9 +1920,6 @@
   (check-equal? (Sin (Asin x)) 'x)
   (check-equal? (Sin (Acos x)) (Sqrt (⊖ 1 (Sqr x))))
   (check-equal? (Sin @i) '(* @i (sinh 1))))
-
-(define (cosh x) (* 0.5 (+ (exp x) (exp (- x)))))
-(define (sinh x) (* 0.5 (- (exp x) (exp (- x)))))
 
 (define (Cosh: u)
   (when debugging? (displayln (list 'Cosh: u)))
