@@ -3131,6 +3131,7 @@
     (define y (verbose~ v))
     (~a "\\begin{pmatrix} " x "\\\\" y "\\end{pmatrix}")))
 
+
 ;;; Formatting Parameters
 
 (define output-application-brackets      (make-parameter (list "(" ")")))
@@ -3204,6 +3205,7 @@
     (match u
       ['<=  "≤ "]
       ['>=  "≥ "]
+      ['~   "\\sim "]
       [_    (~a u)]))
   (define (~symbol s) 
     (match s
@@ -3213,6 +3215,7 @@
       [_ #:when (member s operators) (~a "\\" s)]
       ['<=  "\\leq "]
       ['>=  "\\geq "]
+      ['~   "\\sim "]
       ['*   "\\cdot "]
       ['or  "\\vee "]
       ['and "\\wedge "]
@@ -3252,6 +3255,7 @@
     (match u
       ['<=  "≤ "]
       ['>=  "≥ "]
+      ['~   "\\sim "]
       [_    (~a u)]))
   (define (~symbol s)
     (match s
@@ -3261,6 +3265,7 @@
       [_ #:when (member s operators) (~a "\\" s)]      
       ['<=  "\\leq "]
       ['>=  "\\geq "]
+      ['~   "\\sim "]
       ['*   "\\cdot "]   ; multiplication
       ['or  "\\vee "]    ; logical or
       ['and "\\wedge "]  ; logical and
@@ -3739,13 +3744,16 @@
       
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       ; todo: if u or v contains And or Or in u or v then we need parentheses as in the And line
-      [(Or u v)             (~a (v~ u) " " (~sym 'or) " " (v~ v))]
+      [(Or u v)             (~a (v~ u) " " (~sym 'or) " " (v~ v))]      
       [(list  '= v) (~a (~sym '=) (v~ v))]
       [(list* '= us) ; handle illegal = with multiple terms
        (string-append* (add-between (map (λ (u) (v~ u #t)) us) (~a " " (~relop '=) " ")))]
+      [(list  '~ v)      (~a (~sym '~) (v~ v))]
+      [(list* '~ us)
+       (string-append* (add-between (map (λ (u) (v~ u #t)) us) (~a " " (~relop '~) " ")))]
       [(Equal u v)        (~a (v~ u #t)  " " (~relop '=) " " (v~ v #t))] ; never reached!!
       ; [(⊖ u v)     (~a (par u) "-" (v~ v))]
-      ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]
+      ; [(⊘ u v)     (~a (par u) (~sym '/) (par v))]      
       [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
       ; unnormalized power of a power
       [(Expt (and (Expt u v) w) w1)   (~a ((output-sub-exponent-wrapper)
@@ -3854,6 +3862,7 @@
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
+  (check-equal? (~ '(~ X (bi n p)))    "$X \\sim  bi(n,p)$")
   (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
   ; --- Default
   (use-default-output-style)
