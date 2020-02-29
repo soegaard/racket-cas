@@ -3364,7 +3364,6 @@
       (syntax-parse stx
         [(_ u v) #'(list '/ u v)])))
 
-
   (define (argcons op u v)
     (match v
       [(list* (== op) vs) (list* op u vs)]
@@ -3446,7 +3445,7 @@
     (define ~frac (output-fraction))
     (define (~num r)
       (define precision (output-floating-point-precision))
-      (cond [(and (exact? r) (> (denominator r) 1)) (~frac r) (~a r)]
+      (cond [(and (exact? r) (> (denominator r) 1)) (~frac r)]
             [(exact? r) (~a r)]
             [(nan? r)   (~a r)]
             [precision  (~r r #:precision precision)]
@@ -3655,7 +3654,7 @@
       [(⊗ -1 α) #:when (negative? α)                          (~a "-" (paren  (v~ α)))]
       [(⊗ -1 x)                                               (~a "-"         (v~ x))]
       [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]      
-      [(⊗ -1 p v) #:when (and original? (negative? p))        (displayln (list "A" p v (⊗ p v)))
+      [(⊗ -1 p v) #:when (and original? (negative? p))        ; (displayln (list "A" p v (⊗ p v)))
                                                               (~a "-" (paren  (v~ (⊗ p v) #f)))] ; wrong
       [(⊗ -1 v)   #:when      original?                       (~a "-"         (v~ v))]
       ; [(⊗ -1 p v) #:when                (negative? p)         (~a "-" (paren  (v~ (⊗ p v) #f)))]                 ; wrong
@@ -3678,15 +3677,15 @@
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
 
       ; Use explicit multiplication for fractions
-      [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v)))
+      [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v))) 
                       (~a "-" (~num (abs r)) (implicit* r u) (v~ (argcons '* u v)))]
       [(⊗ r (⊗ u v))  #:when (and (positive? r) (not (equal? '(*) v))) 
                       (~a    (~num (abs r))  (implicit* r u) (v~ (argcons '* u v)))] ; XXX
-      [(⊗ r v)        #:when (negative? r)
+      [(⊗ r v)        #:when (negative? r) 
                       (define w (if original? values paren))
                       (~a  (w (~a "-" (~num (abs r)))) (implicit* r v) (par v #:use paren))] ; XXX
-      [(⊗ r v)        #:when (positive? r)
-                      (~a     (~num (abs r)) (implicit* r v) (par v #:use paren))] ; XXX
+      [(⊗ r v)        #:when (positive? r) 
+                      (~a     (~num r) (implicit* r v) (par v #:use paren))] ; XXX
       
       [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
       ; plus
@@ -3863,6 +3862,9 @@
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
   (check-equal? (~ '(~ X (bi n p)))    "$X \\sim  bi(n,p)$")
+  (check-equal? (~ '(* 1/2 1/3))               "$\\frac{1}{2}\\cdot \\frac{1}{3}$")
+  (check-equal? (~ '(sqrt (* 1/2 1/3))) "$\\sqrt{\\frac{1}{2}\\cdot \\frac{1}{3}}$")
+  (check-equal? (~ '(sqrt (* 12 1/12 11/12))) "$\\sqrt{12\\cdot \\frac{1}{12}\\cdot \\frac{11}{12}}$")
   (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
   ; --- Default
   (use-default-output-style)
