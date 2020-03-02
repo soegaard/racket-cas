@@ -3552,6 +3552,8 @@
         ; unnormalized quotient
         [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                        (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+        ; unormalized sqr
+        [(list 'sqr u) (v~ `(expt ,u 2))]
         ; unormalized sqrt
         [(list 'sqrt u)   ((output-format-sqrt) u)]
         ; unnormalized root
@@ -3866,6 +3868,7 @@
   (check-equal? (~ '(sqrt (* 1/2 1/3))) "$\\sqrt{\\frac{1}{2}\\cdot \\frac{1}{3}}$")
   (check-equal? (~ '(sqrt (* 12 1/12 11/12))) "$\\sqrt{12\\cdot \\frac{1}{12}\\cdot \\frac{11}{12}}$")
   (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
+  (check-equal? (tex '(- (sqr c) (sqr a))) "$c^{2}-a^{2}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* -1 x)) "-x")
