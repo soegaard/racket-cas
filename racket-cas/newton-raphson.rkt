@@ -15,7 +15,8 @@
 
 
 (require math/bigfloat
-         "core.rkt") 
+         "core.rkt" "diff.rkt"
+         "simplify-expand.rkt") ; for subst
 
 (define (newton-raphson f x u0 [n 10] #:trace? [trace? #f])
   ; Use Newton-Raphson's metod to solve the equation f(x)=0.

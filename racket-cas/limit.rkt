@@ -6,7 +6,8 @@
 (provide limit) ; (limit u x x0)  compute the limit of the expression for x -> x0
 
          
-(require "core.rkt" "math-match.rkt")
+(require "core.rkt" "math-match.rkt"
+         "diff.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)

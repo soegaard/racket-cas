@@ -17,8 +17,11 @@
 
 ; repl -> racket-cas -> core
 
-(require               "core.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt")
-(provide (all-from-out "core.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt"))
+(require               "core.rkt" "diff.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt")
+(provide (all-from-out "core.rkt" "diff.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt"))
+
+(require               "simplify-expand.rkt")
+(provide (all-from-out "simplify-expand.rkt"))
 
 
 (module+ start

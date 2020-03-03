@@ -1,7 +1,7 @@
 #lang racket/base
 (provide taylor) ; (taylor u x a n)  compute taylor series of expression u at x=a with n terms
 
-(require "core.rkt" "math-match.rkt")
+(require "core.rkt" "diff.rkt" "math-match.rkt" "simplify-expand.rkt")
 
 (define (taylor u x a n)
   ; Compute the first n+1 terms of the Taylor series of u

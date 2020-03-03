@@ -1,5 +1,6 @@
 #lang racket
 (provide (all-defined-out))
+(require "parameters.rkt")
 (require (prefix-in % "bfracket.rkt"))
 (require (only-in math/base cosh sinh))
 (define debugging? #f)
@@ -850,44 +851,6 @@
 
   (check-equal? (normalize '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
   (check-equal? (expand-all '(* @i (+ 4 (* -1 (+ (* 4 x) 2))))) '(* @i (+ 2 (* -4 x)))))
-
-
-(define (logical-expand u)
-  (define u0 u)
-  (define le logical-expand)
-  (math-match u
-    [(And #f u)          #f]
-    [(And #t u)          (le u)]
-    [(And u (Or v1 v2))  (Or (le (And v1 u)) (le (And v2 u)))]
-    [(Or u v)            (Or (le u) (le v))]
-
-    [(or (And (Equal x u) v)
-         (And v (Equal x u))) (match (simplify (subst v x u))
-                                [#t (Equal x u)]
-                                [#f #f]
-                                [_  (And (Equal x u) (le v))])]
-    [u                   u]))
-
-(define (simplify u) ; use when the automatic simplification isn't enough
-  ; TODO: rewrite fractions with square roots in the denominator
-  (define s simplify)
-  (math-match u
-    [(Expt n 1/2)    (Expt n 1/2)]
-    [(⊗ u v)         (⊗ (s u) (s v))]
-    [(⊕ u v)         (⊕ (s u) (s v))]
-    [(list (var: op) r1 r2) (case op
-                              [(=)  (=  r1 r2)]
-                              [(<)  (<  r1 r2)]
-                              [(>)  (>  r1 r2)]
-                              [(<=) (<= r1 r2)]
-                              [(>=) (>= r1 r2)]
-                              [else u])]
-    [(Equal u1 u2)   (Equal (s u1) (s u2))]
-    [(Diff u x)      (diff u x)]
-    [_ u]))
-
-(module+ test (check-equal? (simplify '(+ 3 (* 2 (expt 8 1/2))))
-                            (⊕ (⊗ 2 2 (Sqrt 2)) 3)))
 
 
 ;;;
@@ -2042,74 +2005,15 @@
   (displayln "TEST - Sqrt")
   (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
 
-(define (diff u x)
-  (define (d u) (diff u x))
-  (math-match u
-    [r 0]
-    [y #:when (eq? x y) 1]
-    [y 0]
-    [(⊕ v w)     (⊕ (d v) (d w))]
-    [(⊗ v w)     (⊕ (⊗ (d v) w) (⊗ v (d w)))]
-    [(Expt u r)  (⊗ r (Expt u (- r 1)) (d u))]
-    [(Expt @e u) (⊗ (Exp u) (d u))]
-    [(Expt r y)  #:when (and (positive? r) (equal? y x))  (⊗ (Expt r x) (Ln r))]
-    [(Expt u v)  (diff (Exp (⊗ v (Ln u))) x)] ; assumes u positive    
-    ; [(Exp u)   (⊗ (Exp u) (d u))]
-    [(Ln u)    (⊗ (⊘ 1 u) (d u))]
-    [(Cos u)   (⊗ (⊖ 0 (Sin u)) (d u))]
-    [(Sin u)   (⊗ (Cos u) (d u))]
-    [(app: f us)  #:when (symbol? f)
-                  (match us
-                    [(list u) (cond [(eq? u x)  (Diff `(,f ,x) x)]
-                                    [else       (⊗ `(app (deriviative ,f ,x) ,u) (d u))])] ; xxx
-                    [_ `(diff (,f ,@us) ,x)])]           ; xxx
-    [_ (error 'diff (~a "got: " u " wrt " x))]))
-
-(define (Diff: u [x 'x])
-  (define D Diff:)
-  (math-match u
-    [(Equal u1 u2) (Equal (D u1 x) (D u2 x))]
-    [_             (list 'diff u x)]))
-
-(define-match-expander Diff
-  (λ (stx) (syntax-parse stx [(_ u x) #'(list 'diff u x)]))
-  (λ (stx) (syntax-parse stx [(_ u x) #'(Diff: u)] [_ (identifier? stx) #'Diff:])))
-
-
-
-(module+ test
-  (displayln "TEST - diff")
-  (check-equal? (diff 1 x) 0)
-  (check-equal? (diff x x) 1)
-  (check-equal? (diff y x) 0)
-  (check-equal? (diff (⊗ x x) x) '(* 2 x))
-  (check-equal? (diff (⊗ x x x) x) '(* 3 (expt x 2)))
-  (check-equal? (diff (⊗ x x x x) x) '(* 4 (expt x 3)))
-  (check-equal? (diff (⊕ (⊗ 5 x) (⊗ x x)) x) '(+ 5 (* 2 x)))
-  (check-equal? (diff (Exp x) x) (Exp x))
-  (check-equal? (diff (Exp (⊗ x x)) x) (⊗ 2 x (Exp (⊗ x x))))
-  (check-equal? (diff (Expt x 1) x) 1)
-  (check-equal? (diff (Expt x 2) x) (⊗ 2 x))
-  (check-equal? (diff (Expt x 3) x) (⊗ 3 (Expt x 2)))
-  (check-equal? (diff (Ln x) x) (⊘ 1 x))
-  (check-equal? (diff (Ln (⊗ x x)) x) (⊘ (⊗ 2 x) (⊗ x x)))
-  (check-equal? (diff (Cos x) x) (⊖ (Sin x)))
-  (check-equal? (diff (Cos (⊗ x x)) x) (⊗ (⊖ (Sin (⊗ x x))) 2 x))
-  (check-equal? (diff (Sin x) x) (Cos x))
-  (check-equal? (diff (Sin (⊗ x x)) x) (⊗ 2 (Cos (Expt x 2)) x))
-  ; TODO: ASE should rewrite the result to (* '(expt x x) (+ 1 (ln x)))
-  (check-equal? (diff (Expt x x) x) '(* (expt @e (* x (ln x))) (+ 1 (ln x))))
-  )
-
-
 
 ;;; Piecewise 
 
 (define (Piecewise: us vs) ; assume us and vs are canonical
+  (define simplify (current-simplify))
   (define clauses
     ; simplify and remove clauses where the conditional is false
     (for/list ([u us] [v (map simplify vs)] #:when v)
-      (list u v))) 
+      (list u v)))
   ; if one of the conditional expressions v is true,
   ; then the result is the corresponding u.
   (define first-true    
@@ -2122,46 +2026,6 @@
   (match first-true
     [(list u) u]
     [_        (cons 'piecewise clauses)]))
-        
-;;; Substition
-
-(define (subst u v w #:normalize? [normalize? #t]) ; substitute w for v in u
-  (define le logical-expand)
-  (define (n* us) (map normalize us))
-  (define (s u)
-    (math-match u
-      [u #:when (equal? u v) w]
-      [(⊕ u1 u2)          (⊕ (s u1) (s u2))]
-      [(⊗ u1 u2)          (⊗ (s u1) (s u2))]
-      [(Expt u1 u2)       (Expt (s u1) (s u2))]
-      [(Piecewise us vs)  (Piecewise: (n* (map s us)) (n* (map s vs)))]
-      [(And u v)          (And (le (s u)) (le (s v)))] ; xxx is le needed?
-      [(Or  u v)          (Or  (le (s u)) (le (s v)))]
-      [(Equal u v)        (Equal (s u) (s v))]         ; xxx
-      [(Less u v)         (Less (s u) (s v))]
-      [(LessEqual u v)    (LessEqual (s u) (s v))]
-      [(Greater u v)      (Greater (s u) (s v))]
-      [(GreaterEqual u v) (GreaterEqual (s u) (s v))]
-      
-      [(app: f us)       `(,f ,@(map s us))]
-      [_ u]))
-  (if normalize?
-      (normalize (s u))
-      (s u)))
-
-
-(module+ test
-  (displayln "TEST - subst")
-  (check-equal? (subst '(expt (+ (* x y) 1) 3) y 1) '(expt (+ 1 x) 3))
-  (check-equal? (let () (define (f x) '(expt (+ x 1) 3)) (subst (f x) x 1)) 8))
-
-(define (subst* u vs ws)
-  ; in u substitute each expression in vs with the corresponding expression in ws
-  (for/fold ([u u]) ([v vs] [w ws])
-    (subst u v w)))
-
-(module+ test (check-equal? (subst* '(+ 1 x y z) '(x y) '(a b)) '(+ 1 a b z)))
-
 
 ;;;
 ;;; Numeric evalution
@@ -2210,7 +2074,7 @@
 
 (module+ test 
   (displayln "TEST - N")
-  (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
+  ; (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
   (check-equal? (N '(expt @i 3)) (expt (expt -1 1/2) 3))
   (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
 
