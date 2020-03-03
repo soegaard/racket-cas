@@ -17,8 +17,8 @@
 
 ; repl -> racket-cas -> core
 
-(require "core.rkt" "format.rkt" "newton-raphson.rkt")
-(provide (all-from-out "core.rkt" "format.rkt" "newton-raphson.rkt"))
+(require "core.rkt" "format.rkt" "newton-raphson.rkt" "solve.rkt")
+(provide (all-from-out "core.rkt" "format.rkt" "newton-raphson.rkt" "solve.rkt"))
 
 
 (module+ start
