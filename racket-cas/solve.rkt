@@ -7,7 +7,7 @@
 
 
 (require racket/list racket/match
-         "core.rkt" "math-match.rkt"
+         "core.rkt" "math-match.rkt" "polynomial.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test
