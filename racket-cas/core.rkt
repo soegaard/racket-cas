@@ -1908,28 +1908,6 @@
   (displayln "TEST - Sqrt")
   (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
 
-
-;;; Piecewise 
-
-(define (Piecewise: us vs) ; assume us and vs are canonical
-  (define simplify (current-simplify))
-  (define clauses
-    ; simplify and remove clauses where the conditional is false
-    (for/list ([u us] [v (map simplify vs)] #:when v)
-      (list u v)))
-  ; if one of the conditional expressions v is true,
-  ; then the result is the corresponding u.
-  (define first-true    
-    ; wrapped in list to disguish non-true and first true v has false u
-    (let loop ([uvs clauses])      
-      (match uvs
-        ['()                     #f]
-        [(list* (list u #t) uvs) (list u)]
-        [_                       (loop (rest uvs))])))
-  (match first-true
-    [(list u) u]
-    [_        (cons 'piecewise clauses)]))
-
 ;;;
 ;;; Numeric evalution
 ;;;

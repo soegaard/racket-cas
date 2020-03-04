@@ -1,16 +1,17 @@
 #lang racket/base
-(provide Compose    ; function composition
-         App        ; function application
-         Piecewise) ; piecewise function   
+(provide Compose     ; function composition
+         App         ; function application
+         Piecewise   ; piecewise function   
+         Piecewise:) 
 
 ;;;
 ;;; Functions
 ;;;
 
 
-(require racket/match
+(require racket/list racket/match
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt")
+         "core.rkt" "math-match.rkt" "parameters.rkt")
 
 (module+ test
   (require rackunit math/bigfloat )
@@ -46,6 +47,9 @@
     [_                     `(app ,u ,@us)]))
 
 
+
+;;; Piecewise 
+
 ;;; The pattern (Piecewise us vs) matches a piecewise expression of
 ;;; the form (piecewise [u v] ...) 
 ;;; and binds us to (list u ...) 
@@ -65,6 +69,26 @@
     [(_ [u:expr v:expr] ...)
      (syntax/loc stx (cond [v u] ...))]))
 
+(define (Piecewise: us vs) ; assume us and vs are canonical
+  (define simplify (current-simplify))
+  (define clauses
+    ; simplify and remove clauses where the conditional is false
+    (for/list ([u us] [v (map simplify vs)] #:when v)
+      (list u v)))
+  ; if one of the conditional expressions v is true,
+  ; then the result is the corresponding u.
+  (define first-true    
+    ; wrapped in list to disguish non-true and first true v has false u
+    (let loop ([uvs clauses])      
+      (match uvs
+        ['()                     #f]
+        [(list* (list u #t) uvs) (list u)]
+        [_                       (loop (rest uvs))])))
+  (match first-true
+    [(list u) u]
+    [_        (cons 'piecewise clauses)]))
+
+
 
 (module+ test
   (displayln "TEST - piecewise")
@@ -73,4 +97,7 @@
   (check-equal? (subst u 'x  3)  9)
   (check-equal? (subst u 'x -2) -3)
   (check-equal? (subst u 'x  0) -1))
+
+
+
 
