@@ -8,7 +8,7 @@
 
 (require racket/list racket/match
          "core.rkt" "math-match.rkt" "polynomial.rkt"
-         "simplify-expand.rkt"
+         "simplify-expand.rkt" "compose-app.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test

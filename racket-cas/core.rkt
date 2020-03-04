@@ -275,24 +275,6 @@
     (syntax-parse stx [(_ u) #'(ImaginaryTerm: u)] [_ (identifier? stx) #'ImaginaryTerm:])))
 
 
-;;; The pattern (Piecewise us vs) matches a piecewise expression of
-;;; the form (piecewise [u v] ...) 
-;;; and binds us to (list u ...) 
-;;; and binds vs to (list v ...) 
-(define-match-expander Piecewise
-  (λ (stx)
-    (syntax-case stx ()
-      [(_ u c)
-       #'(list 'piecewise (list u c) (... ...))]))
-  (λ (stx)
-    (syntax-case stx ()
-      [(_ (u v) ...) #'(list 'piecewise (list u v) ...)]
-      [_ (identifier? stx) #'piecewise])))
-
-(define-syntax (piecewise stx)
-  (syntax-parse stx
-    [(_ [u:expr v:expr] ...)
-     (syntax/loc stx (cond [v u] ...))]))
 
 
 #|
@@ -1683,6 +1665,13 @@
 (define (normalize-pi-coeff c)
   (- (clamp-0-2 (+ c 1)) 1))
 
+
+(define sin-pi/2-table #(0 1 0 -1))
+(define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
+(define cos-pi/2-table #(1 0 -1 0))
+(define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
+
+
 (define (Cos: u)
   (when debugging? (displayln (list 'Cos: u)))
   (math-match u
@@ -2056,54 +2045,6 @@
     (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
     (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
 
-
-
-(define sin-pi/2-table #(0 1 0 -1))
-(define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
-(define cos-pi/2-table #(1 0 -1 0))
-(define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
-
-; rewrite sin(n*u) and cos(n*u) in terms of cos(u) and sin(u)
-; rewrite cos(u+v) and sin(u+v) in terms of cos(u),cos(v),sin(u) and sin(v)
-(define (trig-expand u)  
-  (define (t u)
-    (math-match u
-      [r r]
-      [r.bf r.bf]
-      [x x]
-      [(⊕ u v) (⊕ (t u) (t v))]
-      [(⊗ u v) (⊗ (t u) (t v))]
-      [(Sin 0) 0]
-      [(Sin (⊗ n u)) #:when (negative? n)
-                     (⊖ (t (Sin (- n) u)))]
-      [(Sin (⊗ n u)) (for/⊕ ([k (in-range (+ n 1))])
-                            (⊗ (binomial n k) 
-                               (Expt (Cos u) k)
-                               (Expt (Sin u) (- n k))
-                               (sin-pi/2* (- n k))))]
-      [(Cos 0) 1]
-      [(Cos (⊗ n u)) #:when (negative? n)
-                     (t (Cos (- n) u))]
-      [(Cos (⊗ n u)) (for/⊕ ([k (in-range (+ n 1))])
-                            (⊗ (binomial n k)
-                               (Expt (Cos u) k)
-                               (Expt (Sin u) (- n k))
-                               (cos-pi/2* (- n k))))]
-      [(Sin (⊕ u v)) (t (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))]
-      [(Cos (⊕ u v)) (t (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))]
-      [(Expt u n)  (expand (Expt (t u) n))]
-      [(app: f us) `(,f ,@(map t us))]
-      [_ u]))
-  (t u))
-
-(module+ test
-  (displayln "TEST - trig-expand")
-  (check-equal? (trig-expand (Sin (⊗ 2 x))) (⊗ 2 (Cos x) (Sin x)))
-  (check-equal? (trig-expand (Cos (⊗ 2 x))) (⊖ (Sqr (Cos x)) (Sqr (Sin x))))
-  (let ([u 'u] [v 'v])
-    (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
-    (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
-    (check-equal? (trig-expand '(expt (sin (* 2 x)) 2)) '(* 4 (expt (cos x) 2) (expt (sin x) 2)))))
 
 
 (define-syntax (for/⊕ stx)

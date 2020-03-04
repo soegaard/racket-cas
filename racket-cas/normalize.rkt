@@ -7,7 +7,7 @@
 
 (require racket/match math/bigfloat
          (except-in "bfracket.rkt" denominator numerator)
-         "core.rkt" "math-match.rkt" "parameters.rkt")
+         "core.rkt" "math-match.rkt" "parameters.rkt" "compose-app.rkt")
 
 (module+ test
   (require rackunit math/bigfloat "parameters.rkt")

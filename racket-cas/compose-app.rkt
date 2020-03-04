@@ -1,6 +1,7 @@
 #lang racket/base
-(provide Compose ; function composition
-         App)    ; function application
+(provide Compose    ; function composition
+         App        ; function application
+         Piecewise) ; piecewise function   
 
 ;;;
 ;;; Functions
@@ -12,7 +13,10 @@
          "core.rkt" "math-match.rkt")
 
 (module+ test
-  (require rackunit math/bigfloat)
+  (require rackunit math/bigfloat )
+  (define normalize (dynamic-require "normalize.rkt"       'normalize))
+  (define subst     (dynamic-require "simplify-expand.rkt" 'subst))
+  
   (define x 'x) (define y 'y) (define z 'z))
 
 
@@ -40,3 +44,33 @@
                              [(list w) (App u (App v w))]
                              [_        `(app ,u ,@us)])]                              
     [_                     `(app ,u ,@us)]))
+
+
+;;; The pattern (Piecewise us vs) matches a piecewise expression of
+;;; the form (piecewise [u v] ...) 
+;;; and binds us to (list u ...) 
+;;; and binds vs to (list v ...) 
+(define-match-expander Piecewise
+  (λ (stx)
+    (syntax-case stx ()
+      [(_ u c)
+       #'(list 'piecewise (list u c) (... ...))]))
+  (λ (stx)
+    (syntax-case stx ()
+      [(_ (u v) ...) #'(list 'piecewise (list u v) ...)]
+      [_ (identifier? stx) #'piecewise])))
+
+(define-syntax (piecewise stx)
+  (syntax-parse stx
+    [(_ [u:expr v:expr] ...)
+     (syntax/loc stx (cond [v u] ...))]))
+
+
+(module+ test
+  (displayln "TEST - piecewise")
+  (define u (normalize '(piecewise [(- x 1) (<= x 0)] [(sqr x) (> x 0)])))
+  (check-equal? u '(piecewise ((+ -1 x) (<= x 0)) ((expt x 2) (> x 0))))
+  (check-equal? (subst u 'x  3)  9)
+  (check-equal? (subst u 'x -2) -3)
+  (check-equal? (subst u 'x  0) -1))
+
