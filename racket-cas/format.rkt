@@ -4,7 +4,7 @@
 (require racket/format racket/list racket/match racket/math racket/string 
          math/bigfloat
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt" "normalize.rkt"
+         "core.rkt" "math-match.rkt" "normalize.rkt" "up-ref.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test

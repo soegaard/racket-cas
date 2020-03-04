@@ -20,8 +20,8 @@
 (require               "core.rkt" "diff.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt")
 (provide (all-from-out "core.rkt" "diff.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt"))
 
-(require               "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt")
-(provide (all-from-out "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt"))
+(require               "up-ref.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt")
+(provide (all-from-out "up-ref.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt"))
 
 
 (module+ start
