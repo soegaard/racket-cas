@@ -4,14 +4,12 @@
 (require racket/format racket/list racket/match racket/math racket/string 
          math/bigfloat
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt"
+         "core.rkt" "math-match.rkt" "normalize.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define x 'x)
-  (define y 'y)
-  (define z 'z))
+  (define x 'x) (define y 'y) (define z 'z))
 
 ;;;
 ;;; FORMATTING

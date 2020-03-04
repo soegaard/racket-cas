@@ -17,6 +17,7 @@
 (require math/bigfloat
          "core.rkt" "diff.rkt"
          "simplify-expand.rkt") ; for subst
+(define normalize (dynamic-require "normalize.rkt" 'normalize))
 
 (define (newton-raphson f x u0 [n 10] #:trace? [trace? #f])
   ; Use Newton-Raphson's metod to solve the equation f(x)=0.

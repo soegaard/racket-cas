@@ -13,9 +13,8 @@
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define x 'x)
-  (define y 'y)
-  (define z 'z))
+  (define normalize (dynamic-require "normalize.rkt" 'normalize))
+  (define x 'x) (define y 'y) (define z 'z))
 
 
 

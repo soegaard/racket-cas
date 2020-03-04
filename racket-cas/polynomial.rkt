@@ -36,6 +36,7 @@
 
 (module+ test
   (require rackunit math/bigfloat)
+  (define normalize (dynamic-require "normalize.rkt" 'normalize))
   (define x 'x) (define y 'y) (define z 'z))
 
 
