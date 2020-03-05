@@ -8,7 +8,7 @@
 
 (require racket/format racket/match 
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt")
+         "core.rkt" "math-match.rkt" "relational-operators.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)

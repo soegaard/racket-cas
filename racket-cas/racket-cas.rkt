@@ -23,8 +23,8 @@
 (require               "up-ref.rkt" "trig-expand.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt" "logical-operators.rkt")
 (provide (all-from-out "up-ref.rkt" "trig-expand.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt" "logical-operators.rkt"))
 
-(require               "expand.rkt" "numerical-evaluation.rkt")
-(provide (all-from-out "expand.rkt" "numerical-evaluation.rkt"))
+(require               "expand.rkt" "numerical-evaluation.rkt" "relational-operators.rkt")
+(provide (all-from-out "expand.rkt" "numerical-evaluation.rkt" "relational-operators.rkt"))
 
 
 (module+ start

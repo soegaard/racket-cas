@@ -8,7 +8,7 @@
 (require racket/list racket/match
          (only-in racket/math pi)
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "logical-operators.rkt" "math-match.rkt")
+         "core.rkt" "logical-operators.rkt" "relational-operators.rkt" "math-match.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)

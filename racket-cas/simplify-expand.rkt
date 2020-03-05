@@ -12,7 +12,7 @@
 
 
 (require racket/match "core.rkt" "diff.rkt" "math-match.rkt"  "parameters.rkt"
-         "compose-app.rkt" "logical-operators.rkt")
+         "compose-app.rkt" "logical-operators.rkt" "relational-operators.rkt")
 (define normalize  (dynamic-require "normalize.rkt" 'normalize))
 
 (module+ test
