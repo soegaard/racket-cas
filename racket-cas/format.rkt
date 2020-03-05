@@ -5,6 +5,7 @@
          math/bigfloat
          (for-syntax racket/base racket/syntax syntax/parse)
          "core.rkt" "math-match.rkt" "normalize.rkt" "up-ref.rkt" "compose-app.rkt"
+         "logical-operators.rkt" "expand.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test

@@ -8,7 +8,7 @@
 (require racket/match racket/math
          (only-in math/number-theory binomial)
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt")
+         "core.rkt" "math-match.rkt" "expand.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)

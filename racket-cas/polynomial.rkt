@@ -32,7 +32,7 @@
 (require racket/math math/number-theory
          racket/function racket/match racket/set
          (except-in racket/list permutations)
-         "core.rkt" "diff.rkt" "math-match.rkt")
+         "core.rkt" "diff.rkt" "expand.rkt" "math-match.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)

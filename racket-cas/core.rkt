@@ -2,7 +2,10 @@
 (provide (all-defined-out))
 (require "parameters.rkt")
 (require (prefix-in % "bfracket.rkt"))
-(require (only-in math/base cosh sinh))
+(require (only-in math/base cosh sinh)) 
+(require math/bigfloat)
+
+
 (define debugging? #f)
 (define verbose-debugging? #f)
 (define (debug!) (set! debugging? (not debugging?)) debugging?)
@@ -43,7 +46,8 @@
          (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test
   (require rackunit math/bigfloat "parameters.rkt")
-  (define normalize (dynamic-require "normalize.rkt" 'normalize))
+  (define normalize (dynamic-require "normalize.rkt"            'normalize))
+  (define N         (dynamic-require "numerical-evaluation.rkt" 'N))
   (define x 'x) (define y 'y) (define z 'z))
 
 (module+ test
@@ -696,57 +700,6 @@
   (check-equal? (distribute '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (distribute '(* (+ x 1) 2)) (⊕ (⊗ 2 x) 2)))
 
-(define (expand u)
-  ; expand products and powers with positive integer exponents
-  ; expand terms, but don't recurse into sub terms
-  ; TODO : implement the above description
-  (expand-all u))
-
-(define (expand-all u)
-  ; expand products and powers with positive integer exponents, do recurse
-  (when verbose-debugging? (displayln (list 'expand-all u)))
-  (define e expand-all)
-  (define d distribute)
-  (math-match u
-    [(⊗ @i (⊕ u v))  (⊕ (e (⊗ @i u)) (e (⊗ @i v)))]
-    [(⊗ a (⊕ u v))   (e (⊕ (⊗ a u) (⊗ a v)))]
-    [(⊗ (⊕ u v) b)   (e (⊕ (⊗ u b) (⊗ v b)))]
-    [(⊗ a b)         (let ([ea (e a)] [eb (e b)])
-                       (cond [(and (equal? a ea) (equal? b eb))    (⊗  a  b)]
-                             [(equal? b eb)                     (e (⊗ ea  b))]
-                             [(equal? a ea)                     (e (⊗  a eb))]
-                             [else                              (e (⊗ ea eb))]))]
-    [(⊕ u v)          (⊕ (e u) (e v))]
-    [(Expt (⊕ u v) 2) (e (⊕ (Expt u 2) (Expt v 2) (⊗ 2 u v)))]
-    ; TODO: Replace this with a sum the binomial theorem
-    [(Expt (⊕ u v) n) #:when (and (>= n 3) (odd? n))
-                      (let ([t (e (Expt (⊕ u v) (- n 1)))])
-                        (e (⊕ (⊗ u t) (⊗ v t))))]
-    [(Expt (⊕ u v) n) #:when (and (>= n 3) (even? n))
-                      (let ([t (e (Expt (⊕ u v) (/ n 2)))])
-                        (e (⊗ t t)))]
-    [(Expt (⊗ u v) w) (e (⊗ (Expt u w) (Expt v w)))]
-    [(Ln (Expt u v))  (e (⊗ v (Ln (e u))))]
-    [(Equal u v)      (Equal (e u) (e v))]
-    [(Or u v)         (Or (e u) (e v))]
-    [(And u v)        (And (e u) (e v))]
-    ; Note: NSpire doesn't expand arguments of "non builtin functions
-    ;       Maxima does. Example to test:     expand( f( (x+1)^3 ) )
-    [(app: f us)      (cons f (map e us))]  ; follows maxima
-    [_ u]))
-
-(module+ test
-  (displayln "TEST - expand")
-  (check-equal? (expand (Sqr (⊕ x y))) (⊕ (Sqr x) (Sqr y) (⊗ 2 x y)))
-  (check-equal? (expand (Expt (⊕ x y) 4)) (expand (⊗ (Sqr (⊕ x y)) (Sqr (⊕ x y)))))
-  (check-equal? (expand (⊗ (⊕ x y) (Cos x))) '(+ (* x (cos x)) (* y (cos x))))
-  (check-equal? (expand (Ln (Expt x 3))) (⊗ 3 (Ln x)))
-  (check-equal? (expand '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
-  (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
-                '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
-
-  (check-equal? (normalize '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
-  (check-equal? (expand-all '(* @i (+ 4 (* -1 (+ (* 4 x) 2))))) '(* @i (+ 2 (* -4 x)))))
 
 
 ;;;
@@ -1908,101 +1861,6 @@
   (displayln "TEST - Sqrt")
   (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
 
-;;;
-;;; Numeric evalution
-;;;
-
-
-(define euler-e        (exp 1))
-(define imaginary-unit (sqrt -1))
-; Given an expression without variables, N will evalutate the expression
-; using Racket's standard mathematical operations.
-
-(define (N u)
-  (when debugging? (displayln (list 'N u)))
-  (define (M  f F u)   (math-match   (N u)        [ r    (f r)]   [ v    (F v)]))
-  (define (M2 f F u v) (math-match* ((N u) (N v)) [(r s) (f r s)] [(v w) (F v w)]))
-  (define (logical-or  . xs) (for/or  ([x xs]) (equal? x #t)))
-  (define (logical-and . xs) (for/and ([x xs]) (equal? x #t)))
-
-  (math-match u
-    [r   r]
-    [@pi pi]
-    [@e  euler-e]
-    [@i  imaginary-unit]
-    [(⊕ u v)     (M2 + ⊕ u v)]
-    [(⊗ u v)     (M2 * ⊗ u v)]
-    [(Expt u v)  (M2 expt Expt u v)]
-    [(Sin u)     (M sin Sin u)]
-    [(Cos u)     (M cos Cos u)]
-    [(Ln u)      (M log Ln  u)]
-    [(Log u)     (M  fllog10 Log u)]
-    [(Log u v)   (M2 fllog10 Log u v)]
-    [(Exp u)     (M exp Exp u)]
-    [(Asin u)    (M asin Asin u)]
-    [(Acos u)    (M acos Acos u)]
-    ; [(Atan u)    (M atan Atan u)]
-    [(Equal u v)        (M2 =  Equal u v)]
-    [(Less u v)         (M2 <  Less u v)]
-    [(LessEqual u v)    (M2 <= LessEqual u v)]
-    [(Greater u v)      (M2 >  Greater u v)]
-    [(GreaterEqual u v) (M2 >= GreaterEqual u v)]
-    [(And u v)          (M2 logical-and And u v)]
-    [(Or u v)           (M2 logical-or Or u v)]
-
-    [(app: f us) `(,f ,@(map N us))]
-    [_ u]))
-
-(module+ test 
-  (displayln "TEST - N")
-  ; (check-equal? (N (subst '(expt (+ x 1) 5) x @pi)) (expt (+ pi 1) 5))
-  (check-equal? (N '(expt @i 3)) (expt (expt -1 1/2) 3))
-  (check-equal? (N (normalize '(= x (sqrt 2)))) (Equal x (sqrt 2))))
-
-(module+ test
-  (check-equal?   (normalize '(expt -8 1/3))  '(* 2 (+ (* @i 1/2 (expt 3 1/2)) 1/2)))
-  ; only in complex mode
-  ; (check-=     (N (normalize '(expt -8      1/3)))                 1+1.732i 0.0001) ; principal value 1+sqrt(3)i instead of 2i
-  (check-=     (N (normalize '(expt -8+i -173/3))) (expt  -8+i -173/3) 0.0001)
-  )
-
-  
-(require math/bigfloat)
-(bf-precision 100)
-; Given an expression without variables, N will evalutate the expression
-; using bigfloats. The optional argument can be used to temporarily change
-; the precision. Set bf-precision for a global change of precision.
-; The two last optional arguments can be used to substitute the variable x
-; with a bigfloat value x0.bf. 
-; Note: This is a temporary workaround until bigfloats are better supported.
-(define (bf-N u [prec #f] [x #f] [x0.bf #f])
-  (parameterize ([bf-precision (or prec (bf-precision))])
-    (define e.bf (bfexp 1.bf))
-    (define (N u)
-      (define (M  f F u) (match (N u) [r #:when (bigfloat? r) (f r)] [v (F v)]))
-      (define (M2 f F u v) 
-        (match* ((N u) (N v)) 
-          [(r s) #:when (and (bigfloat? r) (bigfloat? s)) (f r s)]
-          [(v w) (F v w)]))
-      (math-match u
-        [r   (bf r)]
-        [y #:when (eq? y x) x0.bf]
-        [@pi pi.bf]
-        [@e  e.bf]
-        [(⊕ u v)     (M2 bf+ ⊕ u v)]
-        [(⊗ u v)     (M2 bf* ⊗ u v)]
-        [(Expt u v)  (M2 bfexpt Expt u v)]
-        [(Sin u)     (M bfsin Sin u)]
-        [(Cos u)     (M bfcos Cos u)]
-        [(Ln u)      (M bflog Ln  u)]
-        [(Exp u)     (M bfexp Exp u)]
-        [(Asin u)    (M bfasin Asin u)]
-        [(Acos u)    (M bfacos Acos u)]
-        ; [(Atan u)    (M bfatan Atan u)]
-        [(app: f us) (displayln (list 'bf-N f us))
-                     `(,f ,@(map N us))]
-        [_ u]))
-    (N u)))
 
 
 
@@ -2111,68 +1969,8 @@
 (define (Greater:      u v) (math-match* (u v) [(r s) (>  r s)] [(_ __) `(>  ,u ,v)]))
 (define (GreaterEqual: u v) (math-match* (u v) [(r s) (>= r s)] [(_ __) `(>= ,u ,v)]))
 
-;;;
-;;; Logical Operators
-;;; 
-
-(define-match-expander Or
-  (λ (stx)
-    (syntax-parse stx
-      [(_ u v) #'(or (list 'or u v) (list-rest 'or u (app (λ(ys) (cons 'or ys)) v)))]
-      [(_ u)       #'(list 'or u)]))
-  (λ(stx) (syntax-parse stx [(_ u ...) #'(Or: u ...)] [_ (identifier? stx) #'Or:])))
 
 
-(define (Or: . us)
-  (match us
-    ['() #f]
-    [_  (let/ec return
-          (define (flatten us)
-            (reverse 
-             (for/fold ([vs '()])
-                       ([u (in-list us)])
-               (match u
-                 [#t             (return #t)]
-                 [#f             vs]
-                 [(list* 'or ws) (append vs (map flatten ws))]
-                 [_              (cons u vs)]))))
-          (match (remove-duplicates (flatten us))
-            ['()        #f]
-            [(list v)   v]
-            [vs         `(or ,@(sort vs <<))]))]))
-      
-
-(module+ test 
-  (check-equal? (normalize '(or (= x 3) (or (= x 2) (= x 1)))) '(or (= x 1) (= x 2) (= x 3)))
-  (check-equal? (normalize '(or (= x 1) (= x 2) (= x 1))) '(or (= x 1) (= x 2))))
-
-(define-match-expander And
-  (λ (stx)
-    (syntax-parse stx
-      [(_ u v) #'(or (list 'and u v) (list-rest 'and u (app (λ(ys) (cons 'and ys)) v)))]
-      [(_ u)       #'(list 'and u)]))
-  (λ(stx) (syntax-parse stx [(_ u ...) #'(And: u ...)] [_ (identifier? stx) #'And:])))
-
-(define (And: . us)
-  (match us
-    ['() #t]
-    [_  (let/ec return
-          (define (flatten us)
-            (reverse 
-             (for/fold ([vs '()]) ([u (in-list us)])
-               (match u
-                 [#t              vs]
-                 [#f              (return #f)]
-                 [(list* 'and ws) (append vs (map flatten ws))]
-                 [_               (cons u vs)]))))
-          (match (remove-duplicates (flatten us))
-            ['()        #t]
-            [(list v)   v]
-            [vs         `(and ,@(sort vs <<))]))]))
-
-(module+ test 
-  (check-equal? (normalize '(and (= x 3) (and (= x 2) (= x 1)))) '(and (= x 1) (= x 2) (= x 3)))
-  (check-equal? (normalize '(and (= x 1) (= x 2) (= x 1)))       '(and (= x 1) (= x 2))))
 
 
 
