@@ -8,12 +8,16 @@
 (require racket/match racket/math
          (only-in math/number-theory binomial)
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt" "expand.rkt")
+         "core.rkt" "math-match.rkt" "expand.rkt" "trig.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)
   (define x 'x) (define y 'y) (define z 'z))
 
+(define sin-pi/2-table #(0 1 0 -1))
+(define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
+(define cos-pi/2-table #(1 0 -1 0))
+(define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
 
 
 ; rewrite sin(n*u) and cos(n*u) in terms of cos(u) and sin(u)
@@ -57,3 +61,6 @@
     (check-equal? (trig-expand (Sin (⊕ u v))) (⊕ (⊗ (Sin u) (Cos v))  (⊗ (Sin v) (Cos u))))
     (check-equal? (trig-expand (Cos (⊕ u v))) (⊖ (⊗ (Cos u) (Cos v))  (⊗ (Sin u) (Sin v))))
     (check-equal? (trig-expand '(expt (sin (* 2 x)) 2)) '(* 4 (expt (cos x) 2) (expt (sin x) 2)))))
+
+
+

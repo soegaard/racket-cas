@@ -1,10 +1,18 @@
 #lang racket
-(provide (all-defined-out))
 (require "parameters.rkt")
 (require (prefix-in % "bfracket.rkt"))
 (require (only-in math/base cosh sinh)) 
 (require math/bigfloat)
+(require "math-match.rkt" racket/match math/flonum math/number-theory math/special-functions
+         (for-syntax syntax/parse racket/syntax racket/format))
 
+(provide (except-out (all-defined-out)
+           ; These functions are dynamically required - see the bottom of the file.
+           ComplexRealExpt ComplexComplexExpt RealComplexExpt ExpI Angle))
+
+;;;
+;;; Debug
+;;; 
 
 (define debugging? #f)
 (define verbose-debugging? #f)
@@ -41,9 +49,6 @@
 ;   - use "poor man's integrator" to implement integrate
 ;   - symbolic sums (see https://github.com/soegaard/bracket/blob/master/polynomials/poly.rkt)
 
-(provide (all-defined-out))
-(require "math-match.rkt" racket/match math/flonum math/number-theory math/special-functions
-         (for-syntax syntax/parse racket/syntax racket/format))
 (module+ test
   (require rackunit math/bigfloat "parameters.rkt")
   (define normalize (dynamic-require "normalize.rkt"            'normalize))
@@ -532,7 +537,7 @@
   (check-equal? (⊕ '(cos x) '(sin x)) '(+ (cos x) (sin x)))
   (check-equal? (⊕ '(expt x 3) (⊗ 2 '(sin x))) '(+ (expt x 3) (* 2 (sin x))))
   (check-equal? (⊕ x (Expt x 3) (⊖ x)) (Expt x 3))
-  (check-equal? (⊕ (Sin x) (⊗ 2 (Sin x))) '(* 3 (sin x)))
+  (check-equal? (⊕ '(sin x) (⊗ 2 '(sin x))) '(* 3 (sin x)))
   (check-equal? (⊕ 1 x (⊗ -1 (⊕ 1 x))) 0)
   (check-equal? (normalize '(+ (f x) (f y) (f x))) '(+ (* 2 (f x)) (f y)))
   (check-equal? (normalize '(+ (f x) (f (+ h x)) (f (+ (* 2 h) x))))
@@ -626,7 +631,7 @@
   (check-equal? (⊗ (Expt x 3) (Expt x 4)) (Expt x 7))
   (check-equal? (⊗ x (Expt x -1)) 1)
   (check-equal? (⊗ y (Expt x 2)) '(* (expt x 2) y))
-  (check-equal? (⊗ x (Cos x)) '(* x (cos x)))
+  (check-equal? (⊗ x '(cos x)) '(* x (cos x)))
   (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
   (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
@@ -694,7 +699,7 @@
 (module+ test
   (displayln "TEST - distribute")
   (check-equal? (distribute (⊗ 2 (⊕ 3 x y))) '(+ 6 (* 2 x) (* 2 y)))
-  (check-equal? (distribute (⊗ (⊕ x y) (Cos x))) '(+ (* x (cos x)) (* y (cos x))))
+  (check-equal? (distribute (⊗ (⊕ x y) '(cos x))) '(+ (* x (cos x)) (* y (cos x))))
   (check-equal? (distribute (⊗ (⊕ 3 x y) 2)) '(+ 6 (* 2 x) (* 2 y)))
   (check-equal? (distribute (⊕ 1 (⊗ 2 (⊕ 3 x y)))) '(+ 7 (* 2 x) (* 2 y)))
   (check-equal? (distribute '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
@@ -1173,7 +1178,7 @@
                       [_ `(expt @e ,v)])]
     
     [(@i α)             (ExpI (⊗ 1/2 α @pi))]
-    [(@i (Complex a b)) (ComplexComplexExpt 0 1 a b)]
+    [(@i (Complex a b)) (ComplexComplexExpt Expt 0 1 a b)]
     ; we need to handle all @i cases before x is met (otherwise thus catches @i^_ 
     [(x  v)  #:when (not (eq? x '@e))    `(expt ,x ,v)]
     
@@ -1193,9 +1198,9 @@
              [(and (equal? b 0) (equal? d 0)) `(expt ,u ,v)] ; u might be a product
              ; avoid computing the partition into real and imaginary multiple times,
              ; so pass the a, b c and along.
-             [(equal? d 0)               (ComplexRealExpt a b c)]
-             [(equal? b 0)               (RealComplexExpt a c d)]
-             [else                  (ComplexComplexExpt a b c d)])]
+             [(equal? d 0)               (ComplexRealExpt    Expt a b c)]
+             [(equal? b 0)               (RealComplexExpt    Expt a c d)]
+             [else                       (ComplexComplexExpt Expt a b c d)])]
           [(_ _)          `(expt ,u ,v)])])]))
 
 (define-match-expander Expt
@@ -1255,261 +1260,6 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
 
-;;;
-;;; Complex Expressions
-;;;
-
-;;; Imaginary Term
-
-; A term of the form
-;      @i        or
-;   (* @i   u ...) or
-;   (* @i r u ...)
-; where r is a real numbers, is called an *imaginary term*.
-
-(define (imaginary-term? u)
-  ; we assume u is normalized, so we don't need to look at other
-  ; factors besides the first one.
-  (match u
-    [(ImaginaryTerm u) #t]
-    [_                 #f]))
-
-(module+ test
-  (displayln "TEST - imaginary-term?")
-  (complex-mode)
-  (check-equal? (imaginary-term?      '@i)    #t)
-  (check-equal? (imaginary-term? '(* @i 2))   #t)
-  (check-equal? (imaginary-term? '(* @i 2 x)) #t)
-  (check-equal? (imaginary-term? '(* 2 @e))   #f)
-  (check-equal? (imaginary-term? 42)          #f))
-
-
-(define (Magnitude: u)
-  (when debugging? (displayln (list 'Magnitude u)))
-  (math-match u
-    [@i   1]
-    [@e  @e]
-    [@pi @pi]
-    [r #:when (negative? r) (- r)]
-    [(Complex a b) (Sqrt (⊕ (Sqr a) (Sqr b)))]
-    [_ `(magnitude ,u)]))
-
-(define-match-expander Magnitude
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'magnitude u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Magnitude: u)] [_ (identifier? stx) #'Magnitude:])))
-
-
-(module+ test
-  (displayln "TEST - magnitude")
-  (complex-mode)
-  (check-equal? (Magnitude '@i)  1)
-  (check-equal? (Magnitude '@pi) '@pi)
-  (check-equal? (Magnitude '@e)  '@e)
-  (check-equal? (Magnitude  42)  42)
-  (check-equal? (Magnitude -42)  42)
-  (check-equal? (Magnitude  42.) 42.)
-  (check-equal? (Magnitude -42.) 42.)
-  (check-equal? (Magnitude '(* @i  2)) 2)
-  (check-equal? (Magnitude '(* @i -2)) 2)
-  (check-equal? (Magnitude (normalize '(+ 1 @i))) (Sqrt 2))
-  (check-equal? (normalize '(magnitude (+ @i x))) '(expt (+ 1 (expt x 2)) 1/2))
-  ; check normalize knows magnitude
-  (check-equal? (normalize '(magnitude 1)) 1))
-
-
-(define (Angle: u)
-  (when debugging? (displayln (list 'Angle u)))
-  (math-match u
-    [@i  (⊗ 1/2 @pi)]
-    [@e  0]
-    [@pi 0]
-    [0   'error]
-    [r #:when (> r 0) 0]
-    [r #:when (< r 0) @pi]
-    [(Complex a b) 
-     (math-match* (a b)
-                  [(r s) (define m (Sqrt (+ (sqr r) (sqr s))))
-                         (cond
-                           ; [(> r 0)                   (Atan (⊘ s r))]
-                           ; real axis
-                           [(and (= s 0) (> r 0))     0]
-                           [(and (= s 0) (< r 0))     @pi]
-                           ; image axis
-                           [(and (= r 0) (> s 0))     '(*  1/2 @pi)]
-                           [(and (= r 0) (< s 0))     '(* -1/2 @pi)]
-                           ; Quadrants
-                           [(and (> r 0) (> s 0))        (Acos (⊘    r  m))]      ; q1
-                           [(and (< r 0) (> s 0)) (⊖ @pi (Acos (⊘ (- r) m)))]     ; q2
-                           [(and (< r 0) (< s 0)) (⊖     (Acos (⊘ (- r) m)) @pi)] ; q3
-                           [(and (> r 0) (< s 0)) (⊖     (Acos (⊘    r m)))]      ; q4
-                           ; origo
-                           [else                   'error])]
-                  [(_ __) `(angle ,u)])]
-    [_ `(angle ,u)]))
-
-                                
-(module+ test
-  (displayln "TEST - Angle")
-  (complex-mode)
-  ; the axes
-  (check-equal? (normalize '(angle  1))                        0)
-  (check-equal? (normalize '(angle -1))                          @pi)
-  (check-equal? (normalize '(angle       @i))           '(*  1/2 @pi))
-  (check-equal? (normalize '(angle    (* @i -1)))       '(* -1/2 @pi))
-  ; the quadrants
-  (check-equal? (normalize '(angle (+    @i       1 ))) '(*  1/4 @pi)) ; q1
-  (check-equal? (normalize '(angle (+    @i      -1 ))) '(*  3/4 @pi)) ; q2
-  (check-equal? (normalize '(angle (+ (* @i -1 ) -1 ))) '(* -3/4 @pi)) ; q3
-  (check-equal? (normalize '(angle (+ (* @i -1 )  1 ))) '(* -1/4 @pi)) ; q4
-  
-  (check-equal? (normalize '(angle (+  2 @i))) '(acos (* 2 (expt 5 -1/2)))))
-
-(define-match-expander Angle
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'angle u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Angle: u)] [_ (identifier? stx) #'Angle:])))
-
-
-(define (ExpI θ) (⊕ (Cos θ) (⊗ (Sin θ) @i)))
-  
-
-; Compute u=a+ib to v=c+id
-
-(define (ComplexRealExpt a b c) ; d=0
-  (when debugging? (displayln (list 'ComplexRealExpt a b c)))
-  (math-match* (a b c)
-    [(r1 r2 s)     
-     (define r (Sqrt (⊕ (Sqr r1) (Sqr r2))))
-     (define θ (if (> r2 0) (Acos (⊘ r1 r)) (Asin (⊘ r1 r))))
-     #;(⊗ (Expt r s) (ExpI (⊗ θ s)))
-     (⊕ (⊗    (Expt r s) (Cos (⊗ θ s)))  ; this form simplifies a bit more
-        (⊗ @i (Expt r s) (Sin (⊗ θ s))))]
-    [(a b c)
-     `(expt ,(⊕ a (⊗ b @i)) ,c)]))
-
-(define (RealComplexExpt r a b)
-  (when debugging? (displayln (list 'RealComplexExpt r a b)))
-  ; r^z = e^ln(r)^z = e^(z ln(r)) = e^((a+ib) ln(r)) 
-  ;                               = e^(a ln(r)) * e^(i b ln(r))) = r^a * e^(i b ln(r)))
-  (⊗ (Expt r a) (Exp (⊗ b @i (Ln r)))))
-
-(define (ComplexComplexExpt a b c d)
-  (when debugging? (displayln (list 'ComplexComplexExpt a b c d)))
-  (math-match* (a b c d)
-    [(r1 r2 s1 s2 )
-     (cond
-       [(and (= r1 0) (= r2 1)) ; i.e. i^(c+di)
-        ; ^(c+*d) ▸   cos( ((c*π)/(2)) ) * ^(((−d*π)/(2)))
-        ;             + sin( ((c*π)/(2)) ) * ^(((−d*π)/(2)))*
-        (⊕ (⊗    (Cos (⊗ 1/2 @pi c)) (Exp (⊗ -1/2 d @pi)))
-           (⊗ @i (Sin (⊗ 1/2 @pi c)) (Exp (⊗ -1/2 d @pi))))]
-
-       [(= r1 0)
-        ; (b*)^(c+*d) ▸     cos( ((ln(b^2)*d)/2) + ((sign(b)*c*π)/2) ) * (b^2)^(c/2) *^((−sign(b)*d*π)/2)
-        ;                 + *sin(((ln(b^2)*d)/2 )+ ((sign(b)*c*π)/2) )* (b^2)^(c/)) *^((−sign(b)*d*π)/2)
-        (define sign (if (> r2 0) +1 -1))
-        (⊕ (⊗    (Cos (⊕  (⊗ 1/2 (Ln (Sqr b)) d) (⊗ (* sign 1/2) c @pi))) (Expt (Sqr b) (⊘ c 2))  (Exp (⊗ (* sign 1/2) d @pi)))
-           (⊗ @i (Sin (⊕  (⊗ 1/2 (Ln (Sqr b)) d) (⊗ (* sign 1/2) c @pi))) (Expt (Sqr b) (⊘ c 2))  (Exp (⊗ (* sign 1/2) d @pi))))]
-        
-       [else
-        ; (a+b*)^(c+d*) ▸   cos( ((ln(a^2+b^2)*d)/2) -(((2*tan(a/b)-sign(b)*π)*c)/(2)) )  *(a^(2)+b^(2))^(((c)/(2))) * ^(tan(((a)/(b)))*d-((sign(b)*d*π)/(2)))
-        ;                 + i sin( ((ln(a^2+b^2)*d)/2) -(((2*tan(a/b)-sign(b)*π)*c)/(2)) )  *(a^(2)+b^(2))^(((c)/(2))) * ^(tan(((a)/(b)))*d-((sign(b)*d*π)/(2)))
-        (define sign (if (> b 0) +1 -1))
-        (define a^2+b^2 (⊕ (Sqr a) (Sqr b)))
-        (define ln-a^2+b^2 (Ln a^2+b^2))
-        (define arg  (⊖  (⊗ 1/2 ln-a^2+b^2 d) (⊖    (Atan (⊘ a b))    (⊗ (* sign 1/2) c @pi))))
-        (define arg2                          (⊖ (⊗ (Atan (⊘ a b)) d) (⊗ (* sign 1/2) d @pi)))
-        
-        (define a^2+b^2-to-c/2 (Expt a^2+b^2 (⊘ c 2)))
-        (⊕ (⊗    (Cos arg) a^2+b^2-to-c/2  (Exp arg2))
-           (⊗ @i (Sin arg) a^2+b^2-to-c/2  (Exp arg2)))])]
-       ; `(expt ,(⊕ r1 (⊗ r2 @i)) ,(⊕ s1 (⊗ s2 @i)))
-    [(a b c d)
-     `(expt ,(⊕ a (⊗ b @i)) ,(⊕ c (⊗ d @i)))]))
-
-
-(module+ test
-  (displayln "TEST - complex-expt-expand")
-  (complex-mode)
-  (check-equal? (Expt '@i  0)  1)
-  (check-equal? (Expt '@i  1) '@i)
-  (check-equal? (Expt '@i  2) -1)
-  (check-equal? (Expt '@i  3) '(* @i -1))
-  (check-equal? (Expt '@i  4)  1)
-  
-  (check-equal? (Expt '@i -1) '(* @i -1))
-  (check-equal? (Expt '@i -2) -1)
-  (check-equal? (Expt '@i -3) '@i)
-  (check-equal? (Expt '@i -4)  1)
-
-  (check-equal? (Expt '@i  1/2) '(+ (*  @i (expt 2 -1/2))        (expt 2 -1/2) ))
-  (check-equal? (Expt '@i  1/3) '(+ (*  @i          1/2 ) (* 1/2 (expt 3  1/2)) ))
-  (check-equal? (Expt '@i  1/4) '(+ (* @i (expt (* 1/2 (+ 1 (* -1 (expt 2 -1/2)))) 1/2))
-                                          (expt (* 1/2 (+ 1       (expt 2 -1/2)))  1/2)))
-  (check-equal? (Expt '@i  2/3)  '(+ (* @i 1/2 (expt 3 1/2)) 1/2))
-
-  (check-equal? (Expt '(* @i 2) 0)  1)
-  (check-equal? (Expt '(* @i 2) 1) '(* @i  2))
-  (check-equal? (Expt '(* @i 2) 2) -4)
-  (check-equal? (Expt '(* @i 2) 3) '(* @i -8))
-  (check-equal? (Expt '(* @i 2) 4)  16)
-
-  (check-equal? (Expt '(* @i 2) -1) '(* @i -1/2))
-  (check-equal? (Expt '(* @i 2) -2) -1/4)
-  (check-equal? (Expt '(* @i 2) -3) '(* @i 1/8))
-  (check-equal? (Expt '(* @i 2) -4)  1/16)
-  
-  (check-equal? (Expt '(* @i 2) 1/2) '(+ @i 1))
-  ; Actual: '(* (expt 2 1/2) (+ (expt 2 -1/2) (* (expt 2 -1/2) @i)))
-  ;         which is correct mathematically
-  
-  (check-equal? (Expt '(* @i 2.) 0)  1)
-  (check-equal? (Expt '(* @i 2.) 1) '(* @i 2.))
-  (check-equal? (Expt '(* @i 2.) 2) -4.)
-  (check-equal? (Expt '(* @i 2.) 3) '(* @i -8.))
-  (check-equal? (Expt '(* @i 2.) 4)  16.)
-
-  (check-equal? (Expt @i     @i)    '(expt @e (* -1/2 @pi)))
-  (check-equal? (Expt @i '(* @i 2)) '(expt @e (* -1   @pi)))
-  (check-equal? (Expt @i '(* @i 3)) '(expt @e (* -3/2 @pi)))
-  (check-equal? (Expt @i '(* @i 4)) '(expt @e (* -2   @pi)))
-  
-  (check-equal? (Expt @i '(* @i -1)) '(expt @e (* 1/2 @pi)))
-  (check-equal? (Expt @i '(* @i -2)) '(expt @e        @pi))
-  (check-equal? (Expt @i '(* @i -3)) '(expt @e (* 3/2 @pi)))
-  (check-equal? (Expt @i '(* @i -4)) '(expt @e (* 2   @pi)))
-
-  (check-equal? (Expt @i '(* @i 1/2)) '(expt @e (* -1/4 @pi)))
-  (check-equal? (Expt @i '(* @i 1/3)) '(expt @e (* -1/6 @pi)))
-  (check-equal? (Expt @i '(* @i 1/4)) '(expt @e (* -1/8 @pi)))
-  (check-equal? (Expt @i '(* @i 2/3)) '(expt @e (* -1/3 @pi)))
-  
-  (check-equal? (Expt '(+ @i 1)  1)  '(+ @i 1))
-  (check-equal? (Expt '(+ @i 1)  2)  '(* @i 2)) 
-  (check-equal? (Expt '(+ @i 1)  3)  '(+ (* @i 2) -2))
-  (check-equal? (Expt '(+ @i 1)  4)  -4)
-
-  ; The value of this one depends on, whether we are in real or complex mode.
-  ; In real mode (-8)^(1/3)=-3 and in complex mode, the principal value is computed.
-  (real-mode)
-  (check-equal? (normalize '(expt -8 1/3)) -2)
-  (complex-mode)
-  (check-equal? (normalize '(expt -8 1/3)) '(* 2 (+ (* @i 1/2 (expt 3 1/2)) 1/2)))
-  (check-equal? (N (normalize '(expt -8 1/3))) 1.0+1.7320508075688772i)
-  
-  
-  (check-equal? 
-   (normalize '(expt 1+i 1+i))
-   '(+ (* @i (expt 2 1/2)  (expt @e (* -1/4 @pi)) (sin (+ (* 1/4 @pi) (* 1/2 (ln 2)))))
-       (*    (expt 2 1/2)  (expt @e (* -1/4 @pi)) (cos (+ (* 1/4 @pi) (* 1/2 (ln 2)))))))
-  
-  (check-equal? (normalize '(exp (* @i @pi))) -1)
-  (check-equal?
-   (normalize '(expt 1+i 1-i))
-   '(+ (* @i (expt 2 1/2) (expt @e (* 1/4 @pi)) (sin (+ (* 1/4 @pi) (* -1/2 (ln 2)))))
-       (*    (expt 2 1/2) (expt @e (* 1/4 @pi)) (cos (+ (* 1/4 @pi) (* -1/2 (ln 2)))))))
-  (check-= (N (normalize '(expt 1+i 1+i)))      (expt 1+i 1+i) 0.0001)
-  (check-= (N (normalize '(expt 1+i 1-i)))      (expt 1+i 1-i) 0.0001)
-  (check-= (N (normalize '(expt 1+i (+ @i 1)))) (expt 1+i 1+i) 0.0001))
 
 (define (Ln: u)
   (when debugging? (displayln (list 'Ln: u)))
@@ -1607,226 +1357,6 @@
   (check-equal? (Log @e x) (Ln x))
   (check-equal? (Log 2 (Expt 2 x)) x))
 
-; [0, 2)
-(define (clamp-0-2 c)
-  (let [(n (%numerator c)) (d (%denominator c))]
-    (/ (modulo n (* 2 d)) d)))
-
-; [-pi, pi), i.e [-1, 1)
-; better be (-1, 1], but we can save the effort
-; clamp-0-2(c + 1) - 1
-(define (normalize-pi-coeff c)
-  (- (clamp-0-2 (+ c 1)) 1))
-
-
-(define sin-pi/2-table #(0 1 0 -1))
-(define (sin-pi/2* n) (vector-ref sin-pi/2-table (remainder n 4)))
-(define cos-pi/2-table #(1 0 -1 0))
-(define (cos-pi/2* n) (vector-ref cos-pi/2-table (remainder n 4)))
-
-
-(define (Cos: u)
-  (when debugging? (displayln (list 'Cos: u)))
-  (math-match u
-    [0 1]
-    [r.0 (cos r.0)]
-    ; [r (cos r)] ; nope - automatic evaluation is for inexact results only
-    [@pi -1]
-    [(⊗ 1/3 @pi) 1/2]
-    [(⊗ α u)   #:when (negative? α)      (Cos: (⊗ (- α) u))]  ; cos is even
-    [(⊗ n @pi)                           (if (even? n) 1 -1)]    
-    [(⊗ α @pi) #:when (integer? (* 2 α)) (cos-pi/2* (* 2 α))]
-    [(⊗ α @pi) #:when (or (> α 1) (< α -1))
-               (Cos (⊗ (normalize-pi-coeff α) @pi))]
-    [(⊗ α @pi) #:when (> α 1/2) (⊖ (Cos (⊗ (- 1 α) @pi)))]
-    [(⊗ α @pi) #:when (even? (%denominator α)) ; half angle formula
-               (let ([sign (expt -1 (floor (/ (+ α 1) 2)))])
-                 (⊗ sign (Sqrt (⊗ 1/2 (⊕ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx test sign
-    [(⊗ p (Integer _) @pi) #:when (even? p) 1]
-    
-    [(⊕ u (k⊗ p @pi)) #:when (odd? p)  (⊖ (Cos: u))]
-    [(⊕ (k⊗ p @pi) u) #:when (odd? p)  (⊖ (Cos: u))]
-    [(⊕ u (k⊗ p @pi)) #:when (even? p) (Cos: u)]
-    [(⊕ (k⊗ p @pi) u) #:when (even? p) (Cos: u)]
-    [(⊕ u (⊗ p (Integer _) @pi)) #:when (even? p) (Cos: u)]
-    [(⊕ (⊗ p (Integer _) @pi) u) #:when (even? p) (Cos: u)]
-    
-    [(Acos u) u]    ; xxx only of -1<u<1
-    [(Asin u) (Sqrt (⊖ 1 (Sqr u)))]
-    [(Complex a b) #:when (not (zero? b)) (Cosh (⊗ @i u))]
-    [(⊖ u) (Cos u)] ; even function    
-    [_ `(cos ,u)]))
-
-(define-match-expander Cos
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'cos u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Cos: u)] [_ (identifier? stx) #'Cos:])))
-
-(module+ test
-  (displayln "TEST - Cos")
-  (check-equal? (Cos 0) 1)
-  (check-equal? (Cos -3) (Cos 3))
-  (check-equal? (Cos @pi) -1)
-  (check-equal? (Cos (⊗ 2 @pi)) 1)
-  (check-equal? (Cos 0.5) 0.8775825618903728)
-  (check-equal? (for/list ([n 8]) (Cos (⊗ n 1/2 @pi))) '(1 0 -1 0 1 0 -1 0))
-  (check-equal? (Cos (⊖ x)) (Cos x))
-  (check-equal? (Cos (⊕ x (⊗ 2 @pi)))  (Cos x))
-  (check-equal? (Cos (⊕ x (⊗ 4 @pi)))  (Cos x))
-  (check-equal? (Cos (⊕ x (⊗ -4 @pi))) (Cos x))
-  (check-equal? (Cos (⊕ x @pi))        (⊖ (Cos x)))
-  (check-equal? (Cos (⊕ x (⊗ 3 @pi)))  (⊖ (Cos x)))
-  (check-equal? (Cos (⊕ x (⊗ 2 @n @pi))) (Cos x))
-  (check-equal? (Cos (⊕ x (⊗ 4 @n @pi))) (Cos x))
-  (check-equal? (Cos (⊕ x (⊗ 2 @p @pi))) (Cos x))
-  (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
-  (check-equal? (Cos (Acos x)) 'x)
-  (check-equal? (Cos (Asin x)) (Sqrt (⊖ 1 (Sqr 'x))))
-  (check-equal? (Cos @i) '(cosh 1)))
-
-(define (Sin: u)
-  (when debugging? (displayln (list 'Sin: u)))
-  (define (Odd? n)  (and (integer? n) (odd? n)))
-  (define (Even? n) (and (integer? n) (even? n)))
-  (math-match u
-    [0 0]
-    [r.0 (sin r.0)]
-    [@pi 0]
-    [(⊗ 1/3 @pi) (⊘ (Sqrt 3) 2)]
-    [(⊗ (Integer _) @pi) 0]
-    [(⊗ α     u) #:when (negative? α)      (⊖ (Sin: (⊗ (- α) u)))]
-    [(⊗ α   @pi) #:when (integer? (* 2 α)) (if (= (remainder (* 2 α) 4) 1) 1 -1)]
-    [(⊗ (Integer _) (Integer _) @pi) 0]
-    [(⊕ u (k⊗ (Integer v) @pi)) #:when (Even? v) (Sin: u)]
-    [(⊕ (k⊗ (Integer v) @pi) u) #:when (Even? v) (Sin: u)]
-    [(⊕ u (k⊗ (Integer v) @pi)) #:when (Odd? v) (⊖ (Sin: u))]
-    [(⊕ (k⊗ (Integer v) @pi) u) #:when (Odd? v) (⊖ (Sin: u))]
-    [(⊕ u (⊗ p (Integer v) @pi)) #:when (Even? p) (Sin: u)]
-    [(⊕ (⊗ p (Integer v) @pi) u) #:when (Even? p) (Sin: u)]
-    [(⊕ u (⊗ p (Integer v) @pi)) #:when (Odd? p) (⊖ (Sin: u))]
-    [(⊕ (⊗ p (Integer v) @pi) u) #:when (Odd? p) (⊖ (Sin: u))]
-    [(⊗ α @pi) #:when (or (> α 1) (< α -1))
-               (Sin (⊗ (normalize-pi-coeff α) @pi))]
-    [(⊗ α @pi) #:when (> α 1/2) (Sin (⊗ (⊖ 1 α) @pi))]
-    [(⊗ α @pi) #:when (even? (%denominator α)) ; half angle formula
-               (let* ([θ      (* 2 α pi)]
-                      [sign.0 (sgn (+ (- (* 2 pi) θ) (* 4 pi (floor (/ θ (* 4 pi))))))]
-                      [sign   (if (> sign.0 0) 1 -1)])
-                 (⊗ sign (Sqrt (⊗ 1/2 (⊖ 1 (Cos (⊗ 2 α @pi)))))))] ; xxx find sign
-    [(Asin u) u] ; only if -1<=u<=1   Maxima and MMA: sin(asin(3))=3 Nspire: error
-    [(Acos u) (Sqrt (⊖ 1 (Sqr u)))]
-    [(Complex a b) #:when (not (zero? b)) (⊗ @i -1 (Sinh (⊗ @i u)))]
-    [(⊖ u) (⊖ (Sin u))] ; odd function
-    [_ `(sin ,u)]))
-
-(define-match-expander Sin
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'sin u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Sin: u)] [_ (identifier? stx) #'Sin:])))
-
-(module+ test 
-  (displayln "TEST - Sin")
-  (check-equal? (for/list ([n 8]) (Sin (⊗ n 1/2 @pi))) '(0 1 0 -1 0 1 0 -1))
-  (check-equal? (Sin (⊖ x))              (⊖ (Sin x)))
-  (check-equal? (Sin (⊕ x (⊗ 2 @pi)))       (Sin x))
-  (check-equal? (Sin (⊕ x (⊗ 4 @pi)))       (Sin x))
-  (check-equal? (Sin (⊕ x (⊗ -4 @pi)))      (Sin x))
-  (check-equal? (Sin (⊕ x       @pi))    (⊖ (Sin x)))
-  (check-equal? (Sin (⊕ x (⊗ 3 @pi)))    (⊖ (Sin x)))
-  (check-equal? (Sin (⊕ x (⊗ 2 @n @pi)))    (Sin x))
-  (check-equal? (Sin (⊕ x (⊗ 4 @n @pi)))    (Sin x))
-  (check-equal? (Sin (⊕ x (⊗ 2 @p @pi)))    (Sin x))
-  (check-equal? (Sin (⊗ 2/3 @pi)) '(* 1/2 (expt 3 1/2)))
-  (check-equal? (Sin -3) (⊖ (Sin 3)))
-  (check-equal? (Sin (Asin x)) 'x)
-  (check-equal? (Sin (Acos x)) (Sqrt (⊖ 1 (Sqr x))))
-  (check-equal? (Sin @i) '(* @i (sinh 1))))
-
-(define (Cosh: u)
-  (when debugging? (displayln (list 'Cosh: u)))
-  (math-match u
-    [0 1]
-    [r.0 (cosh r.0)]
-    [α #:when (negative? α) (Cosh: (- α))]
-    [u   `(cosh ,u)]))
-
-(define (Sinh: u)
-  (when debugging? (displayln (list 'Sinh: u)))
-  (math-match u
-    [0 0]
-    [r.0  (sinh r.0)]
-    [α #:when (negative? α) (⊖ (Sinh: (- α)))]
-    [u   `(sinh ,u)]))
-
-(define-match-expander Cosh
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'cosh u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Cosh: u)] [_ (identifier? stx) #'Cosh:])))
-
-(define-match-expander Sinh
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'sinh u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Sinh: u)] [_ (identifier? stx) #'Sinh:])))
-
-
-(define (Asin: u)
-  (when debugging? (displayln (list 'Asin: u)))
-  (math-match u
-    [0 0]
-    [1  (⊗ 1/2 @pi)]
-    [1/2 (⊗ 1/6 @pi)]
-    [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/3 @pi)]
-    [(Expt 2 -1/2) (⊗ 1/4 @pi)]
-    [(list '* 1/2 (list 'expt 2 1/2)) (⊗ 1/4 @pi)]
-    [(⊖ u) (⊖ (Asin u))] ; odd function
-    [r.0 (asin r.0)]
-    [_ `(asin ,u)]))
-
-(define-match-expander Asin
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'asin u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Asin: u)] [_ (identifier? stx) #'Asin:])))
-
-; Acos = pi/2 - Asin
-(define (Acos: u)
-  (when debugging? (displayln (list 'Acos: u)))
-  (math-match u
-    [0 (⊘ @pi 2)]
-    [1 0]
-    [1/2 (⊗ 1/3 @pi)]
-    [(list '* 1/2 (list 'expt 3 1/2))               (⊗ 1/6 @pi)]
-    [(Expt 2 -1/2) (⊗ 1/4 @pi)]
-    [(list '* 1/2 (list 'expt 2 1/2)) (⊗ 1/4 @pi)]
-    [(⊖ u) (⊖ @pi (Acos u))]
-    [r.0 (acos r.0)]
-    [_ `(acos ,u)]))
-
-(define-match-expander Acos
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'acos u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Acos: u)] [_ (identifier? stx) #'Acos:])))
-
-(module+ test
-  (displayln "TEST - Acos")
-  (check-equal? (Acos -1/2) '(* 2/3 @pi))
-  (check-equal? (Asin -1/2) '(* -1/6 @pi))
-  (check-equal? (Acos '(* 1/2 (expt 3 1/2))) '(* 1/6 @pi))
-  (check-equal? (Asin '(* 1/2 (expt 3 1/2))) '(* 1/3 @pi))
-  (check-equal? (Asin (Sin '(* -1/3 @pi))) '(* -1/3 @pi))
-  (check-equal? (Acos (Cos '(* -1/3 @pi))) '(* 1/3 @pi))
-  (check-equal? (Asin (Sin '(* -1/6 @pi))) '(* -1/6 @pi))
-  (check-equal? (Acos (Cos '(* -1/6 @pi))) '(* 1/6 @pi)))
-
-(define (Atan: u)
-  (when debugging? (displayln (list 'Atan: u)))
-  (math-match u
-    [r.0 (atan r.0)]
-    [u   (Asin (⊘ u (Sqrt (⊕ 1 (Sqr u)))))]))
-
-(define-match-expander Atan
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'atan u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Atan: u)] [_ (identifier? stx) #'Atan:])))
-
-
-(define (Tan u)
-  (⊘ (Sin u) (Cos u)))
-
-(define (Degree u)
-  (⊗ (⊘ @pi 180) u))
 
 (define (Sqrt u)
   (Expt u 1/2))
@@ -1913,6 +1443,7 @@
   (check-equal? (in-terms/proc (normalize '(+ 1 2 x y (expt x 4) (sin x)))) 
                 '(3 x (expt x 4) y (sin x))))
 
+
 ;;;
 ;;; Expressions
 ;;; 
@@ -1936,5 +1467,19 @@
   (check-equal? (part (⊕ 1 (⊗ 2 x) y) 2 2) x)
   (check-equal? (part (⊕ 1 (⊗ 2 x) y) 2 1) 2))
 
+
+;;;
+;;; Dynamic Requires
+;;;
+
+; Note: These dynamic-requires needs to be last.
+;       Otherwise you'll risk getting "instantiate-linklet: mismatch" errors.
+
+
+(define ComplexRealExpt     (dynamic-require "complex.rkt" 'ComplexRealExpt))
+(define ComplexComplexExpt  (dynamic-require "complex.rkt" 'ComplexComplexExpt))
+(define RealComplexExpt     (dynamic-require "complex.rkt" 'RealComplexExpt))
+(define ExpI                (dynamic-require "complex.rkt" 'ExpI))
+(define Angle               (dynamic-require "complex.rkt" 'Angle))
 
 

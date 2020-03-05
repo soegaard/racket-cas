@@ -7,7 +7,7 @@
 
          
 (require "core.rkt" "math-match.rkt"
-         "diff.rkt")
+         "diff.rkt" "trig.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)

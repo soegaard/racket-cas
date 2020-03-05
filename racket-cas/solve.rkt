@@ -9,7 +9,7 @@
 (require racket/list racket/match
          "core.rkt" "math-match.rkt" "polynomial.rkt"
          "simplify-expand.rkt" "compose-app.rkt" "logical-operators.rkt"
-         "numerical-evaluation.rkt" "relational-operators.rkt"
+         "numerical-evaluation.rkt" "relational-operators.rkt" "trig.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test
