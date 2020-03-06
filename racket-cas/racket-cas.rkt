@@ -20,11 +20,14 @@
 (require               "core.rkt" "diff.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt")
 (provide (all-from-out "core.rkt" "diff.rkt" "format.rkt" "limit.rkt" "newton-raphson.rkt" "polynomial.rkt" "solve.rkt" "taylor.rkt"))
 
-(require               "up-ref.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt" "logical-operators.rkt")
-(provide (all-from-out "up-ref.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt" "logical-operators.rkt"))
+(require               "up-ref.rkt" "trig-expand.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt" "logical-operators.rkt")
+(provide (all-from-out "up-ref.rkt" "trig-expand.rkt" "compose-app.rkt" "normalize.rkt" "simplify-expand.rkt" "logical-operators.rkt"))
 
 (require               "expand.rkt" "numerical-evaluation.rkt" "relational-operators.rkt" "trig.rkt" "complex.rkt")
 (provide (all-from-out "expand.rkt" "numerical-evaluation.rkt" "relational-operators.rkt" "trig.rkt" "complex.rkt"))
+
+(require               "standard-functions.rkt")
+(provide (all-from-out "standard-functions.rkt"))
 
 
 (module+ start

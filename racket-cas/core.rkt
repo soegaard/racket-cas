@@ -1,14 +1,15 @@
 #lang racket
 (require "parameters.rkt")
 (require (prefix-in % "bfracket.rkt"))
-(require (only-in math/base cosh sinh)) 
 (require math/bigfloat)
-(require "math-match.rkt" racket/match math/flonum math/number-theory math/special-functions
+(require "math-match.rkt" racket/match math/flonum
+         (only-in math/number-theory factorize integer-root/remainder divides? max-dividing-power)
          (for-syntax syntax/parse racket/syntax racket/format))
 
 (provide (except-out (all-defined-out)
-           ; These functions are dynamically required - see the bottom of the file.
-           ComplexRealExpt ComplexComplexExpt RealComplexExpt ExpI Angle))
+                     ; These functions are dynamically required in order to avoid a cycle
+                     ; in module requires. See the bottom of the file.
+                     ComplexRealExpt ComplexComplexExpt RealComplexExpt ExpI Angle))
 
 ;;;
 ;;; Debug
@@ -636,43 +637,7 @@
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
   (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
 
-(define-syntax (define-function stx)
-  (syntax-parse stx
-    [(_ Name Name: sym-name expr)
-     (syntax/loc stx
-       (begin
-         (define-match-expander Name
-           (λ (stx) (syntax-parse stx [(_ u) #'(list 'sym-name u)]))
-           (λ (stx) (syntax-parse stx [(_ u) #'(Name: u)] [_ (identifier? stx) #'Name:])))
-         (define Name: expr)))]))
 
-(define-function Gamma Gamma: gamma
-  (λ (u)
-    (math-match u
-      [n (gamma n)]
-      [p 'undefined]
-      [r (gamma r)]
-      [r.bf (bfgamma r.bf)]
-      [_ `(gamma ,u)])))
-
-(define-syntax (define-integer-function stx)
-  (syntax-parse stx
-    [(_ Name Name: name)
-     (syntax/loc stx
-       (define-function Name Name: name
-         (λ (u)
-           (math-match u
-             [n (name n)]
-             [_ `(name ,u)]))))]))
-
-(define-integer-function Factorial Factorial: factorial)
-(define-integer-function Prime? Prime?: prime?)
-(define-integer-function Odd-prime? Odd-prime?: odd-prime?)
-(define-integer-function Nth-prime Nth-prime: nth-prime)
-(define-integer-function Random-prime Random-prime: random-prime)
-(define-integer-function Next-prime Next-prime: next-prime)
-(define-integer-function Prev-prime Prev-prime: prev-prime)
-(define-integer-function Divisors divisors: divisors)
 
 
 
@@ -1168,8 +1133,8 @@
     [(α β)          (let ([n (%numerator α)] [d (%denominator α)])
                       (⊗ (Expt n β) (Expt d (⊖ β))))]              ; (n/d)^β = n^β * d^-β
 
-    [(u  (Log u v)) v]                   ; xxx - is this only true for u real?
-    [(@e (Ln v))    v]
+    [(u             (Log u v)) v]                   ; xxx - is this only true for u real?
+    [(@e            (Ln v))    v]
     [(@e @i)        (ExpI 1)]
     [(@e x)        `(expt @e ,x)]    
     [(@e v)         (match v
@@ -1251,15 +1216,13 @@
   ; (check-equal? (Expt 8 1/3) 2.0)  ; mspire / maxima 
   (check-equal? (Exp (Ln 3)) 3))
 
-  
-(define (Sqr: u)
-  (Expt u 2))
 
-(define-match-expander Sqr
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
+;;;
+;;; Logarithms
+;;; 
 
-
+; Note: Expt and Log/Ln depend on each other, so logarithms can't be move
+;       out of the core.
 
 (define (Ln: u)
   (when debugging? (displayln (list 'Ln: u)))
@@ -1358,8 +1321,32 @@
   (check-equal? (Log 2 (Expt 2 x)) x))
 
 
+;;;
+;;; Convenient Powers
+;;;
+  
+(define (Sqr: u)
+  (Expt u 2))
+
+(define-match-expander Sqr
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 2)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
+
+
 (define (Sqrt u)
   (Expt u 1/2))
+
+(define (Root u n)
+  (Expt u (⊘ 1 n)))
+
+(module+ test
+  (displayln "TEST - Sqrt")
+  (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
+
+
+;;;
+;;; Absolute Value
+;;;
 
 (define (Abs: u)
   (math-match u
@@ -1384,33 +1371,10 @@
   (check-equal? (Abs   0.0)  0.0)
   (check-equal? (Abs  42.0) 42.0))
 
-(define (Root u n)
-  (Expt u (⊘ 1 n)))
 
-(module+ test
-  (displayln "TEST - Sqrt")
-  (check-equal? (Sqrt 0) 0) (check-equal? (Sqrt 1) 1) (check-equal? (Sqrt 4) 2))
-
-
-
-
-(define (free-of u v)
-  ; return true if is not a complete subexpression of u, false otherwise
-  (define (f u)
-    (and (not (equal? u v))
-         (math-match u
-           [r #t]
-           [r.bf #t]
-           [x #t]
-           [(app: _ us) (andmap f us)])))
-  (f u))
-
-(module+ test
-  (let () (define u (Expt (⊕ x 1) 2))
-    (check-equal? (free-of u x) #f)
-    (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
-    (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
-
+;;;
+;;; Sum and products
+;;;
 
 
 (define-syntax (for/⊕ stx)
@@ -1448,6 +1412,22 @@
 ;;; Expressions
 ;;; 
 
+(define (free-of u v)
+  ; return true if is not a complete subexpression of u, false otherwise
+  (define (f u)
+    (and (not (equal? u v))
+         (math-match u
+           [r #t]
+           [r.bf #t]
+           [x #t]
+           [(app: _ us) (andmap f us)])))
+  (f u))
+
+(module+ test
+  (let () (define u (Expt (⊕ x 1) 2))
+    (check-equal? (free-of u x) #f)
+    (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
+    (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
 
 (define (part u . ns)
   ; as in Maxima http://maxima.sourceforge.net/docs/manual/en/maxima_6.html#IDX225 
@@ -1476,10 +1456,10 @@
 ;       Otherwise you'll risk getting "instantiate-linklet: mismatch" errors.
 
 
+
 (define ComplexRealExpt     (dynamic-require "complex.rkt" 'ComplexRealExpt))
 (define ComplexComplexExpt  (dynamic-require "complex.rkt" 'ComplexComplexExpt))
 (define RealComplexExpt     (dynamic-require "complex.rkt" 'RealComplexExpt))
 (define ExpI                (dynamic-require "complex.rkt" 'ExpI))
 (define Angle               (dynamic-require "complex.rkt" 'Angle))
-
 
