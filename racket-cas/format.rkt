@@ -165,9 +165,13 @@
   (define operators '(sin cos tan log ln sqrt det))
   (define (~relop u)
     (match u
-      ['<=  "≤ "]
-      ['>=  "≥ "]
-      ['~   "\\sim "]
+      ['<=           "≤ "]
+      ['>=           "≥ "]
+      ['~            "\\sim "]
+      ['Less         "< "]
+      ['LessEqual    "≤ "]
+      ['Greater      "> "]
+      ['GreaterEqual "≥ "]
       [_    (~a u)]))
   (define (~symbol s) 
     (match s
@@ -218,6 +222,10 @@
       ['<=  "≤ "]
       ['>=  "≥ "]
       ['~   "\\sim "]
+      ['Less         "< "]
+      ['LessEqual    "≤ "]
+      ['Greater      "> "]
+      ['GreaterEqual "≥ "]
       [_    (~a u)]))
   (define (~symbol s)
     (match s
@@ -697,13 +705,13 @@
                                       #:use paren))]
       ; other
       [(And (Less u v) (Less u1 v1))           #:when (equal? v u1)
-       (~a (par u) " " (~sym '<) " " (par v) " " (~relop '<) " " (par v1))]
+       (~a (par u) " " (~relop '<) " " (par v) " " (~relop '<) " " (par v1))]
       [(And (LessEqual u v) (Less u1 v1))      #:when (equal? v u1)
-       (~a (par u) " " (~sym '<=) " " (par v) " " (~relop '<) " " (par v1))]
+       (~a (par u) " " (~relop '<=) " " (par v) " " (~relop '<) " " (par v1))]
       [(And (LessEqual u v) (LessEqual u1 v1)) #:when (equal? v u1)
-       (~a (par u) " " (~sym '<=) " " (par v) " " (~relop '<=) " " (par v1))]
+       (~a (par u) " " (~relop '<=) " " (par v) " " (~relop '<=) " " (par v1))]
       [(And (Less u v)      (LessEqual u1 v1)) #:when (equal? v u1)
-       (~a (par u) " " (~sym '<)  " " (par v) " " (~relop '<=) " " (par v1))]
+       (~a (par u) " " (~relop '<)  " " (par v) " " (~relop '<=) " " (par v1))]
       
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       ; todo: if u or v contains And or Or in u or v then we need parentheses as in the And line
@@ -762,8 +770,8 @@
       [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
       [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
 
-      [(app: f us) #:when (memq f '(< > <= >=))
-                   (match us [(list u v) (~a (v~ u) (~sym f) (v~ v))])]
+      [(app: f us) #:when (memq f '(< > <= >= Less LessEqual Greater GreaterEqual))
+                   (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
       [(app: f us) (let ()
                      (define arguments
                        (apply string-append (add-between (map v~ us) ",")))
@@ -831,6 +839,11 @@
   (check-equal? (~ '(sqrt (* 12 1/12 11/12))) "$\\sqrt{12\\cdot \\frac{1}{12}\\cdot \\frac{11}{12}}$")
   (parameterize ([output-root? #t]) (check-equal? (~ '(expt 2 1/3)) "$\\sqrt[3]{2}$"))
   (check-equal? (tex '(- (sqr c) (sqr a))) "$c^{2}-a^{2}$")
+  (check-equal? (tex '(Less         x 1)) "$x< 1$")
+  (check-equal? (tex '(LessEqual    x 1)) "$x≤ 1$")
+  (check-equal? (tex '(Greater      x 1)) "$x> 1$")
+  (check-equal? (tex '(GreaterEqual x 1)) "$x≥ 1$")
+  
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* -1 x)) "-x")
