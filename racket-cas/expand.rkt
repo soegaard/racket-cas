@@ -7,12 +7,12 @@
 
 (require racket/list racket/match 
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "logical-operators.rkt" "math-match.rkt" "relational-operators.rkt"
-         "trig.rkt")
+         "core.rkt" "math-match.rkt" "runtime-paths.rkt"
+         "logical-operators.rkt"  "relational-operators.rkt" "trig.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define normalize (dynamic-require "normalize.rkt" 'normalize))
+  (define normalize (dynamic-require normalize.rkt 'normalize))
   (define x 'x) (define y 'y) (define z 'z))
 
 

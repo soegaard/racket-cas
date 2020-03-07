@@ -11,9 +11,10 @@
 ; This module contains functions that manipulate expressions.
 
 
-(require racket/match "core.rkt" "diff.rkt" "math-match.rkt"  "parameters.rkt"
-         "compose-app.rkt" "logical-operators.rkt" "relational-operators.rkt")
-(define normalize  (dynamic-require "normalize.rkt" 'normalize))
+(require racket/match
+         "core.rkt" "math-match.rkt"  "parameters.rkt" "runtime-paths.rkt"
+         "diff.rkt" "compose-app.rkt" "logical-operators.rkt" "relational-operators.rkt")
+(define normalize  (dynamic-require normalize.rkt 'normalize))
 
 (module+ test
   (require rackunit math/bigfloat)

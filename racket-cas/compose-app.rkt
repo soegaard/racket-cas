@@ -11,12 +11,13 @@
 
 (require racket/list racket/match
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt" "parameters.rkt")
+         "core.rkt" "math-match.rkt" "parameters.rkt" "runtime-paths.rkt")
+
+(define normalize (dynamic-require normalize.rkt       'normalize))
 
 (module+ test
   (require rackunit math/bigfloat )
-  (define normalize (dynamic-require "normalize.rkt"       'normalize))
-  (define subst     (dynamic-require "simplify-expand.rkt" 'subst))
+  (define subst     (dynamic-require simplify-expand.rkt 'subst))
   
   (define x 'x) (define y 'y) (define z 'z))
 
@@ -39,11 +40,13 @@
   (λ (stx) (syntax-parse stx [(_ u ...) #'(App:      u ...)] [_ (identifier? stx) #'App:])))
 
 (define (App: u . us)
+  ; (displayln (list 'u u 'us us))
   (match u
     [(list 'up coords ...) `(up ,@(for/list ([coord coords]) (apply App: coord us)))]
     [(list 'compose u v)   (match us
                              [(list w) (App u (App v w))]
-                             [_        `(app ,u ,@us)])]                              
+                             [_        `(app ,u ,@us)])]
+    ; [(list* u vs)          (normalize (list* u vs))]
     [_                     `(app ,u ,@us)]))
 
 

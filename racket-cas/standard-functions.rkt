@@ -8,10 +8,8 @@
          math/number-theory
          math/special-functions ; gamma
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt"
-         (except-in "bfracket.rkt" denominator numerator)
-         "math-match.rkt")
-; (define normalize (dynamic-require "normalize.rkt"      'normalize))
+         "core.rkt" "math-match.rkt" "runtime-paths.rkt"
+         (except-in "bfracket.rkt" denominator numerator))
 
 (module+ test
   (require rackunit math/bigfloat)

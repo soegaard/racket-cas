@@ -15,11 +15,12 @@
 
 
 (require math/bigfloat
-         "core.rkt" "diff.rkt"
+         "core.rkt" "runtime-paths.rkt"
+         "diff.rkt"
          "simplify-expand.rkt") ; for subst
-(define normalize (dynamic-require "normalize.rkt"      'normalize))
-(define N         (dynamic-require "numerical-evaluation.rkt" 'N))
-(define bf-N      (dynamic-require "numerical-evaluation.rkt" 'bf-N))
+(define normalize (dynamic-require normalize.rkt      'normalize))
+(define N         (dynamic-require numerical-evaluation.rkt 'N))
+(define bf-N      (dynamic-require numerical-evaluation.rkt 'bf-N))
 
 (define (newton-raphson f x u0 [n 10] #:trace? [trace? #f])
   ; Use Newton-Raphson's metod to solve the equation f(x)=0.

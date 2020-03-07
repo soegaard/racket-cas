@@ -32,11 +32,12 @@
 (require racket/math math/number-theory
          racket/function racket/match racket/set
          (except-in racket/list permutations)
-         "core.rkt" "diff.rkt" "expand.rkt" "math-match.rkt")
+         "core.rkt" "math-match.rkt" "runtime-paths.rkt"
+         "diff.rkt" "expand.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define normalize (dynamic-require "normalize.rkt" 'normalize))
+  (define normalize (dynamic-require normalize.rkt 'normalize))
   (define x 'x) (define y 'y) (define z 'z))
 
 

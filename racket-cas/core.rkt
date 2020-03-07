@@ -1,8 +1,7 @@
 #lang racket
-(require "parameters.rkt")
-(require (prefix-in % "bfracket.rkt"))
-(require math/bigfloat)
-(require "math-match.rkt" racket/match math/flonum
+(require racket/match math/flonum math/bigfloat 
+         "parameters.rkt" "math-match.rkt" "runtime-paths.rkt"
+         (prefix-in % "bfracket.rkt")
          (only-in math/number-theory factorize integer-root/remainder divides? max-dividing-power)
          (for-syntax syntax/parse racket/syntax racket/format))
 
@@ -35,8 +34,6 @@
 ;   - examine automatic simplification of output of (diff '(expt x x) x)
 ;   - (Sqrt -3) currently returns (expt -3 1/2)
 ;     what is the correct error?
-;   - (expt -8 1/3) does not return -2. Instead the principal value is returned.
-;     NSpire for one returns -2. What is the best approach?
 ; Ideas:
 ;   - implement bfracket where big floats are numbers
 ;   - add arctan
@@ -52,8 +49,8 @@
 
 (module+ test
   (require rackunit math/bigfloat "parameters.rkt")
-  (define normalize (dynamic-require "normalize.rkt"            'normalize))
-  (define N         (dynamic-require "numerical-evaluation.rkt" 'N))
+  (define normalize (dynamic-require normalize.rkt            'normalize))
+  (define N         (dynamic-require numerical-evaluation.rkt 'N))
   (define x 'x) (define y 'y) (define z 'z))
 
 (module+ test
@@ -1340,9 +1337,8 @@
 ;       Otherwise you'll risk getting "instantiate-linklet: mismatch" errors.
 
 
-
-(define ComplexRealExpt     (dynamic-require "complex.rkt" 'ComplexRealExpt))
-(define ComplexComplexExpt  (dynamic-require "complex.rkt" 'ComplexComplexExpt))
-(define RealComplexExpt     (dynamic-require "complex.rkt" 'RealComplexExpt))
-(define ExpI                (dynamic-require "complex.rkt" 'ExpI))
-(define Angle               (dynamic-require "complex.rkt" 'Angle))
+(define ComplexRealExpt     (dynamic-require complex.rkt 'ComplexRealExpt))
+(define ComplexComplexExpt  (dynamic-require complex.rkt 'ComplexComplexExpt))
+(define RealComplexExpt     (dynamic-require complex.rkt 'RealComplexExpt))
+(define ExpI                (dynamic-require complex.rkt 'ExpI))
+(define Angle               (dynamic-require complex.rkt 'Angle))

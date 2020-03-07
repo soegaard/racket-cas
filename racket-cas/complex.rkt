@@ -14,12 +14,13 @@
 (require racket/list racket/match racket/math
          (prefix-in % "bfracket.rkt")
          (for-syntax racket/base racket/syntax syntax/parse)
-         "core.rkt" "math-match.rkt" "trig.rkt")
+         "core.rkt" "math-match.rkt" "runtime-paths.rkt"
+         "trig.rkt")
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define normalize (dynamic-require "normalize.rkt"            'normalize))
-  (define N         (dynamic-require "numerical-evaluation.rkt" 'N))
+  (define normalize (dynamic-require normalize.rkt            'normalize))
+  (define N         (dynamic-require numerical-evaluation.rkt 'N))
   (define x 'x) (define y 'y) (define z 'z))
 
 

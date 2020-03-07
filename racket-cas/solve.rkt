@@ -7,14 +7,15 @@
 
 
 (require racket/list racket/match
-         "core.rkt" "math-match.rkt" "polynomial.rkt"
+         "core.rkt" "math-match.rkt" "runtime-paths.rkt"
+         "polynomial.rkt"
          "simplify-expand.rkt" "compose-app.rkt" "logical-operators.rkt"
          "numerical-evaluation.rkt" "relational-operators.rkt" "trig.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define normalize (dynamic-require "normalize.rkt" 'normalize))
+  (define normalize (dynamic-require normalize.rkt 'normalize))
   (define x 'x) (define y 'y) (define z 'z))
 
 
