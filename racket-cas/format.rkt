@@ -532,17 +532,15 @@
                                                             #:wrap-fractions? #t))))]
         [(Expt u p)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-sub-exponent-wrapper)
-                                     ((output-format-function-symbol)
-                                      (fluid-let ([original? #t])
-                                         (par p #:use exponent-sub)))))]
+                                     (fluid-let ([original? #t])
+                                                (par p #:use exponent-sub))))]
         [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
                         (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
         [(Expt u v)   (~a (par u #:use base-sub)
                           (~sym '^) ((output-sub-exponent-wrapper)
-                                     ((output-format-function-symbol)
-                                      (fluid-let ([original? #t])
-                                        (par v #:use exponent-sub #:wrap-fractions? #t)))))]
+                                     (fluid-let ([original? #t])
+                                        (par v #:use exponent-sub #:wrap-fractions? #t))))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
         [(Up u v)    ((output-format-up)  u v)]
@@ -866,7 +864,7 @@
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
-  (check-equal? (~ '(~ X (bi n p)))    "$X \\sim  bi(n,p)$")
+  (check-equal? (~ '(~ X (bi n p)))    "$X \\sim  \\text{bi}(n,p)$")
   (check-equal? (~ '(* 1/2 1/3))               "$\\frac{1}{2}\\cdot \\frac{1}{3}$")
   (check-equal? (~ '(sqrt (* 1/2 1/3))) "$\\sqrt{\\frac{1}{2}\\cdot \\frac{1}{3}}$")
   (check-equal? (~ '(sqrt (* 12 1/12 11/12))) "$\\sqrt{12\\cdot \\frac{1}{12}\\cdot \\frac{11}{12}}$")
