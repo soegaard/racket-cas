@@ -211,7 +211,8 @@
       ['*   "\\cdot "]
       ['or  "\\vee "]
       ['and "\\wedge "]
-      [_  (~a s)]))
+      [_  (define t (~a s))
+          (if (= (string-length t) 1) t (~a "\\text{" t "}"))]))
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~symbol)
   (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
@@ -267,7 +268,8 @@
       ['or  "\\vee "]    ; logical or
       ['and "\\wedge "]  ; logical and
       ['|%| "\\%"]
-      [_  (~a s)]))
+      [_  (define t (~a s))
+          (if (= (string-length t) 1) t (~a "\\text{" t "}"))]))
   (parameterize ((output-application-brackets (list "(" ")"))
                  (output-format-function-symbol ~symbol)
                  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
