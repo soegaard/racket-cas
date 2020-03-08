@@ -94,6 +94,27 @@
     (~a "\\begin{pmatrix} " x "\\\\" y "\\end{pmatrix}")))
 
 
+;;; Intervals
+(define (default-output-interval u)
+  (define v~ verbose~)
+  (parameterize ([output-wrapper values]) ; avoid $ around sub parts
+    (match u
+      [(list 'ccinterval u v) (~a "[" (v~ u) "," (v~ v) "]")]
+      [(list 'ocinterval u v) (~a "]" (v~ u) "," (v~ v) "]")]
+      [(list 'cointerval u v) (~a "[" (v~ u) "," (v~ v) "[")]
+      [(list 'oointerval u v) (~a "]" (v~ u) "," (v~ v) "[")]
+      [_ (error 'default-output-interval (~a "unknown interval type, got: " u))])))
+  
+(define (tex-output-interval u)
+  (define v~ verbose~)
+  (parameterize ([output-wrapper values]) ; avoid $ around sub parts
+    (match u
+      [(list 'ccinterval u v) (~a "[" (v~ u) "," (v~ v) "]")]
+      [(list 'ocinterval u v) (~a "]" (v~ u) "," (v~ v) "]")]
+      [(list 'cointerval u v) (~a "[" (v~ u) "," (v~ v) "[")]
+      [(list 'oointerval u v) (~a "]" (v~ u) "," (v~ v) "[")]
+      [_ (error 'tex-output-interval (~a "unknown interval type, got: " u))])))
+
 ;;; Formatting Parameters
 
 (define output-application-brackets      (make-parameter (list "(" ")")))
@@ -119,6 +140,7 @@
 (define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e, @pi and @i
 (define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
 (define output-fraction                  (make-parameter default-output-fraction))
+(define output-interval                  (make-parameter default-output-interval))
 
 (define (use-mma-output-style)
   (output-application-brackets (list "[" "]"))
@@ -167,6 +189,8 @@
     (match u
       ['<=           "≤ "]
       ['>=           "≥ "]
+      ['≤            "≤ "]
+      ['≥            "≥ "]
       ['~            "\\sim "]
       ['Less         "< "]
       ['LessEqual    "≤ "]
@@ -181,6 +205,8 @@
       [_ #:when (member s operators) (~a "\\" s)]
       ['<=  "\\leq "]
       ['>=  "\\geq "]
+      ['≤   "≤ "]
+      ['≥   "≥ "]
       ['~   "\\sim "]
       ['*   "\\cdot "]
       ['or  "\\vee "]
@@ -210,7 +236,8 @@
   (output-implicit-product? #t)
   (output-relational-operator ~relop)
   (output-variable-name tex-output-variable-name)
-  (output-fraction tex-output-fraction))
+  (output-fraction tex-output-fraction)
+  (output-interval tex-output-interval))
 
 (define (tex u)
   (define operators '(sin  cos  tan log ln sqrt
@@ -262,7 +289,8 @@
                  (output-variable-name        tex-output-variable-name)
                  (output-format-log           tex-output-log)
                  (output-format-up            tex-output-up)
-                 (output-fraction             tex-output-fraction))
+                 (output-fraction             tex-output-fraction)
+                 (output-interval             tex-output-interval))
     (verbose~ u)))
 
 (define char->tex
@@ -768,9 +796,12 @@
       [(list 'abs u) ((output-format-abs) u)] 
       [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
       [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
-      [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
+      [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
 
-      [(app: f us) #:when (memq f '(< > <= >= Less LessEqual Greater GreaterEqual))
+      [(list (or 'ccinterval 'ocinterval 'cointerval 'oointerval ) v1 v2)
+             ((output-interval) u)]
+
+      [(app: f us) #:when (memq f '(< > ≤ ≥ <= >= Less LessEqual Greater GreaterEqual))
                    (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
       [(app: f us) (let ()
                      (define arguments

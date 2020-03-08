@@ -50,7 +50,7 @@
     [(Less u v)         (Less         (n u) (n v))]
     [(LessEqual u v)    (LessEqual    (n u) (n v))]
     [(Greater u v)      (Greater      (n u) (n v))]
-    [(GreaterEqual u v) (GreaterEqual (n u) (n v))]    
+    [(GreaterEqual u v) (GreaterEqual (n u) (n v))]
     [(Ln u)             (Ln   (n u))]
     [(Log u)            (Log  (n u))]
     [(Log u v)          (Log  (n u) (n v))]
@@ -86,6 +86,10 @@
                    [(list  'exp u)    (Exp  (n u))]  
                    [(list  'bf u)     (number? u) (bf u)]
                    [(list* 'or us)    (apply Or: us)]
+                   [(cons  '< us)     (n (cons 'Less         us))]
+                   [(cons  '≤ us)     (n (cons 'LessEqual    us))]
+                   [(cons  '> us)     (n (cons 'Greater      us))]
+                   [(cons  '≥ us)     (n (cons 'GreaterEqual us))]
                    [_ (let ([nus (map n us)])
                         (if (equal? us nus)
                             u
