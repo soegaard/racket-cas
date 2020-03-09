@@ -1315,7 +1315,7 @@
            [x #t]
            [(list 'piecewise us vs) (and (andmap f us) (andmap f vs))]
            [(app: _ us)             (andmap f us)]
-           [_ (error 'free-of (~a "missing-case:" u v))])))
+           [_  (error 'free-of (~a "missing-case:" u v))])))
   (f u))
 
 (module+ test

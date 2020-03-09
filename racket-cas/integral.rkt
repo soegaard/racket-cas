@@ -13,6 +13,7 @@
 
 (define normalize (dynamic-require normalize.rkt       'normalize))
 (define subst     (dynamic-require simplify-expand.rkt 'subst))
+(define expand    (dynamic-require expand.rkt          'expand))
 
 (module+ test
   (require rackunit math/bigfloat)
@@ -204,8 +205,8 @@
 
 (module+ test
   (displayln "TEST - rx+s")
-  (check-equal? (match x [(rx+s y r s) (list r s)][_ #f]) #f)
-  (check-equal? (match y [(rx+s y r s) (list r s)][_ #f]) '(1 0))
+  (check-equal? (match x              [(rx+s y r s) (list r s)][_ #f]) #f)
+  (check-equal? (match y              [(rx+s y r s) (list r s)][_ #f]) '(1 0))
   (check-equal? (match '(+ (* x y) z) [(rx+s x r s) (list r s)][_ #f]) '(y z))
   (check-equal? (match '(+ (* x y) z) [(rx+s y r s) (list r s)][_ #f]) '(x z))
   (check-equal? (match '(+ (* x y) z) [(rx+s z r s) (list r s)][_ #f]) '(1 (* x y))))
@@ -238,9 +239,9 @@
 
 (module+ test
   (displayln "TEST - extract-related-operands")
-  (check-equal? (extract-related-operands (⊗ (Exp x) x) x) '((expt @e x)))
+  (check-equal? (extract-related-operands (⊗ (Exp x) x)    x) '((expt @e x)))
   (check-equal? (extract-related-operands (⊗ (Expt x 5) x) x) '((expt x 3) x))
-  (check-equal? (extract-related-operands (⊗ 3 (Sqr y)) y) '((expt y 2)))
+  (check-equal? (extract-related-operands (⊗ 3 (Sqr y))    y) '((expt y 2)))
   )
 
 ; Find the subexpressions in u that can be used in the "integration by substitution rule"
@@ -260,6 +261,7 @@
   (check-equal? (subst-candidates (⊗ (Exp x) x) x) '((expt @e x)))
   (check-equal? (subst-candidates (⊗ (Exp (Sqr (Cos x))) x) x)
                 '((expt @e (expt (cos x) 2)) (expt (cos x) 2) (cos x))))
+
 
 (define (subst-with-symbol u x v [symbol 'symbol])
   (when debugging? (displayln (list 'subst-with-symbol u x v symbol)))
@@ -311,23 +313,30 @@
   (parameterize [(real-mode? #t) (complex-mode? #f)]
     (define (free-of-x u) (free-of u x))
     (match parts
-      [(Sqrt (⊖ a2 (Sqr (== x)))) #:when (free-of-x a2)
-                                  (try-subst-integrate u x (Asin (⊘ x (Sqrt a2))))]
-      [(Sqrt (⊖ (Sqr (== x)) a2)) #:when (free-of-x a2)
-                                  (try-subst-integrate u x (Asec (⊘ x (Sqrt a2))))]
-      [(Sqrt (⊕ a2 (Sqr (== x)))) #:when (free-of-x a2)
-                                  (try-subst-integrate u x (Atan (⊘ x (Sqrt a2))))]
-      [(Sqrt (⊖ a2 (TimesTerms (Sqr (== x)) b2 ...))) #:when (andmap free-of-x (cons a2 b2))
-                                                     (let* ([b (Sqrt (apply ⊗ b2))] [b/a (⊘ b (Sqrt a2))])
-                                                       (try-subst-integrate u x (Asin (⊗ x b/a))))]
-      [(Sqrt (⊖ (TimesTerms (Sqr (== x)) b2 ...) a2)) #:when (andmap free-of-x (cons a2 b2))
-                                                     (let* ([b (Sqrt (apply ⊗ b2))] [b/a (⊘ b (Sqrt a2))])
-                                                     (try-subst-integrate u x (Asec (⊗ x b/a))))]
-      [(Sqrt (⊕ a2 (TimesTerms (Sqr (== x)) b2 ...))) #:when (andmap free-of-x (cons a2 b2))
-                                                     (let* ([b (Sqrt (apply ⊗ b2))] [b/a (⊘ b (Sqrt a2))])
-                                                     (try-subst-integrate u x (Atan (⊗ x b/a))))]
+      [(Sqrt (⊖ a2 (Sqr (== x))))                       #:when (free-of-x a2)
+                                                        (try-subst-integrate u x (Asin (⊘ x (Sqrt a2))))]
+      
+      [(Sqrt (⊖ (Sqr (== x)) a2))                       #:when (free-of-x a2)
+                                                        (try-subst-integrate u x (Asec (⊘ x (Sqrt a2))))]
+      
+      [(Sqrt (⊕ a2 (Sqr (== x))))                       #:when (free-of-x a2)
+                                                        (try-subst-integrate u x (Atan (⊘ x (Sqrt a2))))]
+      
+      [(Sqrt (⊖ a2 (TimesTerms (Sqr (== x)) b2 ...)))   #:when (andmap free-of-x (cons a2 b2))
+                                                        (let* ([b (Sqrt (apply ⊗ b2))] [b/a (⊘ b (Sqrt a2))])
+                                                          (try-subst-integrate u x (Asin (⊗ x b/a))))]
+      
+      [(Sqrt (⊖ (TimesTerms (Sqr (== x)) b2 ...) a2))   #:when (andmap free-of-x (cons a2 b2))
+                                                        (let* ([b (Sqrt (apply ⊗ b2))] [b/a (⊘ b (Sqrt a2))])
+                                                          (try-subst-integrate u x (Asec (⊗ x b/a))))]
+      
+      [(Sqrt (⊕ a2 (TimesTerms (Sqr (== x)) b2 ...)))   #:when (andmap free-of-x (cons a2 b2))
+                                                        (let* ([b (Sqrt (apply ⊗ b2))] [b/a (⊘ b (Sqrt a2))])
+                                                          (try-subst-integrate u x (Atan (⊗ x b/a))))]
+      
       [_ #f])))
 
+;TODO TODO 
 (module+ test
   (displayln "TEST - trig-subst")
   (check-equal? (trig-subst '(expt (+ 1 (expt x 2)) 1/2) x '(expt (+ 1 (expt x 2)) 1/2))
@@ -337,9 +346,10 @@
                              (expt (+ 1 (* -1 (expt x 2) (expt (+ 1 (expt x 2)) -1))) 1/2))
                     (* 1/2 (asin (* x (expt (+ 1 (expt x 2)) -1/2)))))))
 
+
 (define (try-subst-integrate u x v)
   (when debugging? (displayln (list 'try-subst-integrate u x v)))
-  (define sym (gensym))
+  (define sym (gensym "t"))
   (define trival-integrand (⊘ u (diff v x)))
   (define (get-integrand-in-sym integrand-in-x subst-rand)
     (expand (reduce (cancel (subst-with-symbol integrand-in-x x v subst-rand)))))
@@ -418,9 +428,9 @@
 (define (integrate-impl u x)
   (when debugging? (displayln (list 'integrate-impl u x)))
   (cond
-    [(integrate-table u x)]
-    [(integrate-subst u x)]
-    [(integrate-expand u x)]
+    [(integrate-table u x)  => values]
+    [(integrate-subst u x)  => values]
+    [(integrate-expand u x) => values]
     [else #f]))
 
 (define (integrate-1/ax2+bx+c x a b c)
@@ -698,12 +708,12 @@
                            (* -1 (+ (* (ln (+ 1 (* -1 x))) (+ 1 (* -1 x))) (* -1 (+ 1 (* -1 x))))))))
   (check-equal? (integrate (Acosh x) x) '(+ (* -1 (expt (+ 1 (expt x 2)) 1/2)) (* x (ln (+ x (expt (+ 1 (expt x 2)) 1/2))))))
   (check-equal? (integrate (Asinh x) x) '(+ (* -1 (expt (+ -1 (expt x 2)) 1/2)) (* x (ln (+ x (expt (+ -1 (expt x 2)) 1/2))))))
-  (check-equal? (integrate (⊘ 'C '(+ 'n (* -1 (expt x 2)))) x)
-                '(* -2 C (expt (* -4 'n) -1/2) (asin (* 2 x (expt (* -4 'n) -1/2) (expt (+ 1 (* -1 (expt x 2) (expt 'n -1))) -1/2)))))
+  (check-equal? (integrate (⊘ 'C '(+ n (* -1 (expt x 2)))) x)
+                (normalize '(* -2 C (expt (* -4 n) -1/2) (asin (* 2 x (expt (* -4 n) -1/2) (expt (+ 1 (* -1 (expt x 2) (expt n -1))) -1/2))))))
   (check-equal? (integrate (⊘ 'C '(expt (+ 'n (* -1 (expt x 2))) 1/2)) x)
                 '(* C (expt 'n -1/2) (asin (* x (expt 'n -1/2))))) ; subst with tri funcs.
-  (check-equal? (integrate (⊘ 'C '(+ 'A (* 'B (expt x 2)))) x)
-                '(* 2 C (expt (* 4 'A 'B) -1/2) (asin (* 2 x (expt (* 4 'A 'B) -1/2) (expt (+ 1 (* (expt x 2) (expt 'A -1) 'B)) -1/2) 'B))))
+  (check-equal? (integrate (⊘ 'C '(+ A (* B (expt x 2)))) x)
+                (normalize '(* 2 C (expt (* 4 A B) -1/2) (asin (* 2 x (expt (* 4 A B) -1/2) (expt (+ 1 (* (expt x 2) (expt A -1) B)) -1/2) B)))))
   ;-------
   (check-equal? (integrate '(expt (+ (expt @e x) (expt @e (* -1 x))) -1) x) '(asin (* (expt @e x) (expt (+ 1 (expt @e (* 2 x))) -1/2))))
   (check-equal? (integrate '(* (expt @e x) (expt (+ 1 (expt @e (* 2 x))) -1)) x)

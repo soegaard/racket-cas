@@ -328,7 +328,7 @@
 
 (define-match-expander Cosh
   (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'cosh u) (⊗ 1/2 (⊕ (Exp (⊖ u)) (Exp u))))]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Sinh: u)] [_ (identifier? stx) #'Sinh:])))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Cosh: u)] [_ (identifier? stx) #'Cosh:])))
 
 (define-match-expander Sinh
   (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'sinh u) (⊗ 1/2 (⊖ (Exp u) (Exp (⊖ u)))))]))
@@ -349,9 +349,9 @@
   (define subst  (dynamic-require simplify-expand.rkt 'subst))
   (check-equal? (N (subst (Cosh x) x 1)) (cosh 1))
   (check-equal? (N (subst (Sinh x) x 1)) (sinh 1))
-  (check-equal? (match (Sinh x) [(Sinh y) y]) 'x)
-  (check-equal? (match (Sinh x) [(⊗ 1/2 (2⊗Sinh y)) y]) x)
-  (check-equal? (match (Cosh x) [(⊗ 1/2 (2⊗Cosh y)) y]) x)
-  (check-equal? (match (⊗ 2 (Sinh x)) [(2⊗Sinh u) u]) x)
-  (check-equal? (match (⊗ 2 (Cosh x)) [(2⊗Cosh u) u]) x))
+  (check-equal? (match      (Sinh x)  [         (Sinh y)  y] [_ #f]) x)
+  (check-equal? (match      (Sinh x)  [(⊗ 1/2 (2⊗Sinh y)) y] [_ #f]) x)
+  (check-equal? (match      (Cosh x)  [(⊗ 1/2 (2⊗Cosh y)) y] [_ #f]) x)
+  (check-equal? (match (⊗ 2 (Sinh x)) [       (2⊗Sinh u)  u] [_ #f]) x)
+  (check-equal? (match (⊗ 2 (Cosh x)) [       (2⊗Cosh u)  u] [_ #f]) x))
 
