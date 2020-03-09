@@ -573,6 +573,7 @@
         [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
         [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
         [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
+        [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
 
         ; applications
         [(app: f us) (let ()
@@ -797,6 +798,7 @@
       [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
       [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
       [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
+      [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
 
       [(list (or 'ccinterval 'ocinterval 'cointerval 'oointerval ) v1 v2)
              ((output-interval) u)]
@@ -874,6 +876,7 @@
   (check-equal? (tex '(LessEqual    x 1)) "$x≤ 1$")
   (check-equal? (tex '(Greater      x 1)) "$x> 1$")
   (check-equal? (tex '(GreaterEqual x 1)) "$x≥ 1$")
+  (check-equal? (tex '(bar x))            "$\\bar{x}$")
   
   ; --- Default
   (use-default-output-style)
