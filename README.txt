@@ -91,7 +91,7 @@ In particular, thanks to the following contributors:
 
 Contributors
 ------------
- - Bowen Fu  (complex numbers, together, combine and more)
+ - Bowen Fu  (integrate, complex numbers, together, combine and more)
 
 
 
