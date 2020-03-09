@@ -68,15 +68,26 @@
           (convention (make-is-pred "@pi") #'@pi?)
           (convention (make-is-pred "@i")  #'@i?)))
   
-  (define (find-convention-type s)
-    (for/or ([c (in-list conventions)])
-      (and ((convention-pred? c) s)
-           (convention-type c)))))
+  (define (find-convention-type-list s)
+    (for/list ([c (in-list conventions)]
+               #:when ((convention-pred? c) s))
+      (convention-type c)))
 
+  (define (find-convention-type s)
+    (define type-lst (find-convention-type-list s))
+    (if (empty? type-lst)
+        #f
+        (with-syntax ([(a ...) type-lst])
+          (syntax (conjoin a ...)))
+        )))
+  
 (module+ test (require (submod ".." conventions))
-  (check-equal? (syntax->datum (find-convention-type "r")) 'number?)
-  (check-equal? (syntax->datum (find-convention-type "x")) 'symbol?)
-  (check-equal? (find-convention-type "foo") #f))
+  (check-equal? (syntax->datum (find-convention-type "r")) '(conjoin number?))
+  (check-equal? (syntax->datum (find-convention-type "p+")) '(conjoin positive-number? integer?))
+  (check-equal? (syntax->datum (find-convention-type "x")) '(conjoin symbol?))
+  (check-equal? (find-convention-type "foo") #f)
+  (check-equal? (syntax->datum (find-convention-type "x.bf")) '(conjoin bigfloat-number? symbol?))
+  (check-equal? (syntax->datum (find-convention-type "n.0")) '(conjoin inexact-number? exact-natural?)))
 
 (module math-match racket
   (provide math-match math-match* :pat)
@@ -90,9 +101,10 @@
         (let* ([pat-sym (syntax->datum pat)]
                [pat-str (symbol->string pat-sym)])
           (define pred (find-convention-type pat-str))
-          (cond [pred (with-syntax ([pred pred]
-                                    [name (datum->syntax pat pat-sym)])
-                        #'(? pred name))]
+          (cond [pred
+                 (with-syntax ([pred pred]
+                               [name (datum->syntax pat pat-sym)])
+                   #'(? pred name))]
                 [else pat])))
       (define (rewrite pat0)
         (syntax-case pat0 ()
@@ -146,8 +158,8 @@
   (check-equal? (math-match 1   [@e 2] [_ 3]) 3)
   (check-equal? (math-match '@e [@e 2] [_ 3]) 2)
   (check-equal? (math-match 2 [n.0 3] [_ 4]) 4)
-  (check-equal? (math-match 2.0 [n.0 3] [_ 4]) 3)
-  (check-equal? (math-match (bf 2.0) [x.bf 3] [_ 4]) 3)
+  (check-equal? (math-match 2.0 [n.0 3] [_ 4]) 4) ; '(conjoin inexact-number? exact-natural?)
+  (check-equal? (math-match (bf 2.0) [x.bf 3] [_ 4]) 4) ; '(conjoin bigfloat-number? symbol?)
   (check-equal? (let ((x 'x)) (math-match 'x [(== x) #t] [_ #f])) #t)
   (check-equal? (math-match -42   [p+ #f] [p- #t] [_ #f]) #t)
   (check-equal? (math-match -42.5 [p+ #f] [p- #t] [_ #f]) #f)  ; p- only negative integers
