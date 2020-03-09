@@ -574,6 +574,8 @@
         [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
         [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
         [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
+        [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
+        [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
 
         ; applications
         [(app: f us) (let ()
@@ -799,6 +801,8 @@
       [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
       [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
+      [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
+      [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
 
       [(list (or 'ccinterval 'ocinterval 'cointerval 'oointerval ) v1 v2)
              ((output-interval) u)]
@@ -877,6 +881,8 @@
   (check-equal? (tex '(Greater      x 1)) "$x> 1$")
   (check-equal? (tex '(GreaterEqual x 1)) "$x≥ 1$")
   (check-equal? (tex '(bar x))            "$\\bar{x}$")
+  (check-equal? (tex '(braces 1 2 3))     "$\\{1,2,3\\}$")
+  (check-equal? (tex '(bracket 1 2 3))    "$[1,2,3]$")
   
   ; --- Default
   (use-default-output-style)
