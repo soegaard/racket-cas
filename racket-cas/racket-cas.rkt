@@ -26,8 +26,8 @@
 (require               "expand.rkt" "numerical-evaluation.rkt" "relational-operators.rkt" "trig.rkt" "complex.rkt")
 (provide (all-from-out "expand.rkt" "numerical-evaluation.rkt" "relational-operators.rkt" "trig.rkt" "complex.rkt"))
 
-(require               "standard-functions.rkt" "formula-manipulation.rkt")
-(provide (all-from-out "standard-functions.rkt" "formula-manipulation.rkt"))
+(require               "standard-functions.rkt" "formula-manipulation.rkt" "integral.rkt")
+(provide (all-from-out "standard-functions.rkt" "formula-manipulation.rkt" "integral.rkt"))
 
 
 (module+ start

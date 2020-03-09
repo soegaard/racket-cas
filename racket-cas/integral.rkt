@@ -1,5 +1,20 @@
 #lang racket/base
-(provide)
+(provide integrate)
+
+;;;
+;;; NOTES ON ADDING PR11 THE REFACTOR BRANCH
+;;;
+
+; 1. This line wasn't added to Oslash:
+;       [((TimesTerms (== v) us ...) _) (apply ⊗ us)]
+;    The problem is that it is expensive - and thus is not suited for automatic simplification.
+;    Maybe it can be added to cancel instead?
+
+; 2. Problem with match pattern p-, p+ (and similar).
+
+; 3. A few test cases now fail that didn't before. Maybe due to 1, but maybe due
+;    to the refactoring.
+
 
 ;;;
 ;;; Integral
@@ -20,15 +35,7 @@
   (define N (dynamic-require numerical-evaluation.rkt 'N))
   (define x 'x) (define y 'y) (define z 'z))
 
-;;;
-;;; NOTES
-;;;
 
-; 1. This line wasn't added to Oslash:
-;       [((TimesTerms (== v) us ...) _) (apply ⊗ us)]
-;    The problem is that it is expensive - and thus is not suited for automatic simplification.
-
-; 2. 
 
 ;;; The pattern (Sum us) matches a sum of the form (+ u ...) and binds us to (list u ...)
 (define-match-expander Sum
@@ -759,7 +766,8 @@
   (check-equal? (integrate (reduce (diff (Atan x) x)) x) (Atan x))
   (check-equal? (integrate (diff (Si x) x) x) (Si x))
   (check-equal? (integrate (diff (Ci x) x) x) (Ci x))
-  (check-equal? (integrate (Sqrt (Sqr x)) x) '(* (expt x 2) (piecewise (-1/2 (< x 0)) (1/2 (>= x 0)))))
+  (check-equal? (integrate (Sqrt (Sqr x)) x) 
+                '(* (expt x 2) (piecewise (-1/2 (< x 0)) (1/2 (>= x 0)))))
   )
 
   
