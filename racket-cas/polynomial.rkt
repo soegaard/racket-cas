@@ -73,7 +73,7 @@
 ; (coefficient u v n) find coefficient of v^n in u
 ; (coeffecient u v 0) returns the sum of all terms not of the form c*v^n, n>0
 (define (coefficient u v [n 1])
-  (when debugging? (displayln (list 'coefficient u v 'n n)))
+  (when verbose-debugging? (displayln (list 'coefficient u v 'n n)))
   (define (c u)
     (math-match u
       [r                            (if (= n 0) r    0)]

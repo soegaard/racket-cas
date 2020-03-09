@@ -14,6 +14,8 @@
   (require rackunit math/bigfloat)
   (define x 'x) (define y 'y) (define z 'z))
 
+(define (1/sqrt:1-u^2 u)
+  (⊘ 1 (Sqrt (⊖ 1 (Sqr u)))))
 
 (define (diff u x)
   (define (d u) (diff u x))
@@ -31,6 +33,11 @@
     [(Ln u)    (⊗ (⊘ 1 u) (d u))]
     [(Cos u)   (⊗ (⊖ 0 (Sin u)) (d u))]
     [(Sin u)   (⊗ (Cos u) (d u))]
+    [(Asin u)     (1/sqrt:1-u^2 u)]
+    [(Acos u)  (⊖ (1/sqrt:1-u^2 u))]
+    [(Atan u)  (⊘ 1 (⊕ (Sqr x) 1))]
+    [(Si x)    (Sinc x)]
+    [(Ci x)    (⊘ (Cos x) x)]
     [(app: f us)  #:when (symbol? f)
                   (match us
                     [(list u) (cond [(eq? u x)  (Diff `(,f ,x) x)]
@@ -72,4 +79,6 @@
   (check-equal? (diff (Sin (⊗ x x)) x) (⊗ 2 (Cos (Expt x 2)) x))
   ; TODO: ASE should rewrite the result to (* '(expt x x) (+ 1 (ln x)))
   (check-equal? (diff (Expt x x) x) '(* (expt @e (* x (ln x))) (+ 1 (ln x))))
+  (check-equal? (diff (Si x) x) (Sinc x))
+  (check-equal? (diff (Ci x) x) (⊘ (Cos x) x))
   )

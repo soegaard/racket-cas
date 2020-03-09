@@ -191,12 +191,6 @@
   (check-equal? (match '(* a b c) [(k⊗ x y) (list x y)]) '(1 (* a b c)))
   (check-equal? (match '(sin x)   [(k⊗ r u) (list r u)]) '(1 (sin x))))
 
-;;; The pattern (Sum us) matches a sum of the form (+ u ...) and binds us to (list u ...)
-(define-match-expander Sum
-  (λ (stx) (syntax-case stx () [(_ id) #'(list '+ id (... ...))])))
-;;; The pattern (Prod us) matches a product of the form (* u ...) and binds us to (list u ...)
-(define-match-expander Prod
-  (λ (stx) (syntax-case stx () [(_ id) #'(list '* id (... ...))])))
 
 
 ;; The pattern (Complex u v) matches all expressions and
@@ -495,9 +489,9 @@
     [(u (⊕ v w)) 
      (if (<<= u v)
          (match (plus2 u v)
-           [(Sum _) (match w 
-                      [(Sum ws) (list* '+ u v ws)]
-                      [_        (list  '+ u v w)])]
+           [(cons '+ _) (match w 
+                          [(cons '+ ws) (list* '+ u v ws)]
+                          [_            (list  '+ u v w)])]
            [u+v     (plus2 u+v w)])
          (plus2 v (plus2 u w)))]
     [(_ _) (list '+ s1 s2)]))
@@ -599,9 +593,9 @@
     [(u (⊗ v w))
      (if (<<= u v)
          (match (times2 u v)
-           [(Prod _) (match w 
-                       [(Prod ws) (list* '* u v ws)]
-                       [_         (list  '* u v w)])]
+           [(cons '* _) (match w 
+                          [(cons '* ws) (list* '* u v ws)]
+                          [_            (list  '* u v w)])]
            [u*v       (times2 u*v w)])
          (times2 v (times2 u w)))]
     [(_ _) (if (<<= s1 s2) (list '* s1 s2) (list '* s2 s1))]))
@@ -698,11 +692,12 @@
 ; divide u by v
 (define (Oslash: u v)
   (math-match* (u v)
-    [(r  0) +nan.0]
-    [(u  1) u]
-    [(u -1) (⊖ u)]
-    [(u u) 1]  ; should trigger a warning: x/x=1 is not true when x=0
-    [(u  v) (⊗ u (Expt v -1))]))
+    [(r     0) +nan.0]
+    [(r.bf  0) +nan.0]
+    [(u     1) u]
+    [(u    -1) (⊖ u)]
+    [(u     u) 1]  ; should trigger a warning: x/x=1 is not true when x=0
+    [(u     v) (⊗ u (Expt v -1))]))
 
 (define (not-one? x) (not (equal? x 1)))
 
@@ -743,8 +738,8 @@
   (math-match u
     [r                                      (%numerator u)]
     [r.bf                                   (%numerator u)]
-    [(Expt u p)        #:when (negative? p) 1]
-    [(Expt u (⊗ p us)) #:when (negative? p) 1]    
+    [(Expt u r)        #:when (negative? r) 1]                                ; PR11
+    [(Expt u (⊗ r us)) #:when (negative? r) 1]                                ; PR11
     [(⊗ u v)                                (⊗ (numerator u) (numerator v))]
     [_                                      u]))
 
@@ -752,8 +747,8 @@
   (math-match u
     [r                                      (%denominator u)]
     [r.bf                                   (%denominator u)]
-    [(Expt u p)        #:when (negative? p) (Expt u (- p))]
-    [(Expt u (⊗ p us)) #:when (negative? p) (Expt u (⊗ (- p) us))]
+    [(Expt u r)        #:when (negative? r) (Expt u (- r))]         ; PR11
+    [(Expt u (⊗ r us)) #:when (negative? r) (Expt u (⊗ (- r) us))]  ; PR11
     [(⊗ u v)                                (⊗ (denominator u) (denominator v))]
     [_                                      1]))
 
@@ -844,7 +839,8 @@
                                             (reverse-terms->sum neg))]
                        [(cons u us) (if (negative-term? u)
                                         (loop us         pos  (cons (negate-term u) neg))
-                                        (loop us (cons u pos)                       neg))]))]))
+                                        (loop us (cons u pos)                       neg))]))]
+    [_ (values u 0)]))
                         
 
   
@@ -1014,21 +1010,26 @@
     [(α β)          (let ([n (%numerator α)] [d (%denominator α)])
                       (⊗ (Expt n β) (Expt d (⊖ β))))]              ; (n/d)^β = n^β * d^-β
 
-    [(u             (Log u v)) v]                   ; xxx - is this only true for u real?
-    [(@e            (Ln v))    v]
-    [(@e @i)        (ExpI 1)]
-    [(@e x)        `(expt @e ,x)]    
-    [(@e v)         (match v
-                      [(list  '*   '@i '@pi)                  (ExpI @pi)]
-                      [(list  '* r '@i '@pi) #:when (real? r) (ExpI (⊗ r @pi))] 
-                      [_ `(expt @e ,v)])]
+    [(u  (Log u v))     v]              ; xxx - is this only true for u real?
+    [(@e (Ln v))        v]
+    [(@e (⊗ p (Ln v)))  (Expt v p)]
+    [(@e @i)            (ExpI 1)]
+    [(@e x)             `(expt @e ,x)]    
+    [(@e v)             (match v
+                          [(list  '*   '@i '@pi)                  (ExpI @pi)]
+                          [(list  '* r '@i '@pi) #:when (real? r) (ExpI (⊗ r @pi))] 
+                          [_ `(expt @e ,v)])]
     
     [(@i α)             (ExpI (⊗ 1/2 α @pi))]
     [(@i (Complex a b)) (ComplexComplexExpt Expt 0 1 a b)]
     ; we need to handle all @i cases before x is met (otherwise thus catches @i^_ 
-    [(x  v)  #:when (not (eq? x '@e))    `(expt ,x ,v)]
+    [(x  v)          #:when (not (eq? x '@e))            `(expt ,x ,v)]
+    [((Expt u  α) β) #:when (and (integer? (* α β))
+                                 (not (and (integer? α)   (even? α))))
+                     (Expt u (* α β))]  ; PR11
+    [((Expt u  v) p) (Expt u (⊗  p v))]
+    ; [((Expt u -1) v) (Expt u (⊗ -1 v))] ; PR11 - compare NSpire
     
-    [((Expt u v) p) (Expt u (⊗ p v))]
     [(u v)
      (cond
        [(real-mode?)  ; real mode
@@ -1095,7 +1096,8 @@
   (check-equal? (Expt 2/3 -1) 3/2)
   ; (check-equal? (Expt 4 -1/2) 1/2) ; nspire / maxima
   ; (check-equal? (Expt 8 1/3) 2.0)  ; mspire / maxima 
-  (check-equal? (Exp (Ln 3)) 3))
+  (check-equal? (Exp (Ln 3)) 3)
+  (check-equal? (Exp '(* 2 (ln x))) '(expt x 2)))
 
 
 ;;;
@@ -1116,6 +1118,8 @@
                    (⊕ (Ln (Sqrt (⊕ (Sqr a) (Sqr b)))) 
                       (⊗ @i (Angle (Complex a b))))]
     [(Expt @e v) v]
+    [(Expt u α) #:when (= (%numerator (abs α)) 1)   
+                (⊗ α (Ln: u))]     ;  ln(x^1/2) = 1/2*ln(x) but don't rewrite ln(x^3).
     [(⊗ u v)  (⊕ (Ln: u) (Ln: v))]
     [_ `(ln ,u)]))
 
@@ -1135,10 +1139,11 @@
   (check-equal? (Ln (Expt (Exp x) 2)) '(* 2 x))
   (check-equal? (Ln (Expt x 3)) '(ln (expt x 3)))
   (check-equal? (Ln (⊗ 7 x (Expt y 3))) '(+ (ln 7) (ln x) (ln (expt y 3))))
+  (check-equal? (Ln (Expt x -1/2)) '(* -1/2 (ln x)))
   (check-equal? (Ln       @i)     '(* @i  1/2 @pi))
   (check-equal? (Ln (⊗ -1 @i))    '(* @i -1/2 @pi))
   (check-equal? (Ln (⊗  2 @i)) '(+ (* @i  1/2 @pi) (ln 2)))
-  (check-equal? (Ln (⊕  1 @i)) '(+ (* @i  1/4 @pi) (ln (expt 2 1/2))))
+  (check-equal? (Ln (⊕  1 @i)) '(+ (* @i  1/4 @pi) (* 1/2 (ln 2))))
   )
 
 
@@ -1214,8 +1219,14 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(Sqr: u)] [_ (identifier? stx) #'Sqr:])))
 
 
-(define (Sqrt u)
+(define (Sqrt: u)
   (Expt u 1/2))
+
+(define-match-expander Sqrt
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'expt u 1/2)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Sqrt: u)] [_ (identifier? stx) #'Sqrt:])))
+
+
 
 (define (Root u n)
   (Expt u (⊘ 1 n)))
@@ -1295,13 +1306,16 @@
 
 (define (free-of u v)
   ; return true if is not a complete subexpression of u, false otherwise
+  (when verbose-debugging? (displayln (list 'free-of u v)))
   (define (f u)
     (and (not (equal? u v))
          (math-match u
            [r #t]
            [r.bf #t]
            [x #t]
-           [(app: _ us) (andmap f us)])))
+           [(list 'piecewise us vs) (and (andmap f us) (andmap f vs))]
+           [(app: _ us)             (andmap f us)]
+           [_ (error 'free-of (~a "missing-case:" u v))])))
   (f u))
 
 (module+ test

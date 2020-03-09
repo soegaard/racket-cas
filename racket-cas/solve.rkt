@@ -66,6 +66,7 @@
           [(Equal (Expt u α) v)  #:when (= (%numerator α) 1) (r (Equal u (Expt v (⊘ 1 α))))]
           [(Equal (Expt n u) m)  #:when (and (free-of n x) (free-of m x)) (r (Equal u (Log n m)))]
           [(Equal (Expt v u) w)  #:when (and (free-of v x) (free-of w x)) (r (Equal u (Log v w)))]          
+          [(Equal (Atan u) v) (r (Equal u (Tan v)))] ; Atan must be before Asin pattern. Asin pattern covers Atan.
           [(Equal (Asin u) v) (r (Equal u (Sin v)))]
           [(Equal (Acos u) v) (r (Equal u (Cos v)))]
           [(Equal (Cos u) s)  #:when (or (> s 1) (< s -1)) (return #f)]
@@ -117,7 +118,7 @@
            ; try factoring
            [_ (match (polynomial-square-free-factor u x)
                 ; it helped!
-                [(⊗ v w) (solve1 (Equal (⊗ v w) 0) x)]
+                [(⊗ v w) (solve1 (Equal (⊗ v w) 0))]
                 ; give up
                 [_        (Equal u 0)])]
            [_ (Equal u 0)])]

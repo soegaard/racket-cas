@@ -62,6 +62,7 @@
   (check-equal? (together (⊕ (⊘ 1 x) (⊘ 2 y)))                      '(* (expt (* x y) -1) (+ (* 2 x) y)))
   (check-equal? (together (plus (⊘ (⊗ y 3) x) (⊘ (⊗ x z 1/3) 5/6))) '(* (expt (* 5 x) -1)
                                                                         (+ (* 2 (expt x 2) z) (* 15 y))))
+  (check-equal? (together (normalize '(+ (/ y 5) 1)))               '(* 1/5 (+ 5 y)))
 
   (parameterize ([lazy-expt? #t])
     (check-equal? (together (normalize '(+ (/ y 5) 1))) '(* 1/5 (+ 5 y))))

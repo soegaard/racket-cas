@@ -1,8 +1,10 @@
 #lang racket/base
-(provide Cos  Sin  Tan
-         Acos Asin Atan
+(provide  Cos  Sin  Tan   Sec  Csc  Tanh  Cot
+         Acos Asin Atan  Asec Acsc Atanh 
+          Cosh  Sinh
+         Acosh Asinh
          Degree
-         Cosh Sinh)
+         Ci Si Sinc)
 
 ;;;
 ;;; Trigonometry
@@ -16,7 +18,8 @@
 
 (module+ test
   (require rackunit math/bigfloat)
-  (define normalize (dynamic-require normalize.rkt 'normalize))
+  (define normalize (dynamic-require normalize.rkt            'normalize))
+  (define N         (dynamic-require numerical-evaluation.rkt 'N))
   (define x 'x) (define y 'y) (define z 'z))
 
 ;;;
@@ -78,7 +81,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'cos u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Cos: u)] [_ (identifier? stx) #'Cos:])))
 
-#;(module+ test
+(module+ test
   (displayln "TEST - Cos")
   (check-equal? (Cos 0) 1)
   (check-equal? (Cos -3) (Cos 3))
@@ -98,7 +101,7 @@
   (check-equal? (Cos (⊗ 4/3 @pi)) -1/2)
   (check-equal? (Cos (Acos x)) 'x)
   (check-equal? (Cos (Asin x)) (Sqrt (⊖ 1 (Sqr 'x))))
-  (check-equal? (Cos @i) '(cosh 1)))
+  (check-equal? (Cos @i) (Cosh 1)))
 
 (define (Sin: u)
   (when debugging? (displayln (list 'Sin: u)))
@@ -139,7 +142,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'sin u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sin: u)] [_ (identifier? stx) #'Sin:])))
 
-#;(module+ test 
+(module+ test 
   (displayln "TEST - Sin")
   (check-equal? (for/list ([n 8]) (Sin (⊗ n 1/2 @pi))) '(0 1 0 -1 0 1 0 -1))
   (check-equal? (Sin (⊖ x))              (⊖ (Sin x)))
@@ -155,7 +158,8 @@
   (check-equal? (Sin -3) (⊖ (Sin 3)))
   (check-equal? (Sin (Asin x)) 'x)
   (check-equal? (Sin (Acos x)) (Sqrt (⊖ 1 (Sqr x))))
-  (check-equal? (Sin @i) '(* @i (sinh 1))))
+  (check-equal? (Sin @i) (⊗ '@i (Sinh 1))) ; PR11 TODO
+  )
 
 
 
@@ -194,7 +198,7 @@
   (λ (stx) (syntax-parse stx [(_ u) #'(list 'acos u)]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Acos: u)] [_ (identifier? stx) #'Acos:])))
 
-#;(module+ test
+(module+ test
   (displayln "TEST - Acos")
   (check-equal? (Acos -1/2) '(* 2/3 @pi))
   (check-equal? (Asin -1/2) '(* -1/6 @pi))
@@ -211,17 +215,91 @@
     [r.0 (atan r.0)]
     [u   (Asin (⊘ u (Sqrt (⊕ 1 (Sqr u)))))]))
 
+; Patterns involved with Atan should appear before Similar patterns with Asin to avoid being hijacked.
+
 (define-match-expander Atan
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'atan u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'atan u) (Asin (⊘ u (Sqrt (⊕ 1 (Sqr u))))))]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Atan: u)] [_ (identifier? stx) #'Atan:])))
 
 
 (define (Tan u)
   (⊘ (Sin u) (Cos u)))
 
+(define (Cot u)
+  (⊘ (Cos u) (Sin u)))
+
+(define (Csc u)
+  (⊘ 1 (Sin u)))
+
+(define (Sec u)
+  (⊘ 1 (Cos u)))
+
+
+(define (Asec u)
+  (Acos (⊘ 1 u)))
+
+(define (Acsc u)
+  (Asin (⊘ 1 u)))
+
+(define (Tanh u)
+  (⊘ (Sinh u) (Cosh u)))
+
+(define (Atanh u)
+  (⊗ 1/2 (⊕ (Ln (⊕ 1 u)) (Ln (⊖ 1 u)))))
+
+(define (Asinh: u)
+  (Ln (⊕ u (Sqrt (⊕ (Sqr u) 1)))))
+
+
+(define-match-expander Asinh
+  (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'asinh u)
+                                          (Ln (⊕ u (Sqrt (⊕ -1 (Sqr u)))))
+                                          (Ln (⊕   (Sqrt (⊕ -1 (Sqr u))) u)))]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Asinh: u)] [_ (identifier? stx) #'Asinh:])))
+
+(define (Acosh: u)
+  (Ln (⊕ u (Sqrt (⊕ (Sqr u) -1)))))
+
+(define-match-expander Acosh
+  (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'acosh u)
+                                          (Ln (⊕ u (Sqrt (⊕ 1 (Sqr u)))))
+                                          (Ln (⊕   (Sqrt (⊕ 1 (Sqr u))) u)))]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Acosh: u)] [_ (identifier? stx) #'Acosh:])))
+
+(define (Sinc: u)
+  (when debugging? (displayln (list 'Sinc: u)))
+  (math-match u
+    [0 1]
+    [_ (⊘ (Sin u) u)]))
+
+(define-match-expander Sinc
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'sinc u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Sinc: u)] [_ (identifier? stx) #'Sinc:])))
+
+(define (Si: u)
+  (when debugging? (displayln (list 'Si: u)))
+  (math-match u
+    [0 0]
+    [_ `(si ,u)]))
+
+(define-match-expander Si
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'si u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Si: u)] [_ (identifier? stx) #'Si:])))
+
+(define (Ci: u)
+  (when debugging? (displayln (list 'Ci: u)))
+  (math-match u
+    [0 0]
+    [_ `(ci ,u)]))
+
+(define-match-expander Ci
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'ci u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Ci: u)] [_ (identifier? stx) #'Ci:])))
+
+
+
 (define (Degree u)
   (⊗ (⊘ @pi 180) u))
-
 
 
 ;;;
@@ -232,23 +310,48 @@
 (define (Cosh: u)
   (when debugging? (displayln (list 'Cosh: u)))
   (math-match u
-    [0 1]
-    [r.0 (cosh r.0)]
+    [0                      1]
+    [r.0                    (cosh r.0)]
     [α #:when (negative? α) (Cosh: (- α))]
-    [u   `(cosh ,u)]))
+    [(ImaginaryTerm u)      (Cos u)]
+    [u                      (⊗ 1/2 (⊕ (Exp u) (Exp (⊖ u))))]))
 
 (define (Sinh: u)
   (when debugging? (displayln (list 'Sinh: u)))
   (math-match u
-    [0 0]
-    [r.0  (sinh r.0)]
-    [α #:when (negative? α) (⊖ (Sinh: (- α)))]
-    [u   `(sinh ,u)]))
+    [0                       0]
+    [r.0                     (sinh r.0)]
+    [α #:when (negative? α)  (⊖ (Sinh: (- α)))]
+    [(ImaginaryTerm u)       (⊗ @i (Sin u))]
+    [u                       (⊗ 1/2 (⊖ (Exp u) (Exp (⊖ u))))]))
+
 
 (define-match-expander Cosh
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'cosh u)]))
-  (λ (stx) (syntax-parse stx [(_ u) #'(Cosh: u)] [_ (identifier? stx) #'Cosh:])))
+  (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'cosh u) (⊗ 1/2 (⊕ (Exp (⊖ u)) (Exp u))))]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Sinh: u)] [_ (identifier? stx) #'Sinh:])))
 
 (define-match-expander Sinh
-  (λ (stx) (syntax-parse stx [(_ u) #'(list 'sinh u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(or (list 'sinh u) (⊗ 1/2 (⊖ (Exp u) (Exp (⊖ u)))))]))
   (λ (stx) (syntax-parse stx [(_ u) #'(Sinh: u)] [_ (identifier? stx) #'Sinh:])))
+
+(define (double u)
+  (⊗ 2 u))
+
+
+(define-match-expander 2⊗Cosh
+  (λ (stx) (syntax-parse stx [(_ u) #'(⊕ (Exp (⊖ u)) (Exp u))])))
+  
+(define-match-expander 2⊗Sinh
+  (λ (stx) (syntax-parse stx [(_ u) #'(⊖ (Exp u) (Exp (⊖ u)))])))
+
+(module+ test
+  (displayln "TEST - Cosh")
+  (define subst  (dynamic-require simplify-expand.rkt 'subst))
+  (check-equal? (N (subst (Cosh x) x 1)) (cosh 1))
+  (check-equal? (N (subst (Sinh x) x 1)) (sinh 1))
+  (check-equal? (match (Sinh x) [(Sinh y) y]) 'x)
+  (check-equal? (match (Sinh x) [(⊗ 1/2 (2⊗Sinh y)) y]) x)
+  (check-equal? (match (Cosh x) [(⊗ 1/2 (2⊗Cosh y)) y]) x)
+  (check-equal? (match (⊗ 2 (Sinh x)) [(2⊗Sinh u) u]) x)
+  (check-equal? (match (⊗ 2 (Cosh x)) [(2⊗Cosh u) u]) x))
+

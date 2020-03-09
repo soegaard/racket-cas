@@ -148,7 +148,10 @@
   (check-equal? (math-match 2 [n.0 3] [_ 4]) 4)
   (check-equal? (math-match 2.0 [n.0 3] [_ 4]) 3)
   (check-equal? (math-match (bf 2.0) [x.bf 3] [_ 4]) 3)
-  (check-equal? (let ((x 'x)) (math-match 'x [(== x) #t] [_ #f])) #t))
+  (check-equal? (let ((x 'x)) (math-match 'x [(== x) #t] [_ #f])) #t)
+  (check-equal? (math-match -42   [p+ #f] [p- #t] [_ #f]) #t)
+  (check-equal? (math-match -42.5 [p+ #f] [p- #t] [_ #f]) #f)  ; p- only negative integers
+  (check-equal? (math-match -42.5 [r+ #f] [r- #t] [_ #f]) #t)) 
 
 (require (submod "." math-match))
 (require (for-syntax syntax/parse))

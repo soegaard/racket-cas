@@ -45,6 +45,9 @@
     [(Expt (⊕ u v) n) #:when (and (>= n 3) (even? n))
                       (let ([t (e (Expt (⊕ u v) (/ n 2)))])
                         (e (⊗ t t)))]
+
+    [(Expt (⊕ u v) p-) (Expt (e (Expt (⊕ u v) (- p-))) -1)] ; PR11 TODO
+    
     [(Expt (⊗ u v) w) (e (⊗ (Expt u w) (Expt v w)))]
     [(Ln (Expt u v))  (e (⊗ v (Ln (e u))))]
     [(Equal u v)      (Equal (e u) (e v))]
@@ -64,6 +67,7 @@
   (check-equal? (expand '(* 2 x (+ 1 x))) (⊕ (⊗ 2 x) (⊗ 2 (Sqr x))))
   (check-equal? (expand '(* (expt (+ 1 x) 2) (sin 2))) 
                 '(+ (* 2 x (sin 2)) (* (expt x 2) (sin 2)) (sin 2)))
+  (check-equal? (expand (Expt (⊕ x y) -2)) (Expt (⊕ (Sqr x) (Sqr y) (⊗ 2 x y)) -1)) ; PR11
 
   (check-equal? (normalize '(+ 2 (* -3 (expt 2 -1) x) (* 3 x))) '(+ 2 (* 3/2 x)))
   (check-equal? (expand-all '(* @i (+ 4 (* -1 (+ (* 4 x) 2))))) '(* @i (+ 2 (* -4 x)))))

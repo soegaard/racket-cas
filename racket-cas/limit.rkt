@@ -60,7 +60,8 @@
   (check-equal? (limit (Sin x) x y) '(sin y))
   ; Now for the tricky ones:
   (check-equal? (limit (⊘ (Sin x) x) x 0) 1)
-  (check-equal? (limit (⊘ (⊖ (Sqr x) 1) (⊖ x 1)) x 1) 2))
+  (check-equal? (limit (⊘ (⊖ (Sqr x) 1) (⊖ x 1)) x 1) 2)
+  (check-equal? (limit (⊘ (⊖ (Sqr x) 4) (⊖ x 2)) x 2) 4))
 
 ; Note: (limit (⊘ (⊖ (Sqr x) 4) (⊖ x 2)) x 2) gives 0
 ; Cause: (⊗ 0 +inf.0) currently gives 0.
