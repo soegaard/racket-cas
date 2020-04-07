@@ -1,5 +1,29 @@
 #lang racket
 (provide math-match* math-match :pat)
+;;;
+;;; Math Match
+;;;
+
+; This module defines a new pattern matcher `math-match`.
+; It extends the standard pattern mattern `match` from `racket/match`.
+; With the standard matcher an identifier used as a pattern will match all values.
+; In the math matcher an identifier that has
+
+;   prefix  x y z   will match symbols only
+;   prefix  r s     will match numbers only (not bigfloats)
+;   prefix  m n     will match exact naturals only
+;   prefix  p q     will match integers
+;   prefix  α β     will match exact numbers
+;   prefix  bool    will match booleans only
+
+;   suffix .0       will match inexact numbers only
+;   suffix .bf      will match bigfloats only  
+
+; For completeness, code that uses math-match will often use
+;   u v   to indicate  normalized                   expressions
+;   a b   to indeicate general (maybe unnormalized) expressions
+
+
 (require (for-syntax racket/string racket/match racket/syntax)         
          rackunit)
 
@@ -67,6 +91,7 @@
           (convention (make-is-pred "@e")  #'@e?)
           (convention (make-is-pred "@pi") #'@pi?)
           (convention (make-is-pred "@i")  #'@i?)))
+
   
   (define (find-convention-type s)
     (for/or ([c (in-list conventions)])

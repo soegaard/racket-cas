@@ -598,7 +598,7 @@
                                   (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                                   (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
                   [(⊗  1 u)                       (~a                          (v~ u))]
-                  [(⊗ -1 u)                       (prefix-minus (v~ u))]
+                  [(⊗ -1 u)                       (prefix-minus (par u))]
                   ; integer
                   ; Explicit multiplication between integers
                   [(⊗  p q)                       (~a (~num p)  (~sym '*) (par q))]
@@ -695,7 +695,7 @@
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (~num (abs r)))
                                 (~a (t1~ u)  (~sym '+) (~num (abs r))))]
-      [(⊕ u (⊗ -1 v))       (~a (t1~ u)  (~sym '-) (v~ v))]
+      [(⊕ u (⊗ -1 v))        (~a (t1~ u)  (~sym '-) (par v))] ; YYY
       ; Unnormalized (in a normalized expression only the first factor can be a number)
       [(⊕ u (⊗  r s))        #:when (negative? r) (~a (t1~ u)  (~sym '-) (~num (abs r)) (~sym '*) (par s))]
       [(⊕ u (⊗  r s))        #:when (positive? r) (~a (t1~ u)  (~sym '+) (~num (abs r)) (~sym '*) (par s))]
@@ -709,7 +709,7 @@
                             (~a (t1~ u)  (~sym '-) (v~ (⊗ (abs r) v)))]
       [(⊕ u (⊗  r v))       #:when (positive? r) 
                             (~a (t1~ u)  (~sym '+) (v~ (⊗ r v)))]
-      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ v w)))]
+      [(⊕ u (⊕ (⊗ -1 v) w)) (~a (t1~ u)  (~sym '-) (v~ (argcons '+ (par v) w)))] ; YYY
 ;      [(⊕ u (⊕ (⊗  r v) w)) #:when (negative? r) (displayln (list 'EEE r v))
 ;                            (~a (t1~ u)  (~sym '-) (v~ (argcons '+ (list '* (abs r) v) w)))]
 ;      [(⊕ u (⊕ (⊗  r v) w)) #:when (positive? r) (displayln (list 'FFF r v))
@@ -901,4 +901,6 @@
   (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7*1/x")
   (check-equal? (~ '(formatting ([use-quotients? #t]) (+ 1 (* 7 (expt x -1))))) "1+7/x")
   (check-equal? (~ '(expt (expt 65 1/2) 2)) "sqrt(65)^2")
+  (check-equal? (~ '(+ (* 2 y) (* -1 (+ 2 x)))) "2*y-(2+x)")
+  (check-equal? (~ '(+ (* -1 (+ y 1)) 3)) "-(y+1)+3")
   )
