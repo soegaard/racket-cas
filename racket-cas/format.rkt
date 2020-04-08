@@ -510,10 +510,13 @@
         [(⊗ -1 v) #:when original?      (let ([s (prefix-minus (v~ v))])
                                           (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XX
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
-        [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ u v) #:when original?       (let ([s (~a      (v~ u)  (~sym '*) (par v))])
-                                          (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XXX
-        [(⊗ u v)                        (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
+        [(⊗ u v) #:when exponent-base?  (displayln "X") (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
+        [(⊗ u v) #:when original?       (displayln "Y") (let ([s (~a      (par u)  (~sym '*) (par v))])
+                                                          s
+                                                          #;(if (eqv? (string-ref s 0) #\-)
+                                                              (wrap s)
+                                                              (exponent-wrap s)))] ; XXX
+        [(⊗ u v)                        (displayln "Z") (exponent-wrap (~a (par (v~ u)) (~sym '*) (par v)))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -903,4 +906,8 @@
   (check-equal? (~ '(expt (expt 65 1/2) 2)) "sqrt(65)^2")
   (check-equal? (~ '(+ (* 2 y) (* -1 (+ 2 x)))) "2*y-(2+x)")
   (check-equal? (~ '(+ (* -1 (+ y 1)) 3)) "-(y+1)+3")
+  (check-equal? (~ '(* (+ 1 x) -2 (+ 3 x))) "(1+x)*(-2)*(3+x)")
+  (check-equal? (~ '(* (+ 1 x)  2 (+ 3 x))) "(1+x)*2*(3+x)")
+  (check-equal? (~ '(* (+ 1 x)  z (+ 3 x))) "(1+x)*z*(3+x)")
+  (check-equal? (~ '(* (+ 1 x) (+ 2 y) (+ 3 x))) "(1+x)*(2+y)z*(3+x)")
   )
