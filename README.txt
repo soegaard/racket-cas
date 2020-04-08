@@ -94,6 +94,10 @@ Contributors
  - Bowen Fu  (integrate, complex numbers, together, combine and more)
 
 
+Related
+-------
+Check out another CAS for Racket, https://github.com/Metaxal/rascas .
+
 
 Enjoy
 /soegaard
