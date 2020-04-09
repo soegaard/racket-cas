@@ -19,12 +19,34 @@
 
 (define (diff u x)
   (define (d u) (diff u x))
+  (define (products us)
+    ; example: (products '(a b c)) = '((* a b c) (* b c) c)
+    (match us
+      ['()          '()]
+      [(list u)     (list u)] 
+      [(cons u us)  (define ps (products us))
+                    (cons (⊗ u (car ps)) ps)]))
+  
   (math-match u
     [r 0]
     [y #:when (eq? x y) 1]
     [y 0]
     [(⊕ v w)     (⊕ (d v) (d w))]
-    [(⊗ v w)     (⊕ (⊗ (d v) w) (⊗ v (d w)))]
+    [(⊗ v w)     (match u
+                   [(list '* v w) (⊕ (⊗ (d v) w) (⊗ v (d w)))]
+                   [(list '* vs ...)
+                    (let loop ([sum     0]
+                               [us    '()]
+                               [us⊗     1]
+                               [ws    vs]
+                               [ws⊗s  (products vs)])
+                      ; invariant: (append us ws)       = vs
+                      ; invariant: (⊗ us⊗ (first ws⊗s)) = u
+                      (match ws
+                        ['()                                                sum]
+                        [(list w)          (⊕ (⊗ (d w)    us⊗)              sum)]
+                        [(cons w ws) (loop (⊕ (⊗ (d w) (⊗ us⊗ (cadr ws⊗s))) sum)
+                                           (cons u w) (⊗ us⊗ w) ws (cdr ws⊗s))]))])]
     [(Expt u r)  (⊗ r (Expt u (- r 1)) (d u))]
     [(Expt @e u) (⊗ (Exp u) (d u))]
     [(Expt r y)  #:when (and (positive? r) (equal? y x))  (⊗ (Expt r x) (Ln r))]
