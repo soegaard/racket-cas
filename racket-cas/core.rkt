@@ -971,10 +971,23 @@
   (math-match* (u v)
     [(1 v)          1]
     [(u 1)          u]
-    [(0 0)          +nan.0] ; TODO: is this the best we can do?   
+
+    [(0 0)          'undefined]              ; todo: throw error instead?
+    [(0 r)          (cond
+                      [(zero?     r) +nan.0] ; TODO: is this the best we can do?
+                      [(positive? r) 0]
+                      [(negative? r) (error 'Expt "undefined: 0 to a negative exponent")]
+                      [else          (error 'Expt: "this is unexpected")])]
+    [(0 r.bf)       (cond
+                      [(bfzero?     r.bf) +nan.0] ; TODO: is this the best we can do?
+                      [(bfpositive? r.bf) 0]
+                      [(bfnegative? r.bf) (error 'Expt "undefined: 0 to a negative exponent")]
+                      [else               (error 'Expt: "this is unexpected")])]
     [(0 v)          0]
+
     [(u 0)          1]
     [(u 0.0)        1.0]
+    
     [(r.0 s)        (expt r.0 s)] ; inexactness is contagious
     [(r s.0)        (expt r s.0)] ; inexactness is contagious
     
