@@ -436,8 +436,10 @@
   (define ~sym (let ([sym (output-format-function-symbol)]) (λ (x) (sym x)))) ; function names
   (define ~var (let ([out (output-variable-name)]) (λ(x) (out x)))) ; variable names
   (define (~relop x) ((output-relational-operator) x))
-  (define (~red str)  (~a "{\\color{red}" str "\\color{black}}"))
-  (define (~blue str) (~a "{\\color{blue}" str "\\color{black}}"))
+  (define (~red str)    (~a "{\\color{red}"    str "\\color{black}}"))
+  (define (~blue str)   (~a "{\\color{blue}"   str "\\color{black}}"))
+  (define (~green str)  (~a "{\\color{green}"  str "\\color{black}}"))
+  (define (~purple str) (~a "{\\color{purple}" str "\\color{black}}"))
   (define (~explicit-paren strs) (~a "{\\left(" (string-append* (add-between strs ",")) "\\right)}"))
 
   (define (v~ u [original? #f])
@@ -495,8 +497,10 @@
                  #:exponent-base? [exponent-base? #f]) ; wrap if (locally) necessary
       (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
-        [(list 'red   u) (~red  (par u))]           ; red color
-        [(list 'blue  u) (~blue (par u))]           ; blue color
+        [(list 'red    u) (~red    (par u))]           ; red   color
+        [(list 'blue   u) (~blue   (par u))]           ; blue  color
+        [(list 'green  u) (~green  (par u))]           ; green color
+        [(list 'purple u) (~purple (par u))]           ; purpe color
         [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
         [α    #:when (and wrap-fractions? (not (integer? α))) (wrap (~frac α))] ; XXX
         [α    #:when (not (integer? α)) (~frac α)] ; XXX
@@ -590,8 +594,10 @@
     (define (t1~ u) ; term 1 aka first term in a sum
       (when debugging? (displayln (list 't1 u)))
       (math-match u
-                  [(list 'red   u) (~red  (t1~ u))]
-                  [(list 'blue  u) (~blue (t1~ u))]           ; blue color
+                  [(list 'red    u) (~red    (t1~ u))]
+                  [(list 'blue   u) (~blue   (t1~ u))]           ; blue color
+                  [(list 'green  u) (~green  (t1~ u))]
+                  [(list 'pruple u) (~purple (t1~ u))]  
                   [(list 'paren u ...) (~explicit-paren (map t1~ u))] ; explicit parens (tex)
 
                   ; unnormalized and normalized quotients
@@ -625,8 +631,10 @@
     (when debugging? (write (list 'v~ u 'orig original?)) (newline))
     (math-match u
       [(? string? u) u]
-      [(list 'red   u) (~red  (v~ u))]
-      [(list 'blue  u) (~blue (v~ u))]           ; blue color
+      [(list 'red    u) (~red    (v~ u))]
+      [(list 'blue   u) (~blue   (v~ u))]           ; blue color
+      [(list 'green  u) (~green  (v~ u))]
+      [(list 'purple u) (~purple (v~ u))]
       [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
       [(list 'formatting options u)
        (let loop ([os options])
@@ -872,6 +880,8 @@
   (check-equal? (~ '(paren -3)) "${\\left(-3\\right)}$")
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
+  (check-equal? (~ '(green  (paren -3))) "${\\color{green}{\\left(-3\\right)}\\color{black}}$")
+  (check-equal? (~ '(purple (paren -3))) "${\\color{purple}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
   (check-equal? (~ '(~ X (bi n p)))    "$X \\sim  \\text{bi}(n,p)$")
   (check-equal? (~ '(* 1/2 1/3))               "$\\frac{1}{2}\\cdot \\frac{1}{3}$")
