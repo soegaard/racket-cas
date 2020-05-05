@@ -519,13 +519,12 @@
         [(⊗ -1 v) #:when original?      (let ([s (prefix-minus (v~ v))])
                                           (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XX
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
-        [(⊗ u v) #:when exponent-base?  #;(displayln "X") (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ u v) #:when original?       #;(displayln "Y") (let ([s (~a      (par u)  (~sym '*) (par v))])
-                                                          s
-                                                          #;(if (eqv? (string-ref s 0) #\-)
-                                                              (wrap s)
-                                                              (exponent-wrap s)))] ; XXX
-        [(⊗ u v)                        #;(displayln (list "Z" 'u u 'v v)) (~a (par (v~ u)) (~sym '*) (par v))]
+
+        [(⊗ u v) #:when exponent-base?   (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
+        [(⊗ r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX YY
+        [(⊗ u v) #:when original?        (let ([s (~a (par u)  (~sym '*) (par v))])
+                                           s)] ; XXX
+        [(⊗ u v)                         (~a (par (v~ u)) (~sym '*) (par v))]
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -907,6 +906,8 @@
                   (use-tex-output-style)
                   (parameterize ([output-implicit-product? #f]) (~ '(* 5 (sqrt 5)))))
                 "$5\\cdot \\sqrt{5}$")  
+  (check-equal? (tex '(= (sin A) (/ (* 5 (sqrt 5)) 2)))
+                "$\\sin(A) = \\frac{5\\sqrt{5}}{2}$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* -1 x)) "-x")
