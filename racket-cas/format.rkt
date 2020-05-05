@@ -477,16 +477,21 @@
         [(list* (== op) args) (list* op x args)]
         [args                 (list* op x (list args))]))
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
-      (math-match u
-        [r (math-match v
-             [s                    (~sym '*)]
-             [x                     implicit-mult]
-             [(⊗ u1 u2)            (implicit* r u1)]
-             [(Expt u1 u2)         (implicit* r u1)]
-             [(list '+ u1 u2 ...)   implicit-mult]
-             [(list 'vec u1 u2 ...) implicit-mult]  
-             [_                   (~sym '*)])]        
-        [_ (~sym '*)]))
+      (cond
+        [(output-implicit-product?)
+         (math-match u
+           [r (math-match v
+                [s                    (~sym '*)]
+                [x                     implicit-mult]
+                [(⊗ u1 u2)            (implicit* r u1)]
+                [(Expt u1 u2)         (implicit* r u1)]
+                [(list '+ u1 u2 ...)   implicit-mult]
+                [(list 'vec u1 u2 ...) implicit-mult]  
+                [(list 'sqrt u1)       implicit-mult]
+                [_                   (~sym '*)])]        
+           [_ (~sym '*)])]
+        ; if implicit products are off, always use *
+        [else (~sym '*)]))
 
     (define (prefix-minus s)
       (if (eqv? (string-ref s 0) #\-)
@@ -896,7 +901,12 @@
   (check-equal? (tex '(bar x))            "$\\bar{x}$")
   (check-equal? (tex '(braces 1 2 3))     "$\\{1,2,3\\}$")
   (check-equal? (tex '(bracket 1 2 3))    "$[1,2,3]$")
-  
+  (check-equal? (parameterize ([output-implicit-product? #t]) (tex '(* 5 (sqrt 5))))
+                "$5\\sqrt{5}$")  
+  (check-equal? (let ()
+                  (use-tex-output-style)
+                  (parameterize ([output-implicit-product? #f]) (~ '(* 5 (sqrt 5)))))
+                "$5\\cdot \\sqrt{5}$")  
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* -1 x)) "-x")
