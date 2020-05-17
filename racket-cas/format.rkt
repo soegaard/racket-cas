@@ -34,7 +34,22 @@
 (define (mma-output-variable-name x)
   (match x ['@pi "Pi"] ['@i "I"] ['@e "E"]           [_ (~a x)]))
 (define (tex-output-variable-name x)
-  (match x ['@pi "π"]  ['@i "i"] ['@e "\\mathrm{e}"] [_ (symbol->tex x)]))
+  (match x ['@pi "π"]  ['@i "i"] ['@e "\\mathrm{e}"] 
+         [(? symbol? x)
+          (define s (symbol->string x))
+          (cond
+            ; single letter variables are italic
+            [(= (string-length s) 1)  (symbol->tex x)]
+            ; identifiers with subscripts
+            [(string-contains? s "_")
+             (define parts           (string-split s "_"))
+             (define formatted-parts (map tex-output-variable-name (map string->symbol parts)))
+             (string-append* (add-between (map ~a formatted-parts) "_"))]
+            [(string-contains? s "-")
+             ; An dash in an identifer is formatted as a space
+             (~a "\\mathrm{" (symbol->tex (string->symbol (string-replace s "-" "\\;"))) "}")]
+            [else
+             (~a "\\mathrm{" (symbol->tex x) "}")])]))
 
 ;;; Fractions
 
@@ -191,8 +206,8 @@
       ['>=           "≥ "]
       ['≤            "≤ "]
       ['≥            "≥ "]
-      ['~            "\\sim "]
-      ['Less         "< "]
+      ['~            "\\approx "]
+      ['Less         "< "]      
       ['LessEqual    "≤ "]
       ['Greater      "> "]
       ['GreaterEqual "≥ "]
@@ -207,7 +222,7 @@
       ['>=  "\\geq "]
       ['≤   "≤ "]
       ['≥   "≥ "]
-      ['~   "\\sim "]
+      ['~   "\\approx "]
       ['*   "\\cdot "]
       ['or  "\\vee "]
       ['and "\\wedge "]
@@ -249,7 +264,7 @@
     (match u
       ['<=  "≤ "]
       ['>=  "≥ "]
-      ['~   "\\sim "]
+      ['~   "\\approx "]
       ['Less         "< "]
       ['LessEqual    "≤ "]
       ['Greater      "> "]
@@ -263,7 +278,7 @@
       [_ #:when (member s operators) (~a "\\" s)]      
       ['<=  "\\leq "]
       ['>=  "\\geq "]
-      ['~   "\\sim "]
+      ['~   "\\approx "]
       ['*   "\\cdot "]   ; multiplication
       ['or  "\\vee "]    ; logical or
       ['and "\\wedge "]  ; logical and
@@ -427,7 +442,7 @@
 ;  The output format is configured using parameters.
 ;  The three builtin styles are default, mma and tex.
 (define (verbose~ u)
-  ; (displayln u)
+  ; (displayln (list 'verbose~ u))
   (match-define (list app-left  app-right)  (output-application-brackets))
   (match-define (list sub-left  sub-right)  (output-sub-expression-parens))
   (match-define (list expt-left expt-right) (output-sub-exponent-parens))
@@ -443,7 +458,7 @@
   (define (~explicit-paren strs) (~a "{\\left(" (string-append* (add-between strs ",")) "\\right)}"))
 
   (define (v~ u [original? #f])
-    ; (displayln (list 'v~ u))
+    ; (displayln (list 'v~ u 'orig original?))
     (define ~frac (output-fraction))
     (define (~num r)
       (define precision (output-floating-point-precision))
@@ -480,6 +495,7 @@
       (cond
         [(output-implicit-product?)
          (math-match u
+           ; first factor is a number          
            [r (math-match v
                 [s                    (~sym '*)]
                 [x                     implicit-mult]
@@ -488,7 +504,28 @@
                 [(list '+ u1 u2 ...)   implicit-mult]
                 [(list 'vec u1 u2 ...) implicit-mult]  
                 [(list 'sqrt u1)       implicit-mult]
-                [_                   (~sym '*)])]        
+                [(list 'sqr u1)        implicit-mult]
+                [_                   (~sym '*)])]
+           ; first factor is a symbol
+           [x (define s (~a x))
+              (if (or (= (string-length s) 1)
+                      (and (string-contains? s "_")
+                           (>= (string-length s) 2)
+                           (eqv? (string-ref s 1) #\_)))
+                  ; only single letter variables (possibly with an index) uses implicit 
+                  (math-match v
+                    [s                    (~sym '*)]
+                    [y                     implicit-mult]
+                    [(⊗ u1 u2)            (implicit* x u1)]
+                    [(Expt u1 u2)         (implicit* x u1)]
+                    [(list '+ u1 u2 ...)   implicit-mult]
+                    [(list 'vec u1 u2 ...) implicit-mult]  
+                    [(list 'sqrt u1)       implicit-mult]
+                    [(list 'sqr  u1)       implicit-mult]
+                    [_                   (~sym '*)])
+                  ; other variables uses explicit
+                  (~sym '*))]
+           ; anything else is explicit
            [_ (~sym '*)])]
         ; if implicit products are off, always use *
         [else (~sym '*)]))
@@ -498,8 +535,10 @@
           (~a "-(" s ")")
           (~a "-" s)))
              
-    (define (par u #:use [wrap paren] #:wrap-fractions? [wrap-fractions? #f]
-                 #:exponent-base? [exponent-base? #f]) ; wrap if (locally) necessary
+    (define (par u
+                 #:use             [wrap paren]
+                 #:wrap-fractions? [wrap-fractions? #f]
+                 #:exponent-base?  [exponent-base? #f]) ; wrap if (locally) necessary
       (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
         [(list 'red    u) (~red    (par u))]           ; red   color
@@ -522,9 +561,9 @@
 
         [(⊗ u v) #:when exponent-base?   (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
         [(⊗ r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX YY
-        [(⊗ u v) #:when original?        (let ([s (~a (par u)  (~sym '*) (par v))])
+        [(⊗ u v) #:when original?        (let ([s (~a (par u)  (implicit* u v) (par v))])
                                            s)] ; XXX
-        [(⊗ u v)                         (~a (par (v~ u)) (~sym '*) (par v))]
+        [(⊗ u v)                         (~a (par (v~ u)) (implicit* u v) (par v))] ; YYY
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -678,8 +717,8 @@
       ; [(⊗ -1 p v) #:when                (negative? p)         (~a "-" (paren  (v~ (⊗ p v) #f)))]                 ; wrong
       [(⊗ -1 v)                                        (paren (~a "-"         (v~ v)))]
       ; Explicit multiplication between integers
-      [(⊗ p q) #:when original?           (~a (~num p) (~sym '*) (par q))]
-      [(⊗ p q) #:when (not (negative? p)) (~a (~num p) (~sym '*) (par q))]
+      [(⊗ p q) #:when original?           (~a     (~num p)     (~sym '*) (par q))]
+      [(⊗ p q) #:when (not (negative? p)) (~a     (~num p)     (~sym '*) (par q))]
       [(⊗ p q) #:when      (negative? p)  (~a "(" (~num p) ")" (~sym '*) (par q))]
       ; An implicit multiplication can not be used for fractions 
       ;[(⊗ p v)  #:when (negative? p)        (~a "-" (~num (abs p)) implicit-mult (par v #:use paren))]
@@ -695,17 +734,23 @@
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
 
       ; Use explicit multiplication for fractions
-      [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v))) 
+      [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v)))
+                      ;(displayln 'X1)
                       (~a "-" (~num (abs r)) (implicit* r u) (v~ (argcons '* u v)))]
-      [(⊗ r (⊗ u v))  #:when (and (positive? r) (not (equal? '(*) v))) 
-                      (~a    (~num (abs r))  (implicit* r u) (v~ (argcons '* u v)))] ; XXX
-      [(⊗ r v)        #:when (negative? r) 
+      [(⊗ r (⊗ u v))  #:when (and (positive? r) (not (equal? '(*) v)))
+                      ;(displayln (list 'X2 r u v (argcons '* u v) (fluid-let ([original? #t]) (v~ (argcons '* u v) #t))))
+                      (~a    (~num (abs r))  (implicit* r u) (fluid-let ([original? #t]) (v~ (argcons '* u v) #t)))] ; XXX
+      [(⊗ r v)        #:when (negative? r)
+                      ;(displayln 'X3)
                       (define w (if original? values paren))
                       (~a  (w (~a "-" (~num (abs r)))) (implicit* r v) (par v #:use paren))] ; XXX
-      [(⊗ r v)        #:when (positive? r) 
+      [(⊗ r v)        #:when (positive? r)
+                      ;(displayln 'X4)
                       (~a     (~num r) (implicit* r v) (par v #:use paren))] ; XXX
       
-      [(⊗ u v)  #:when (not (equal? '(*) v))    (~a (par u) (implicit* u v)  (par v))]
+      [(⊗ u v)  #:when (not (equal? '(*) v))
+                ;(displayln (list 'X5 u v (par u) (fluid-let ([original? #t]) (par v))))
+                (~a (par u) (implicit* u v) (fluid-let ([original? #t]) (par v)))]
       ; plus
       [(⊕ u r)              (if (negative? r)
                                 (~a (t1~ u)  (~sym '-) (~num (abs r)))
@@ -815,7 +860,9 @@
       [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
       [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
       [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
-      [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
+      [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
+      [(list 'where u v) (~a (v~ u) " | " (v~ v))]        ; TODO: only for TeX
+      
       [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
       [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
 
@@ -887,7 +934,7 @@
   (check-equal? (~ '(green  (paren -3))) "${\\color{green}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(purple (paren -3))) "${\\color{purple}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(paren x_1 y_1))   "${\\left(x_1,y_1\\right)}$")
-  (check-equal? (~ '(~ X (bi n p)))    "$X \\sim  \\text{bi}(n,p)$")
+  (check-equal? (~ '(~ X (bi n p)))    "$X \\approx  \\text{bi}(n,p)$")
   (check-equal? (~ '(* 1/2 1/3))               "$\\frac{1}{2}\\cdot \\frac{1}{3}$")
   (check-equal? (~ '(sqrt (* 1/2 1/3))) "$\\sqrt{\\frac{1}{2}\\cdot \\frac{1}{3}}$")
   (check-equal? (~ '(sqrt (* 12 1/12 11/12))) "$\\sqrt{12\\cdot \\frac{1}{12}\\cdot \\frac{11}{12}}$")
@@ -900,6 +947,15 @@
   (check-equal? (tex '(bar x))            "$\\bar{x}$")
   (check-equal? (tex '(braces 1 2 3))     "$\\{1,2,3\\}$")
   (check-equal? (tex '(bracket 1 2 3))    "$[1,2,3]$")
+  ;; Names
+  (check-equal? (tex 'a)                     "$a$")
+  (check-equal? (tex 'ab)                    "$\\mathrm{ab}$")
+  (check-equal? (tex 'a_1)                   "$a_1$")
+  (check-equal? (tex 'ab_1)                  "$\\mathrm{ab}_1$")
+  (check-equal? (tex 'h_a)                   "$h_a$")
+  (check-equal? (tex 'mellemliggende-vinkel) "$\\mathrm{mellemliggende\\;vinkel}$")
+  (check-equal? (tex '(= T (* 1/2 a b (sin C))))  "$T = \\frac{1}{2}ab\\cdot \\sin(C)$")
+  (check-equal? (tex '(* 1/2 a b c))              "$\\frac{1}{2}abc$")
   (check-equal? (parameterize ([output-implicit-product? #t]) (tex '(* 5 (sqrt 5))))
                 "$5\\sqrt{5}$")  
   (check-equal? (let ()

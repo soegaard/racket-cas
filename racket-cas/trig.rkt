@@ -1,10 +1,15 @@
 #lang racket/base
-(provide  Cos  Sin  Tan   Sec  Csc  Tanh  Cot
-         Acos Asin Atan  Asec Acsc Atanh 
-          Cosh  Sinh
-         Acosh Asinh
-         Degree
-         Ci Si Sinc)
+(provide  Cos  Acos
+          Sin  Asin
+          Tan  Atan
+          Sec  Asec
+          Csc  Acsc
+          Tanh Atanh
+          Cot                 
+          Cosh Acosh 
+          Sinh Asinh           
+          Degree Deg deg
+          Ci Si Sinc)
 
 ;;;
 ;;; Trigonometry
@@ -13,6 +18,7 @@
 (require racket/list racket/match racket/math
          (only-in math/number-theory binomial)
          (prefix-in % "bfracket.rkt")
+         (only-in "bfracket.rkt" deg)
          (for-syntax racket/base racket/syntax syntax/parse)
          "core.rkt" "math-match.rkt" "runtime-paths.rkt")
 
@@ -300,6 +306,14 @@
 
 (define (Degree u)
   (⊗ (⊘ @pi 180) u))
+
+(define (Deg: u)
+  (when debugging? (displayln (list 'Deg: u)))
+  (⊗ (⊘ @pi 180) u))
+
+(define-match-expander Deg
+  (λ (stx) (syntax-parse stx [(_ u) #'(list 'deg u)]))
+  (λ (stx) (syntax-parse stx [(_ u) #'(Deg: u)] [_ (identifier? stx) #'Deg:])))
 
 
 ;;;

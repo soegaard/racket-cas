@@ -39,6 +39,7 @@
     [(Expt u v)  (M2 expt Expt u v)]
     [(Sin u)     (M sin Sin u)]
     [(Cos u)     (M cos Cos u)]
+    [(Deg u)     (M deg Deg u)]
     [(Ln u)      (M log Ln  u)]
     [(Log u)     (M  fllog10 Log u)]
     [(Log u v)   (M2 fllog10 Log u v)]

@@ -13,6 +13,7 @@
              [(bigfloat? x) (bfname x)]
              [else          `(name ,x)]))))]))
 
+
 (define-fun sin %sin bfsin)
 (define-fun cos %cos bfcos)
 (define-fun tan %tan bftan)
@@ -189,6 +190,14 @@
           1
           (%denominator x))
       (error 'denominator (~a "number or bigfloat expected, got: " x))))
+
+
+; Conversion from degrees to radians
+
+(define (%deg  r)   (*   (/ pi        180.)      r))
+(define (bfdeg r) (bf* (bf/ pi.bf (bf 180.)) (bf r)))
+(define-fun deg %deg bfdeg)
+
 
 
 
