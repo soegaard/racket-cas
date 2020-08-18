@@ -828,6 +828,10 @@
                                            ((output-sub-exponent-wrapper)
                                             (par v #:use exponent-sub
                                                  #:wrap-fractions? #t))))]
+      [(App u  v)   (match u
+                      [(? symbol? f)             (~a          f     "(" (v~ v) ")")]
+                      [(list 'vec (? symbol? f)) (~a "\\vec{" f "}" "(" (v~ v) ")")]
+                      [_ (error '~v "the first subform of App is restricted to f and (vec f) in format")])]
       ; Unnormalized
       [(list 'sqr u) (v~ `(expt ,u 2))]
       
