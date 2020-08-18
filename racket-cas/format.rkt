@@ -833,7 +833,8 @@
                       [(list 'vec (? symbol? f)) (~a "\\vec{" f "}" "(" (v~ v) ")")]
                       [_ (error '~v "the first subform of App is restricted to f and (vec f) in format")])]
       ; Unnormalized
-      [(list 'sqr u) (v~ `(expt ,u 2))]
+      [(list 'sqr u)   (v~ `(expt ,u 2))]
+      [(list 'in u v)  (~a (v~ u) "\\in " (~v v))]
       
       ;   handle sqrt first
       [(list 'diff (list 'sqrt u) x)
