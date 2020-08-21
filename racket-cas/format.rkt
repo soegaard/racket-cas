@@ -710,7 +710,9 @@
       [(⊗  1 v)                                               (~a             (v~ v))]
       [(⊗ -1 α) #:when (negative? α)                          (~a "-" (paren  (v~ α)))]
       [(⊗ -1 x)                                               (~a "-"         (v~ x))]
-      [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]      
+      [(⊗ -1 (Expt  u v))                                     (~a "-" (v~ `(expt ,u ,v)))]
+      [(⊗ -1 (⊗     u v))                                     (~a "-" (v~ `(*    ,u ,v)))] ; YYY
+      [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]
       [(⊗ -1 p v) #:when (and original? (negative? p))        ; (displayln (list "A" p v (⊗ p v)))
                                                               (~a "-" (paren  (v~ (⊗ p v) #f)))] ; wrong
       [(⊗ -1 v)   #:when      original?                       (~a "-"         (v~ v))]
@@ -834,7 +836,7 @@
                       [_ (error '~v "the first subform of App is restricted to f and (vec f) in format")])]
       ; Unnormalized
       [(list 'sqr u)   (v~ `(expt ,u 2))]
-      [(list 'in u v)  (~a (v~ u) "\\in " (~v v))]
+      [(list 'in u v)  (~a (v~ u) "\\in " (v~ v))]
       
       ;   handle sqrt first
       [(list 'diff (list 'sqrt u) x)
@@ -852,11 +854,15 @@
       [(Log u)     ((output-format-log) u)]
       [(Log u v)   ((output-format-log) u v)]
       [(Up u v)    ((output-format-up)  u v)]
-      [(Piecewise us vs)    (string-append*
-                             (append (list "\\begin{cases}\n")
-                                     (for/list ([u us] [v vs])
-                                       (~a (v~ u) " & " (v~ v) "\\\\\n"))
-                                     (list "\\end{cases}")))]
+      [(Piecewise us vs)    (case (length us)
+                              [(1) (let ([u (first us)] [v (first vs)])
+                                     (~a (v~ u) " , " (v~ v)))]
+                              [else
+                               (string-append*
+                                (append (list "\\begin{cases}\n")
+                                        (for/list ([u us] [v vs])
+                                          (~a (v~ u) " & " (v~ v) "\\\\\n"))
+                                        (list "\\end{cases}")))])]
       [(list 'sqrt u)   ((output-format-sqrt) u)]   ; unnormalized sqrt
       [(list 'root u v) ((output-format-root) u v)] ; unnormalized root
       [(list 'percent u) (~a (v~ u) (~sym '|%|))]
@@ -925,6 +931,7 @@
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "$\\frac{x}{1-y^{2}}$")
   (check-equal? (~ '(* -8 x )) "$-8x$")
   (check-equal? (~ '(- 1 (+ 2 3))) "$1-(2+3)$")
+  (check-equal? (~ '(* -1 (expt (- x 1) 2))) "$-(x-1)^{2}$")
   (check-equal? (~ '(* 4 (+ -7 (* -1 a)))) "$4(-7-a)$")
   (check-equal? (~ '(* 3 6)) "$3\\cdot 6$")
   (check-equal? (~ '(sqrt d)) "$\\sqrt{d}$")
@@ -933,6 +940,7 @@
   (check-equal? (~ '(* -9 (expt x -10))) "$\\frac{-9}{x^{10}}$")
   (check-equal? (~ '(- (* 2 3) (* -1  4))) "$2\\cdot 3-(-4)$")
   (check-equal? (~ '(- (* 2 3) (* -1 -4))) "$2\\cdot 3-(-(-4))$")
+  (check-equal? (~ '(* -1 (* (- x 1) (- x 2)))) "$-(x-1)\\cdot (x-2)$")
   (check-equal? (~ '(paren -3)) "${\\left(-3\\right)}$")
   (check-equal? (~ '(red  (paren -3))) "${\\color{red}{\\left(-3\\right)}\\color{black}}$")
   (check-equal? (~ '(blue (paren -3))) "${\\color{blue}{\\left(-3\\right)}\\color{black}}$")
