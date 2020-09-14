@@ -113,7 +113,12 @@
 (define (default-output-interval u)
   (define v~ verbose~)
   (parameterize ([output-wrapper values]) ; avoid $ around sub parts
+    ; (displayln (list 'default-output-interval u))
     (match u
+      [(list 'ccinterval -inf.0 +inf.0) (~a "]" "-∞"   ","  "∞"   "[")]
+      [(list 'ocinterval -inf.0      v) (~a "]" "-∞"   "," (v~ v) "]")]
+      [(list 'cointerval u      +inf.0) (~a "[" (v~ u) "," "∞"    "[")]
+      
       [(list 'ccinterval u v) (~a "[" (v~ u) "," (v~ v) "]")]
       [(list 'ocinterval u v) (~a "]" (v~ u) "," (v~ v) "]")]
       [(list 'cointerval u v) (~a "[" (v~ u) "," (v~ v) "[")]
@@ -121,9 +126,26 @@
       [_ (error 'default-output-interval (~a "unknown interval type, got: " u))])))
   
 (define (tex-output-interval u)
+  ; (displayln (list 'tex-output-interval u))
   (define v~ verbose~)
   (parameterize ([output-wrapper values]) ; avoid $ around sub parts
     (match u
+      [(list 'oointerval -inf.0 +inf.0)  (~a "]" "-∞"   "," "∞"    "[")]
+      [(list 'oointerval u      +inf.0)  (~a "]" (v~ u) "," "∞"    "[")] ; for wrong options
+      [(list 'oointerval -inf.0      v)  (~a "]" "-∞"   "," (v~ v) "[")]
+
+      [(list 'ccinterval -inf.0 +inf.0)  (~a "[" "-∞"   ","  "∞"   "]")] ; for wrong options
+      [(list 'ccinterval -inf.0      v)  (~a "[" "-∞"   "," (v~ v) "]")] ; for wrong options
+      [(list 'ccinterval u      +inf.0)  (~a "[" (v~ u) "," "∞"    "]")] ; for wrong options
+
+      [(list 'ocinterval -inf.0 +inf.0)  (~a "]" "-∞"   "," "∞"    "]")] ; for wrong options
+      [(list 'ocinterval -inf.0      v)  (~a "]" "-∞"   "," (v~ v) "]")]
+      [(list 'ocinterval u      +inf.0)  (~a "]" (v~ u) "," "∞"    "]")] ; for wrong options
+
+      [(list 'cointerval -inf.0 +inf.0)  (~a "[" "-∞"   "," "∞"    "[")] ; for wrong options
+      [(list 'cointerval u      +inf.0)  (~a "[" (v~ u) "," "∞"    "[")]
+      [(list 'cointerval -inf.0 v)       (~a "[" "-∞"   "," (v~ v) "[")] ; for wrong options
+
       [(list 'ccinterval u v) (~a "[" (v~ u) "," (v~ v) "]")]
       [(list 'ocinterval u v) (~a "]" (v~ u) "," (v~ v) "]")]
       [(list 'cointerval u v) (~a "[" (v~ u) "," (v~ v) "[")]
@@ -462,7 +484,9 @@
     (define ~frac (output-fraction))
     (define (~num r)
       (define precision (output-floating-point-precision))
-      (cond [(and (exact? r) (> (denominator r) 1)) (~frac r)]
+      (cond [(eqv? r -inf.0) "-∞"]
+            [(eqv? r +inf.0) "∞"]
+            [(and (exact? r) (> (denominator r) 1)) (~frac r)]
             [(exact? r) (~a r)]
             [(nan? r)   (~a r)]
             [precision  (~r r #:precision precision)]
@@ -626,6 +650,7 @@
         [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
         [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
         [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
+        [(list 'int u v)   (~a "\\int " (v~ u) "\\ \\textrm{d}" (v~ v))] ; TODO: only for TeX
 
         ; applications
         [(app: f us) (let ()
@@ -798,13 +823,13 @@
                                       #:use paren))]
       ; other
       [(And (Less u v) (Less u1 v1))           #:when (equal? v u1)
-       (~a (par u) " " (~relop '<) " " (par v) " " (~relop '<) " " (par v1))]
+       (~a (v~ u) " " (~relop '<) " " (v~ v) " " (~relop '<) " " (v~ v1))]
       [(And (LessEqual u v) (Less u1 v1))      #:when (equal? v u1)
-       (~a (par u) " " (~relop '<=) " " (par v) " " (~relop '<) " " (par v1))]
+       (~a (v~ u ) " " (~relop '<=) " " (v~ v) " " (~relop '<) " " (v~ v1))]
       [(And (LessEqual u v) (LessEqual u1 v1)) #:when (equal? v u1)
-       (~a (par u) " " (~relop '<=) " " (par v) " " (~relop '<=) " " (par v1))]
+       (~a (v~ u) " " (~relop '<=) " " (v~ v) " " (~relop '<=) " " (v~ v1))]
       [(And (Less u v)      (LessEqual u1 v1)) #:when (equal? v u1)
-       (~a (par u) " " (~relop '<)  " " (par v) " " (~relop '<=) " " (par v1))]
+       (~a (v~ u) " " (~relop '<)  " " (v~ v) " " (~relop '<=) " " (v~ v1))]
       
       [(And u v)            (~a (par u) " " (~sym 'and) " " (par v))]
       ; todo: if u or v contains And or Or in u or v then we need parentheses as in the And line
@@ -812,6 +837,8 @@
       [(list  '= v) (~a (~sym '=) (v~ v))]
       [(list* '= us) ; handle illegal = with multiple terms
        (string-append* (add-between (map (λ (u) (v~ u #t)) us) (~a " " (~relop '=) " ")))]
+      [(list* '⇔ us) ; handle ⇔ with multiple terms
+       (string-append* (add-between (map (λ (u) (v~ u #t)) us) "\\ \\  \\Leftrightarrow \\ \\ "))]
       [(list  '~ v)      (~a (~sym '~) (v~ v))]
       [(list* '~ us)
        (string-append* (add-between (map (λ (u) (v~ u #t)) us) (~a " " (~relop '~) " ")))]
@@ -873,6 +900,8 @@
       [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'where u v) (~a (v~ u) " | " (v~ v))]        ; TODO: only for TeX
+
+      [(list 'int u v)   (~a "\\int " (v~ u) "\\ \\textrm{d}" (v~ v))] ; TODO: only for TeX
       
       [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
       [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
