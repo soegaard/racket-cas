@@ -584,10 +584,10 @@
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
 
         [(⊗ u v) #:when exponent-base?   (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX YY
-        [(⊗ u v) #:when original?        (let ([s (~a (par u)  (implicit* u v) (par v))])
+        [(⊗ r u) #:when (positive? r)   (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX YY
+        [(⊗ u v) #:when original?         (let ([s (~a (par u)  (implicit* u v) (par v))])
                                            s)] ; XXX
-        [(⊗ u v)                         (~a (par (v~ u)) (implicit* u v) (par v))] ; YYY
+        [(⊗ u v)                       (~a (par u) (implicit* u v) (par v))] ; YYY
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -1023,6 +1023,7 @@
   (check-equal? (~ '(formatting ([use-quotients? #f]) (+ 1 (* 7 (expt x -1))))) "1+7*1/x")
   (check-equal? (~ '(formatting ([use-quotients? #t]) (+ 1 (* 7 (expt x -1))))) "1+7/x")
   (check-equal? (~ '(expt (expt 65 1/2) 2)) "sqrt(65)^2")
+  (check-equal? (~ '(+ 1 (* 2 a b) 1)) "1+2*a*b+1")
   (check-equal? (~ '(+ (* 2 y) (* -1 (+ 2 x)))) "2*y-(2+x)")
   (check-equal? (~ '(+ (* -1 (+ y 1)) 3)) "-(y+1)+3")
   (check-equal? (~ '(* (+ 1 x) -2 (+ 3 x))) "(1+x)*(-2)*(3+x)")
