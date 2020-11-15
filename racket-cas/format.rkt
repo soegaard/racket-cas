@@ -170,6 +170,7 @@
 (define output-format-up                 (make-parameter default-output-up))
 (define output-sub-exponent-parens       (make-parameter (list "(" ")"))) ; for Tex it is { }
 (define output-sub-exponent-wrapper      (make-parameter values))         ; TeX needs extra {}
+(define output-format-negative-exponent  (make-parameter #f))  ; use 1/2 or 2^-1 to output negative exponents
 (define output-terms-descending?         (make-parameter #f)) ; reverse terms before outputting?
 (define output-implicit-product?         (make-parameter #f)) ; useful for TeX
 (define output-relational-operator       (make-parameter ~a)) ; useful for TeX
@@ -194,6 +195,7 @@
   (output-format-up           default-output-up)
   (output-sub-exponent-parens (list "(" ")"))
   (output-sub-exponent-wrapper values)
+  (output-format-negative-exponent #f)
   (output-implicit-product? #f)
   (output-relational-operator ~a)
   (output-variable-name mma-output-variable-name)
@@ -207,6 +209,7 @@
   (output-sub-expression-parens  (list "(" ")"))
   (output-sub-exponent-parens    (list "(" ")"))
   (output-sub-exponent-wrapper   values)
+  (output-format-negative-exponent #f)
   (output-wrapper values)
   (output-sqrt? #t)
   (output-root? #f)
@@ -271,6 +274,7 @@
   (output-format-up  tex-output-up)
   (output-sub-exponent-parens  (list "{" "}"))
   (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
+  (output-format-negative-exponent #f)
   (output-implicit-product? #t)
   (output-relational-operator ~relop)
   (output-variable-name tex-output-variable-name)
@@ -323,6 +327,7 @@
                                                    (~a "\\sqrt[" (verbose~ n) "]{" (verbose~ u) "}")))))
                  (output-sub-exponent-parens  (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
+                 ; (output-format-negative-exponent #f) ; omitted on purpose
                  (output-implicit-product?    #t)
                  (output-relational-operator  ~relop)
                  (output-variable-name        tex-output-variable-name)
@@ -724,7 +729,8 @@
                       (format/ 1 (par u #:use quotient-sub))]
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
+                      (cond [(output-format-negative-exponent) (~a (par u) "^" (paren p))]
+                            [else (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))])]
       [(Expt u α)     #:when (and (output-root?) (= (numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
                       ((output-format-root) u (/ 1 α))] ; only used, if (output-format-root) returns non-#f 
       [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
@@ -1006,6 +1012,8 @@
                 "$5\\cdot \\sqrt{5}$")  
   (check-equal? (tex '(= (sin A) (/ (* 5 (sqrt 5)) 2)))
                 "$\\sin(A) = \\frac{5\\sqrt{5}}{2}$")
+  (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -3)))
+                "$2^(-3)$")
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* -1 x)) "-x")
