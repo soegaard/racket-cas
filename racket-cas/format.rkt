@@ -601,7 +601,8 @@
         ; powers
         [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
         [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                        (format/ 1 (par u #:use quotient-sub))]
+                        (cond [(output-format-negative-exponent) (~a (par u) "^" (exponent-wrap -1))]
+                              [else                              (format/ 1 (par u #:use quotient-sub))])]
         ; unnormalized power of a power
         [(Expt (and (Expt u v) w) w1) (~a ((output-sub-exponent-wrapper) ; braces for tex otherwise nothing
                                            (v~ w)) 
@@ -609,10 +610,12 @@
                                                      (fluid-let ([original? #t])
                                                        (par v #:use exponent-sub
                                                             #:wrap-fractions? #t))))]
-        [(Expt u p)   (~a (par u #:use base-sub)
-                          (~sym '^) ((output-sub-exponent-wrapper)
-                                     (fluid-let ([original? #t])
-                                                (par p #:use exponent-sub))))]
+        [(Expt u p)   (if (and (negative? p) (output-format-negative-exponent))
+                          (~a (par u) "^" (exponent-wrap p))
+                          (~a (par u #:use base-sub)
+                              (~sym '^) ((output-sub-exponent-wrapper)
+                                         (fluid-let ([original? #t])
+                                                    (par p #:use exponent-sub)))))]
         [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
                         (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
@@ -622,7 +625,7 @@
                                         (par v #:use exponent-sub #:wrap-fractions? #t))))]
         [(Log u)      ((output-format-log) u)]
         [(Log u v)    ((output-format-log) u v)]
-        [(Up u v)    ((output-format-up)  u v)]
+        [(Up u v)     ((output-format-up)  u v)]
         
         [(app: f us) #:when (memq f '(< > <= >=))
                      (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
@@ -726,11 +729,13 @@
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (format/ 1 (par u #:use quotient-sub))]
+                      (cond [(output-format-negative-exponent) (~a (par u) "^" (exponent-wrap -1))]
+                            [else                              (format/ 1 (par u #:use quotient-sub))])]
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (cond [(output-format-negative-exponent) (~a (par u) "^" (paren p))]
-                            [else (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))])]
+                      (cond [(output-format-negative-exponent) (~a (par u) "^" (exponent-wrap p))]
+                            [else                              (format/ 1 (par (Expt u (- p)) 
+                                                                               #:use quotient-sub #:exponent-base? #t))])]
       [(Expt u α)     #:when (and (output-root?) (= (numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
                       ((output-format-root) u (/ 1 α))] ; only used, if (output-format-root) returns non-#f 
       [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
@@ -1012,8 +1017,15 @@
                 "$5\\cdot \\sqrt{5}$")  
   (check-equal? (tex '(= (sin A) (/ (* 5 (sqrt 5)) 2)))
                 "$\\sin(A) = \\frac{5\\sqrt{5}}{2}$")
+  (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -1)))
+                "$2^{-1}$") ; a^-1 is a special case
   (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -3)))
-                "$2^(-3)$")
+                "$2^{-3}$") ; a^p, p negative
+  (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -1)))
+                "$2^{-1}$")
+  (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -2)))
+                "$2^{-2}$")
+
   ; --- Default
   (use-default-output-style)
   (check-equal? (~ '(* -1 x)) "-x")
