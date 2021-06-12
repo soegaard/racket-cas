@@ -63,7 +63,7 @@
     [(app: f us)  #:when (symbol? f)
                   (match us
                     [(list u) (cond [(eq? u x)  (Diff `(,f ,x) x)]
-                                    [else       (⊗ `(app (deriviative ,f ,x) ,u) (d u))])] ; xxx
+                                    [else       (⊗ `(app (derivative ,f ,x) ,u) (d u))])] ; xxx
                     [_ `(diff (,f ,@us) ,x)])]           ; xxx
     [_ (error 'diff (~a "got: " u " wrt " x))]))
 
