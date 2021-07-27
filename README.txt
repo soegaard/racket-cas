@@ -17,10 +17,11 @@ will simplify all quoted and quasi-quoted expressions.
 Also, in the repl it can be convenient to write x instead of 'x so,
 we will turn on auto quoting:
 
-    > (require racket-cas/auto-quote]
+    > (require racket-cas/auto-quote)
+    > x
+    'x
 
-
-TeX output is also available;
+TeX output is available;
     > (tex (expand '(expt (+ a b) 2)))
 
 This can also be rendered at the REPL:
