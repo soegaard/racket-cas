@@ -4,6 +4,7 @@
 
 ; the start submodule redefines ' and ` to provide automatic simplification
 (require (submod "racket-cas.rkt" start))
+(provide (all-from-out (submod "racket-cas.rkt" start)))
 
 (displayln "Welcome to Racket CAS.")
 (displayln "Use ' and ` to create symbolic expressions.")
@@ -14,6 +15,3 @@
 (newline)
 (displayln "/soegaard")
 (newline)
-
-
-
