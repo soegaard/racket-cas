@@ -8,13 +8,17 @@ Here is a short example. Open racket-cas.rkt in DrRacket and run it.
 
 To begin write:
     > (require racket-cas/repl)
-note: if that fails use
-    > (require (submod "." start))
-    
+
 This changes the meaning of quote such that automatic simplifier
 will simplify all quoted and quasi-quoted expressions.
     > '(+ x 2 a 3 (* 4 x))
     '(+ 5 a (* 5 x))
+
+Also, in the repl it can be convenient to write x instead of 'x so,
+we will turn on auto quoting:
+
+    > (require racket-cas/auto-quote]
+
 
 TeX output is also available;
     > (tex (expand '(expt (+ a b) 2)))
