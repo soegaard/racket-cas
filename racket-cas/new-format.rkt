@@ -1,5 +1,6 @@
 #lang racket
 (require (only-in "core.rkt" ⊘))  ; matches quotient with non-1 denominator
+(require (for-syntax syntax/parse))
 (provide use-minus-in-sums?
          implicit-product?
          implicit-minus-one-as-first-factor?
@@ -17,11 +18,14 @@
          mode
          format
          format/no-wrap
+         latex
+         latex-mode ; 'inline 'mathsdisplay or 'unwrapped
          )
 
 
 ;;;
 ;;; TODO
+;;;   - (- x ...) with more than two arguments
 ;;;   - negative exponents formatted as quotients
 ;;;   - support big floats
 ;;;   - complex numbers
@@ -219,7 +223,10 @@
 
 (define (format-variable-name-for-tex x)
   (match x
-    ['@pi "π"]  ['@i "i"] ['@e "\\mathrm{e}"] 
+    ['@pi "π"]           ; π   3.14...
+    ['@i "i"]            ; i   imaginary unit
+    ['@e "\\mathrm{e}"]  ; e   Eulers constant
+    ['\\ "\\\\"]         ; \\  LaTeX linebreak
     [(? symbol? x)
      (define s (symbol->string x))
      (cond
@@ -310,10 +317,10 @@
     [else                           (error 'format-number (~a "expected a number, got: " x))]))
 
 (define (paren x)
-    (case (mode)
-      [(latex) (~a "(" x ")")
-               #;(~a "\\left(" x "\\right)")]
-      [else    (~a "(" x ")")]))
+  (case (mode)
+    [(latex) (~a "(" x ")")
+             #;(~a "\\left(" x "\\right)")]
+    [else    (~a "(" x ")")]))
 
 (define (wrap ctx x unwrapped)
   (when debug? (displayln (list 'wrap ctx x unwrapped)))
@@ -471,8 +478,8 @@
        [(first-factor inner-factor last-factor) (paren unwrapped)]
        [(numerator)                             (wrap-numerator   unwrapped)]
        [(denominator)                           (wrap-denominator unwrapped)]
-       [(base)                                  (paren unwrapped)]
-       [(exponent)                                     unwrapped]
+       [(base)                                  (paren         unwrapped)]
+       [(exponent)                              (wrap-exponent unwrapped)]
        [(argument)                                      unwrapped]
        [(relation-argument)                             unwrapped]
        [(unary-minus)                           (paren unwrapped)]
@@ -504,10 +511,12 @@
     ;;; SQUARE ROOTS
     [(list* 'sqrt top-ctx more)      unwrapped]
     [(list* 'radicand top-ctx more)  unwrapped]
-    [(list* 'unary-minus (or 'inner-factor 'subtrahend) _)
-     (paren unwrapped)]
-    [(list* 'unary-minus 'base _)
-     (wrap-base unwrapped)]
+    ;;; UNARY MINUS
+    [(list* 'unary-minus (or 'inner-factor 'subtrahend) _) (paren unwrapped)]
+    [(list* 'unary-minus 'base _)                          (wrap-base unwrapped)]
+    [(list* 'unary-minus (or 'inner-term 'last-term) _)
+     (if (use-minus-in-sums?) unwrapped (paren unwrapped))]
+    
     [(list* _ 'first-term _)          unwrapped]
     [(list* _ 'argument __)           unwrapped]
     [(list* _ 'relation-argument __)  unwrapped]
@@ -647,9 +656,11 @@
           (~a (format-sign ctx -1)
               (if (equal? (string-ref s 0) #\-)   (~a "(" s ")")   s))]
          [else
+          ; Don't use -1 use-minus-in-sums? is #f
+          (define minus-one (if (use-minus-in-sums?) "-1" "(-1)"))
           (if (implicit-product?)
-              (~a "-1" implicit (format-factor (list* 'last-factor ctx) last-factor))
-              (~a "-1" explicit (format-factor (list* 'last-factor ctx) last-factor)))])]
+              (~a minus-one implicit (format-factor (list* 'last-factor ctx) last-factor))
+              (~a minus-one explicit (format-factor (list* 'last-factor ctx) last-factor)))])]
       [(list '* first-factor last-factor)
        (~a (format-factor (list* 'first-factor ctx) first-factor)
            (implicit* first-factor last-factor)
@@ -674,7 +685,7 @@
              [(list v) (list v)]
              [(list)   '()])))
        (string-append* factors/times)]
-      [_ (error 'format-prodcut (~a "expected a product, got: " x))]))
+      [_ (error 'format-product (~a "expected a product, got: " x))]))
   (wrap (cons 'product ctx) x plain))
 
 (define (format-unary-minus ctx x)
@@ -841,13 +852,30 @@
 (define (format-application ctx x)
   (when debug? (displayln (list 'format-application ctx x)))  
   (match x
+    [(list name #:opt opt u ...)
+     (define f    (format-function-name (cons 'application ctx) name))
+     (define us   (map (λ (u) (format-sexp (cons 'argument ctx) u)) u))
+     (define opts (format-sexp (cons 'argument ctx) opt))
+     (define args  (string-append* (add-between us ",")))
+     (define largs (string-append* (add-between us "}{")))
+     (define unwrapped
+       (case (mode)
+         [(latex) (if (backslash-symbol? name)
+                      (~a name "[" opts "]" "{" largs "}")  ; commands like \boxed
+                      (~a f    "[" opts "]" "("  args ")"))]
+         [(mma)   (~a f "[" args "]")]
+         [else    (~a f "(" args ")")]))
+     (wrap (cons 'application ctx) x unwrapped)]
     [(list name u ...)
      (define f    (format-function-name (cons 'application ctx) name))
      (define us   (map (λ (u) (format-sexp (cons 'argument ctx) u)) u))
      (define args (string-append* (add-between us ",")))
+     (define largs (string-append* (add-between us "}{")))
      (define unwrapped
        (case (mode)
-         [(latex) (~a f "(" args ")")]
+         [(latex) (if (backslash-symbol? name)
+                      (~a name "{" largs "}")  ; commands like \boxed
+                      (~a f    "("  args ")"))]
          [(mma)   (~a f "[" args "]")]
          [else    (~a f "(" args ")")]))
      (wrap (cons 'application ctx) x unwrapped)]
@@ -948,14 +976,59 @@
     [else    (relation-symbol->default-name s)]))
 
 (define (format-relation ctx x)
-  (when debug? (displayln (list 'format-relation ctx x)))  
+  (define who 'format-relation)
+  (when debug? (displayln (list who ctx x)))  
   (match x
     [(list* relsym us)
      (define op (relation-symbol->name relsym))
      (define ss (map (λ (u) (format-sexp (cons 'relation-argument ctx) u)) us))
      (define unwrapped (string-append* (add-between ss (~a " " op))))
      (wrap (cons 'relation ctx) x unwrapped)]
-    [_ (error 'format-relation (~a "got: " x))]))
+    [_ (error who (~a "got: " x))]))
+
+
+;; (~ '(equation (split (= a
+;;                         & (+ b c (- d) \\ (+ e (- f)))
+;;                         & (+ g h)
+;;                         & i)))))
+
+(define (format-split-relation ctx x)
+  (define who 'format-split-relation)
+  ; A split-relation can contain:
+  ;   &   alignment marker
+  ;   \\  linebreak
+  ; Split supports only a single alignment & per line.
+  (when debug? (displayln (list who ctx x)))  
+  (match x
+    [(list 'split (list* relsym us))
+     ; In the output the & must appear before the relation operator.
+     (define op  (~a " " (relation-symbol->name relsym)))
+     (define &op (~a " &" (relation-symbol->name relsym)))
+     (define ss (map (λ (u) (format-sexp (cons 'relation-argument ctx) u)) us))
+     ; Without alignment & and linebreaks \\ we could simple do:
+     ; (define unwrapped (string-append* (add-between ss (~a " " op))))
+     (define v0 (first ss)) ; 
+     (define vs (let loop ([us (rest us)] [ss (rest ss)])
+                  (define (next [n 1]) (loop (drop us n) (drop ss n)))
+                  (define (split-error)
+                    (error who (~a "a split environment can't end in \\\\. Got: " x)))
+                  (match us
+                    ; Make sure the end isn't a linebreak \\
+                    [(list  _ _ '\\)  (split-error)]
+                    [(list  _   '\\)  (split-error)]
+                    [(list      '\\)  (split-error)]
+                    ; 
+                    [(list* '& u '\\ _)  (list* &op (second ss) "\\\\\n" (next 3))]
+                    [(list* '&   '\\ _)  (list* &op             "\\\\\n" (next 2))]
+                    [(list* '& u     _)  (list* &op (second ss)          (next 2))]
+                    [(list*    u '\\ _)  (list*  op (first  ss) "\\\\\n" (next 2))]
+                    [(list*      '\\ _)  (list*                 "\\\\\n" (next 1))]                    
+                    [(list*    u     _)  (list*  op (first  ss)          (next 1))]
+                    [(list)              (list)])))
+     (wrap-latex-environment 'split (~a (string-append* (cons v0 vs)) "\n"))]
+    [_ (error who (~a "got: " x))]))
+
+  
 
 (define (format-hat ctx x)
   (when debug? (displayln (list 'format-hat ctx x)))  
@@ -1093,6 +1166,16 @@
     [(latex)  (format-interval/latex   x)]
     [else     (format-interval/default x)]))
 
+(define (format-group ctx x)
+  (define who format-group)
+  (when debug? (displayln (list who ctx x)))
+  (match x
+    [(list* 'group us)
+     (define ss (map (λ (u) (format-sexp ctx u)) us))
+     (case (mode)
+       [(latex)  (~a "{" (string-append* ss) "}")]
+       [else     (string-append* ss)])]))
+
 (define (format-diff ctx y)
   (when debug? (displayln (list 'format-diff ctx y)))
   (define unwrapped
@@ -1122,6 +1205,11 @@
 (define (format-as-quotient ctx u v x)
   (format-quotient ctx `(/ ,u ,v)))
 
+(define (format-string ctx u)
+  (case (mode)
+    [(latex) (~a "\\textrm{" u "}")]
+    [else    u]))
+
 (define (format-sexp ctx x)
   (when debug? (displayln (list 'format-sexp ctx x)))
   (define uq (use-quotient?))
@@ -1129,7 +1217,8 @@
   (define (nr? x) (not (rational? x)))
   (match x
     [(? number?)                    (format-number         ctx x)]
-    [(? symbol?)                    (format-variable-name  ctx x)]    
+    [(? symbol?)                    (format-variable-name  ctx x)]
+    [(? string?)                    (format-string         ctx x)]
     [(list* '+ _)                   (format-sum            ctx x)]
     [(list* '* k _)  #:when (ni? k) (format-product        ctx x)]
     [(⊘ u (? nr? v)) #:when uq      (format-as-quotient    ctx u v x)] ; before * and /
@@ -1157,6 +1246,7 @@
                 'cointerval
                 'oointerval) _)     (format-interval       ctx x)]
     [(list* 'diff _)                (format-diff           ctx x)]
+    [(list* 'group _)               (format-group          ctx x)]
     [(list* '~ _)                   (format-approx         ctx x)]
     [(list* (? color-symbol?) _)    (format-color          ctx x)]
     [(list* (? relation-symbol?) _) (format-relation       ctx x)]
@@ -1164,6 +1254,10 @@
     
     [_
      (error 'format-sexp (~a "got: " x))]))
+
+;;;
+;;; FORMAT
+;;;
 
 (define (format/no-wrap x)
   (format-sexp '(original) x))
@@ -1177,6 +1271,221 @@
 
 (define ~ format)
 
+;;;
+;;; LATEX
+;;;
+
+(define (latex-mode? x) (and (member x '(inline mathdisplay unwrapped #f)) x))
+(define latex-mode (make-parameter #f latex-mode?))
+
+(define (latex extended-expr)
+  (define x extended-expr)
+  (define who 'latex)
+  (when debug? (displayln (list who x)))
+  (define unwrapped? (equal? (latex-mode) 'unwrapped))
+  (parameterize ([mode 'latex] [latex-mode (or (latex-mode) 'inline)])
+    (define unwrapped (format-latex '(original) x))
+    (case (or unwrapped? (latex-mode))
+      [(inline)       (~a "$"   unwrapped "$")]
+      [(mathdisplay)  (~a "\\[" unwrapped "\\]")]
+      [(#t unwrapped) unwrapped]
+      [else (error who (~a "unknown latex mode, got: " (latex-mode)))])))
+
+(define (format-latex ctx x)
+  ;;; NOTES:
+  ;;;   The following LaTeX constructs are not supported by MathJax
+  ;;;     intertext, flalign
+  
+  (define org x)
+  (define who 'format-latex)
+  (when debug? (displayln (list who ctx x)))
+  (match x
+    ; equation* : single equation with no generated number
+    [(list 'equation* x ...)
+     (latex-mode 'mathdisplay)
+     (define xs (for/list ([x x]) (format-latex (cons 'equation* ctx) x)))
+     (latex-environment/newlines 'equation* xs)]
+    ; equation  : single equation with a generated number  (n)
+    [(list 'equation x ...)
+     (latex-mode 'mathdisplay)
+     (format-equation-env ctx org)]
+    #;[(list 'equation x ...)
+     (latex-mode 'mathdisplay)
+     (define xs (for/list ([x x]) (format-latex (cons 'equation ctx) x)))
+     (latex-environment/newlines 'equation xs)]
+    [(list* 'split xs)
+     ; split can only be used inside the other environment (not in multline though)
+     ; Note: we don't update the context above - should we?
+     #;(unless (and (for/or ([env '(equation equation*)]) (member env ctx))
+                  (eq? (latex-mode) 'mathdisplay))
+       (error who "the split environment must be used inside an environment (other than multline)"))
+     (format-split ctx org)]
+    [(list* 'multline xs)
+     ; variation of `equation` for single formula, that doesn't fit a single line
+     (latex-mode 'mathdisplay)  ; a `multline` can't be inline
+     (format-multline ctx org)]
+    [(list* 'gather xs)
+     ; groups equations without alignment - each equation is centered horizontally
+     (latex-mode 'mathdisplay)  ; a `gather` can't be inline
+     (format-gather ctx org)]
+    [(list* 'gathered xs)
+     ; like `gather` but width = content width
+     (latex-mode 'mathdisplay)  ; a `gather` can't be inline
+     (format-gathered ctx org)]
+    [(list* 'align xs)
+     ; groups equations with alignment
+     (latex-mode 'mathdisplay) ; an `align` can't be inline
+     (format-align ctx org)]
+    [(list* 'aligned xs)
+     ; like `align` but width = content width
+     (latex-mode 'mathdisplay) ; an `align` can't be inline
+     (format-aligned ctx org)]
+    ;; flalign is not supported by MathJax - sigh.
+    ;; [(list* 'flalign xs)
+    ;;  ; groups equations without alignment - each equation is centered horizontally
+    ;;  (latex-mode 'mathdisplay)  ; a `flalign` can't be inline
+    ;;  (format-flalign ctx org)]
+    [(list* 'cases xs)
+     ; several
+     (latex-mode 'mathdisplay)  ; a `cases` can't be inline
+     (format-cases ctx org)]
+    [(list* 'array xs)
+     (latex-mode 'mathdisplay)  ; a `array` can't be inline
+     (format-array ctx org)]
+    ;;;
+    [(list 'right-brace u)
+     (~a "\\left. " (format-latex ctx u) "\\right\\} ")]
+    [(list 'left-brace u)
+     (~a "\\left\\{ " (format-latex ctx u) "\\right. ")]    
+    [(list 'braces u)
+     (~a "\\left\\{ " (format-latex ctx u) "\\right\\} ")]
+    [(list 'super u v)
+     (~a "{ " (format-latex-literals (list u)) "}^{" (format-latex-literals (list v)) "}")]
+    [(list 'sub u v)
+     (~a "{ " (format-latex-literals (list u)) "}_{" (format-latex-literals (list v)) "}")]
+    [(list 'limits u)    (~a "\\limits_{" (format-latex-literals (list u)) "}")]
+    [(list 'limits u v)  (~a "\\limits_{" (format-latex-literals (list u)) 
+                             "}^{"        (format-latex-literals (list v)) "}")]
+    [(list 'sub-super (? symbol? u) v w)     
+     (~a " "  (format-latex-literals (list u))
+         "_{" (format-latex-literals (list v)) 
+         "}^{" (format-latex-literals (list w)) "}")]
+    [(list 'sub-super u v w)     
+     (~a "{ "  (format-latex-literals (list u))
+         "}_{" (format-latex-literals (list v)) 
+         "}^{" (format-latex-literals (list w)) "}")]
+    [_
+     (format-sexp (cons 'original ctx) x)]))
+
+(define (format-split ctx x)
+  (define who 'format-split)
+  ;; This version of split mimics the LaTeX one directly.
+  ;; All & and \\ needs to be explicit.
+  ; Split supports only a single alignment & per line.
+  (when debug? (displayln (list who ctx x)))
+  (match x
+    [(list* 'split xs)
+     (wrap-latex-environment
+      'split (~a (format-latex-literals xs) "\n"))]
+    [_
+     (error who (~a "expected a (split ...), got: " x))]))
+
+(define (format-array ctx x)
+  (define who 'format-array)
+  (when debug? (displayln (list who ctx x)))
+  (match x
+    [(list* 'array arg xs)
+     (wrap-latex-environment 
+      'array (~a (format-latex-literals xs) "\n")
+      arg)]
+    [_
+     (error who (~a "expected a (split ...), got: " x))]))
+
+(define-syntax (define-format-literal-latex-environment stx)
+  (syntax-parse stx
+    [(_ format-name name)
+     (syntax/loc stx
+       (define (format-name ctx x)
+         (define who 'format-name)
+         ;; This version of multline mimics the LaTeX one directly.
+         (when debug? (displayln (list who ctx x)))
+         (match x
+           [(list* 'name xs)
+            (wrap-latex-environment
+             'name (~a (format-latex-literals xs) "\n"))]
+           [_
+            (error who (~a "expected a (" 'name " ...), got: " x))])))]))
+
+; NOTE!!!
+;   Remember to add a clause in format-latex-literals, when you add a new
+;   environment type.
+(define-format-literal-latex-environment format-equation-env equation)
+
+(define-format-literal-latex-environment format-multline multline)
+(define-format-literal-latex-environment format-gather   gather)   ; width = line width
+(define-format-literal-latex-environment format-align    align)    ; width = line width
+(define-format-literal-latex-environment format-flalign  flalign)
+(define-format-literal-latex-environment format-cases    cases)
+
+(define-format-literal-latex-environment format-gathered gathered) ; width = content width
+(define-format-literal-latex-environment format-aligned  aligned)  ; width = content width
+
+
+(define (backslash-symbol? x)
+  (and (symbol? x) (equal? (string-ref (~a x) 0) #\\)))
+
+(define (format-latex-literals xs)
+  (define who 'format-latex-literals)
+  ; The input is a list of literal latex tokens and S-expressions.
+  ; The literal tokens will be output directly, and the S-expressions
+  ; will be formatted by format-sexp in the context 'original.
+  ; Literals:
+  ;   &        alignment marker   
+  ;   \\       linebreak
+  ;   quad     space
+  ;   strings  becomes \textrm{ }
+  ; Split supports only a single alignment & per line.
+  ;
+  
+  (when debug? (displayln (list who xs)))
+  (define ss
+    (let loop ([xs xs])
+      (define (next) (loop (rest xs)))
+      (cond
+        [(null? xs) '()]
+        [else
+         (define x (first xs))
+         (define s (match x
+                     ['&                    " &"]
+                     ['\\                   "\\\\\n"]
+                     ['quad                 "\\quad "]
+                     ['qquad                "\\qquad "]
+                     [(? backslash-symbol?) (~a x)]
+                     [(? string?) (~a "\\textrm{" x "}")]
+                     [(list* (or 'equation 'split 'align 'aligned 'gather 'gathered 'flalign
+                                 'multline 'cases 'array 'super 'sub 'sub-super 'limits
+                                 'right-brace 'left-brace 'braces) _)
+                      (format-latex '(original) x)]
+                     [u      (format-sexp '(relation-argument) x)]))
+         (cons s (next))])))
+  (string-append* ss))
+
+
+(define (wrap-latex-environment env body [arg #f])
+  (match arg
+    [#f (~a "\\begin{" env "}\n"
+            body
+            "\\end{"   env "}")]
+    [_  (~a "\\begin{" env "}{" arg "}\n"
+            body
+            "\\end{"   env "}")]))
+
+(define (latex-environment/newlines env lines)
+  ; Note: \\ between lines - not after the last list
+  (string-append* (append (list (~a "\\begin{" env "}\n"))
+                          (add-between lines "\\\\\n")
+                          (list "\n")
+                          (list (~a "\\end{" env "}")))))
 
 (module+ test
   ;; VARIABLE NAMES
@@ -1245,6 +1554,9 @@
     (check-equal? (~ 'x)         "x")
     (check-equal? (~ '(+ 1 x))   "1+x")
     (check-equal? (~ '(+ 1 x y)) "1+x+y"))
+  (parameterize ([implicit-minus-one-as-first-factor? #f] 
+                 [use-minus-in-sums?                  #f])
+    (check-equal? (~ '(+ 2 (* -1 -1))) "2+(-1)*(-1)"))
   
   
 
@@ -1309,6 +1621,9 @@
   (check-equal? (~ '(- (* 2 3)))  "-2*3")
   (check-equal? (~ '(- (* -2 3))) "-(-2*3)")
   (check-equal? (~ '(- (- 4)))    "-(-4)")
+  ;;; SUMS WITH UNARY MINUS
+  (parameterize ([use-minus-in-sums? #t])
+    (check-equal? (~ '(+ a (- b) c (- d))) "a-b+c-d"))
 
   ;;; BINARY MINUS
   (check-equal? (~ '(- 2 3)) "2-3")
@@ -1406,7 +1721,10 @@
     (check-equal? (~ '(expt x (* 2 3)))    "x^(2*3)")
     (check-equal? (~ '(expt x (expt 2 3))) "x^(2^3)")
     (check-equal? (~ '(expt (expt 2 3) x)) "(2^3)^x")
-    (check-equal? (~ '(expt (- x) 2))      "(-x)^2"))
+    (check-equal? (~ '(expt (- x) 2))      "(-x)^2")
+
+    (check-equal? (~ '(expt (- 1 p) (- n r))) "(1-p)^(n-r)"))
+
   
   (parameterize ([mode 'default] [use-quotient-for-exponent-minus-one? #t])
     (check-equal? (~ '(expt 2   -1))  "1/2")
@@ -1497,6 +1815,7 @@
     (check-equal? (~ '(diff (f x) x))    "$f'(x)$")
     (check-equal? (~ '(diff (f x) y))    "$\\dv{y}(f(x))$")
     (check-equal? (~ '(diff (sqrt x) x)) "$(\\sqrt{x})'$"))
+
 
 
   ;;; -------------------      
@@ -1638,5 +1957,28 @@
       (check-equal? (~ `(expt 2 -1)) "$2^{-1}$")
       (check-equal? (~ `(expt 2 -2)) "$2^{-2}$")
       (check-equal? (~ '(expt y -4)) "$y^{-4}$"))
+    (check-equal? (~ '(expt 2 1)) "$2^1$")
     ;;; END LATEX
-    ))
+    )
+
+  ;;; LATEX ONLY ENVIRONMENTS
+  ;;; SPLIT
+  #;(parameterize ([mode 'latex])
+    (define (split . xs) (format-split-relation '(original) `(split ,@xs)))
+    ;; The split environment supports a single alignment marker & per line.
+    ;; The linebreak \\ can't occur as the last token.
+    (check-equal? (split '(= a   b))           "a = b")
+    (check-equal? (split '(= a   b  c))        "a = b = c")
+    (check-equal? (split '(= a & b))           "a &= b")
+    (check-equal? (split '(= a & b   c))       "a &= b = c")
+    (check-equal? (split '(= a & b & c))       "a &= b &= c")
+
+    (check-equal? (split '(= a \\  b))         "a\\\\ = b")
+    (check-equal? (split '(= a \\  b    c))    "a\\\\ = b = c")
+    (check-equal? (split '(= a \\  b \\ c))    "a\\\\ = b\\\\ = c")
+    (check-equal? (split '(= a \\ & b))        "a\\\\ &= b")
+    (check-equal? (split '(= a \\ & b))        "a\\\\ &= b")
+    (check-equal? (split '(= a \\ & b      c)) "a\\\\ &= b = c")
+    (check-equal? (split '(= a \\ & b \\ & c)) "a\\\\ &= b\\\\ &= c"))
+  )
+

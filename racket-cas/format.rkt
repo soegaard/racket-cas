@@ -611,12 +611,13 @@
                                                        (par v #:use exponent-sub
                                                             #:wrap-fractions? #t))))]
         [(Expt u p)   (if (and (negative? p) (output-format-negative-exponent))
-                          (~a (par u) "^" (exponent-wrap p))
+                          ; note: LaTeX needs to wrap the base in {} if u is an exponent
+                          (~a ((output-sub-exponent-wrapper) (par u)) "^" (exponent-wrap p)) 
                           (~a (par u #:use base-sub)
                               (~sym '^) ((output-sub-exponent-wrapper)
                                          (fluid-let ([original? #t])
                                                     (par p #:use exponent-sub)))))]
-        [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
+        [(Expt u α)   #:when (= (numerator α) -1) ; -1/p
                         (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
         [(Expt u v)   (~a (par u #:use base-sub)
@@ -631,7 +632,8 @@
                      (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
         ; unnormalized quotient
         [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
+                       (define out     (format/ (par u #:use quotient-sub) (par v #:use quotient-sub)))
+                       (if exponent-base? (base-sub out) out)]
         ; unormalized sqr
         [(list 'sqr u) (v~ `(expt ,u 2))]
         ; unormalized sqrt
@@ -663,7 +665,7 @@
         ; applications
         [(app: f us) (let ()
                        (define arguments
-                         (apply string-append (add-between (map v~ us) ",")))
+                         (string-append* (add-between (map v~ us) ",")))
                        (define head ((output-format-function-symbol) f))
                        (~a head app-left arguments app-right))]
         [_  (wrap u)]))
@@ -725,18 +727,25 @@
       ; unnormalized and normalized quotients
       [(list '/ u v) (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                      (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
-      [(Quotient u v) #:when (and  (output-use-quotients?) (not (rational? v)))
+      [(Quotient u v) #:when (and (output-use-quotients?) (not (rational? v)))
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                       (format/ (par u #:use quotient-sub) (par v #:use quotient-sub))]
       [(Expt u -1)    (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (cond [(output-format-negative-exponent) (~a (par u) "^" (exponent-wrap -1))]
-                            [else                              (format/ 1 (par u #:use quotient-sub))])]
+                      (cond [(output-format-negative-exponent)
+                             (~a ((output-sub-exponent-wrapper) (par u)) "^" (exponent-wrap -1))]
+                            [else (format/ 1 (par u #:use quotient-sub))])]
       [(Expt u p)     #:when (negative? p)
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
-                      (cond [(output-format-negative-exponent) (~a (par u) "^" (exponent-wrap p))]
-                            [else                              (format/ 1 (par (Expt u (- p)) 
-                                                                               #:use quotient-sub #:exponent-base? #t))])]
-      [(Expt u α)     #:when (and (output-root?) (= (numerator α) 1) ((output-format-root) u (/ 1 α))) ; α=1/n
+                      (cond [(and (output-format-negative-exponent) (output-use-quotients?))
+                             ; note: the base needs to be wrapped - TeX requires {} around the base to avoid
+                             ;       doubles superscripts as in a^2^3
+                             (~a ((output-sub-exponent-wrapper) (par u)) "^" (exponent-wrap p))]
+                            [(output-use-quotients?)
+                             (format/ 1 (par (Expt u (- p)) #:use quotient-sub #:exponent-base? #t))]
+                            [else 
+                             (~a ((output-sub-exponent-wrapper) (par u #:exponent-base? #t)) "^" (exponent-wrap p))])]
+      [(Expt u α)     #:when (and (output-root?) (= (numerator α) 1) (> (abs (denominator α)) 1)
+                                  ((output-format-root) u (/ 1 α))) ; α=1/n
                       ((output-format-root) u (/ 1 α))] ; only used, if (output-format-root) returns non-#f 
       [(Expt u α)     #:when (= (numerator α) -1) ; -1/p
                       (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
@@ -859,11 +868,11 @@
       [(Expt u 1/2) #:when (output-sqrt?) ((output-format-sqrt) u)]
       ; unnormalized power of a power
       [(Expt (and (Expt u v) w) w1)   (~a ((output-sub-exponent-wrapper)
-                                          (v~ w)) 
+                                           (v~ w)) 
                                          (~sym '^) (fluid-let ([original? #t])
                                                      ((output-sub-exponent-wrapper)
                                                       (par w1 #:use exponent-sub
-                                                           #:wrap-fractions? #t))))]
+                                                              #:wrap-fractions? #t))))]
       [(Expt u v)  (~a (par u #:exponent-base? #t) (~sym '^) (fluid-let ([original? #t])
                                            ((output-sub-exponent-wrapper)
                                             (par v #:use exponent-sub
@@ -871,7 +880,8 @@
       [(App u  v)   (match u
                       [(? symbol? f)             (~a          f     "(" (v~ v) ")")]
                       [(list 'vec (? symbol? f)) (~a "\\vec{" f "}" "(" (v~ v) ")")]
-                      [_ (error '~v "the first subform of App is restricted to f and (vec f) in format")])]
+                      [_ (error '~v 
+                                "the first subform of App is restricted to f and (vec f) in format")])]
       ; Unnormalized
       [(list 'sqr u)   (v~ `(expt ,u 2))]
       [(list 'in u v)  (~a (v~ u) "\\in " (v~ v))]
@@ -1018,13 +1028,33 @@
   (check-equal? (tex '(= (sin A) (/ (* 5 (sqrt 5)) 2)))
                 "$\\sin(A) = \\frac{5\\sqrt{5}}{2}$")
   (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -1)))
-                "$2^{-1}$") ; a^-1 is a special case
+                "${2}^{-1}$") ; a^-1 is a special case
   (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -3)))
-                "$2^{-3}$") ; a^p, p negative
+                "${2}^{-3}$") ; a^p, p negative
   (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -1)))
-                "$2^{-1}$")
+                "${2}^{-1}$")
   (check-equal? (parameterize ([output-format-negative-exponent #t]) (tex `(expt 2 -2)))
-                "$2^{-2}$")
+                "${2}^{-2}$")
+  (check-equal? (parameterize ([output-format-negative-exponent #t] [output-use-quotients? #f]) 
+                  (tex '(expt y -4)))
+                "${y}^{-4}$")
+
+  #;(check-equal? (tex '(expt (expt a 2) 3))    ; note: a^2^3 is a "double superscript error"
+                "${a^{2}}^3$")
+  (check-equal? (parameterize ([output-format-negative-exponent #t] [output-use-quotients? #f]) 
+                  (tex '(expt (expt a 2) -3)))    ; note: a^2^3 is a "double superscript error"
+                "${a^{2}}^{-3}$")
+  #;(check-equal? (parameterize ([output-format-negative-exponent #t] [output-use-quotients? #f]) 
+                  (tex '(expt (expt a -2) -3)))    ; note: a^2^3 is a "double superscript error"
+                "${a^{-2}}^{-3}$")
+  #;(check-equal? (parameterize ([output-format-negative-exponent #t] [output-use-quotients? #f]) 
+                  (tex '(expt (expt a -2) 3)))    ; note: a^2^3 is a "double superscript error"
+                  "${a^{-2}}^3$")
+  (check-equal? (tex '(expt (/ a b) 5))
+                "${(\\frac{a}{b})}^{5}$")
+  (check-equal? (tex '(expt 2 1))
+                "$2^{1}$")
+  
 
   ; --- Default
   (use-default-output-style)
@@ -1055,4 +1085,9 @@
                        (* (+ 1 x) (+ 3 x) (+ 4 x))
                        (* (+ 2 x) (+ 3 x) (+ 4 x)))) 
                 "(1+x)*(2+x)*(3+x)+(1+x)*(2+x)*(4+x)+(1+x)*(3+x)*(4+x)+(2+x)*(3+x)*(4+x)")
+  (check-equal? (~ '(expt (/ a b)  2)) "(a/b)^2")
+  (check-equal? (parameterize ([output-format-negative-exponent #t] [output-use-quotients? #f]) 
+                  (~ '(expt (/ a b) -2))) "(a/b)^(-2)")
+  (check-equal? (~ '(expt (* (expt a 2) (expt b 3)) 4))
+                "(a^2*b^3)^4")
   )
