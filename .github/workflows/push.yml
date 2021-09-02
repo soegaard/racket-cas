@@ -22,7 +22,7 @@ jobs:
           cd ../..
           raco pkg install -i --auto --no-setup --skip-installed rackunit-lib
           raco pkg install -i --auto --no-setup --skip-installed racket-cas/
-          raco pkg update  --auto --no-setup racket-cas
+          raco pkg update  --auto --no-setup racket-cas/
           cd racket-cas
       - name: Setup Collections
         run: raco setup --check-pkg-deps racket-cas
