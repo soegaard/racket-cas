@@ -23,4 +23,4 @@ jobs:
           raco pkg install --deps search-auto racket-cas/
           cd racket-cas
       - name: Setup Collections
-        run: raco setup --check-pkg-deps racket-cas
+        run: raco setup --check-pkg-deps racket-cas/
