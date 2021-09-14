@@ -154,6 +154,7 @@
 
 ;;; Formatting Parameters
 
+(define output-mode                      (make-parameter #f)) ; #f=default, 'default, 'mma or 'tex 
 (define output-application-brackets      (make-parameter (list "(" ")")))
 (define output-format-function-symbol    (make-parameter ~a))
 (define output-format-quotient           (make-parameter #f)) ; #f means default u/v
@@ -181,6 +182,7 @@
 (define output-interval                  (make-parameter default-output-interval))
 
 (define (use-mma-output-style)
+  (output-mode 'mma)
   (output-application-brackets (list "[" "]"))
   (output-format-function-symbol (λ(s) (string-titlecase (~a s))))
   (output-format-quotient #f)
@@ -202,6 +204,7 @@
   (output-fraction mma-output-fraction))
 
 (define (use-default-output-style)
+  (output-mode 'default)
   (output-application-brackets (list "(" ")"))
   (output-format-function-symbol ~a)
   (output-format-quotient #f)
@@ -224,6 +227,7 @@
   (output-fraction default-output-fraction))
 
 (define (use-tex-output-style)
+  (output-mode 'tex)
   (define operators '(sin cos tan log ln sqrt det))
   (define (~relop u)
     (match u
@@ -311,7 +315,8 @@
       ['|%| "\\%"]
       [_  (define t (~a s))
           (if (= (string-length t) 1) t (~a "\\text{" t "}"))]))
-  (parameterize ((output-application-brackets (list "(" ")"))
+  (parameterize ((output-mode 'tex)
+                 (output-application-brackets (list "(" ")"))
                  (output-format-function-symbol ~symbol)
                  (output-format-quotient (λ (u v) (~a "\\frac{" u "}{" v "}")))
                  (output-format-quotient-parens (list "" ""))
@@ -454,7 +459,7 @@
      [(Log   u v)     (list    'log  (p u) (p v))]
      [(Piecewise us vs) (Piecewise: (map p us) (map p vs))]
      [(app: f us)     (cons f (map p us))]
-     [_ (display u)
+     [_ ; (display u)
         (error 'prepare-unnormalized-for-formatting
                (~a "internal error, got: " u))]))
   (if (string? u)
@@ -482,8 +487,10 @@
   (define (~blue str)   (~a "{\\color{blue}"   str "\\color{black}}"))
   (define (~green str)  (~a "{\\color{green}"  str "\\color{black}}"))
   (define (~purple str) (~a "{\\color{purple}" str "\\color{black}}"))
-  (define (~explicit-paren strs) (~a "{\\left(" (string-append* (add-between strs ",")) "\\right)}"))
-
+  (define (~explicit-paren strs)
+    (case (output-mode)
+      [(tex) (~a "{\\left(" (string-append* (add-between strs ",")) "\\right)}")]
+      [else  (~a        "(" (string-append* (add-between strs ",")) ")")]))
   (define (v~ u [original? #f])
     ; (displayln (list 'v~ u 'orig original?))
     (define ~frac (output-fraction))
@@ -521,6 +528,7 @@
         [(list* (== op) args) (list* op x args)]
         [args                 (list* op x (list args))]))
     (define (implicit* u v) ; returns either (~sym '*) or implicit-mult
+      ; (displayln (list 'implicit* u v))
       (cond
         [(output-implicit-product?)
          (math-match u
@@ -754,9 +762,10 @@
       ; mult
       [(⊗  1 v)                                               (~a             (v~ v))]
       [(⊗ -1 α) #:when (negative? α)                          (~a "-" (paren  (v~ α)))]
+      [(⊗ -1 α)                                               (~a "-"         (v~ α))]
       [(⊗ -1 x)                                               (~a "-"         (v~ x))]
       [(⊗ -1 (Expt  u v))                                     (~a "-" (v~ `(expt ,u ,v)))]
-      [(⊗ -1 (⊗     u v))                                     (~a "-" (v~ `(*    ,u ,v)))] ; YYY
+      [(⊗ -1 (⊗     u v)) #:when (not (equal? v '(*)))        (~a "-" (v~ `(*    ,u ,v)))] ; ex: (verbose~ '(* -1 4))
       [(⊗ -1 v)                                               (~a "-" (paren  (v~ v)))]
       [(⊗ -1 p v) #:when (and original? (negative? p))        ; (displayln (list "A" p v (⊗ p v)))
                                                               (~a "-" (paren  (v~ (⊗ p v) #f)))] ; wrong
@@ -978,6 +987,7 @@
   (use-tex-output-style)
   (check-equal? (~ 4)   "$4$")
   (check-equal? (~ 2/3) "$\\frac{2}{3}$")
+  (check-equal? (~ '(* -1 4)) "$-4$")
   (check-equal? (~ (normalize '(/ x (- 1 (expt y 2))))) "$\\frac{x}{1-y^{2}}$")
   (check-equal? (~ '(* -8 x )) "$-8x$")
   (check-equal? (~ '(- 1 (+ 2 3))) "$1-(2+3)$")
