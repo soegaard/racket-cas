@@ -379,9 +379,9 @@
 
 (define (prepare-unnormalized-for-formatting
          u
-         #:zero-term   [zero-term   #f]  ; remove  0 in sums
-         #:one-factor  [one-factor  #f]  ; rewrite (* 1 u) to u
-         #:zero-factor [zero-factor #f]  ; rewrite (* 0 u) to 0
+         #:zero-term   [zero-term   #f]  ; #t means: remove  0 in sums
+         #:one-factor  [one-factor  #f]  ; #t means: rewrite (* 1 u) to u
+         #:zero-factor [zero-factor #f]  ; #t means: rewrite (* 0 u) to 0
          #:all         [all         #t])
   ; the purpose of this function is to reuse the formatter for normalized
   ; expressions, for formatting unnormalized expressions.
@@ -444,9 +444,9 @@
      [(⊘ u v)         (list     '/ (p u) (p v))]  ; binary only     
      [(⊗ u v)         (argcons  '* (p u) (p v))]
      [(⊕ u v)         (match (list (p u) (p v))
-                        [(list 0 0) 0]
-                        [(list 0 u) u]
-                        [(list u 0) u]
+                        [(list 0 0) #:when zero-term 0]
+                        [(list 0 u) #:when zero-term u]
+                        [(list u 0) #:when zero-term u]
                         [(list u v) (argcons  '+ u v)])]
      [(⊕ u)           (p u)]
      
