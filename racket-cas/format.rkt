@@ -662,7 +662,8 @@
 
         [(list 'percent u) (~a (v~ u) (~sym '|%|))]
         [(list 'abs u) ((output-format-abs) u)] 
-        [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
+        [(list 'vec u)      (~a "\\overrightarrow{" (v~ u) "}")]               ; TODO: only for TeX 
+        [(list 'vecfun u v) (~a "\\overrightarrow{" (v~ u) "}" "(" (v~ v) ")" )] ; TODO: only for TeX 
         [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
         [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
         [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
@@ -924,12 +925,13 @@
       [(list 'root u v) ((output-format-root) u v)] ; unnormalized root
       [(list 'percent u) (~a (v~ u) (~sym '|%|))]
 
-      [(list 'abs u) ((output-format-abs) u)] 
-      [(list 'vec u) (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
-      [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
-      [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
-      [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
-      [(list 'where u v) (~a (v~ u) " | " (v~ v))]        ; TODO: only for TeX
+      [(list 'abs u)      ((output-format-abs) u)] 
+      [(list 'vec u)      (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
+      [(list 'vecfun u v) (~a "\\overrightarrow{" (v~ u) "}" "(" (v~ v) ")" )]
+      [(list 'deg u)      (~a (v~ u) "° ")]                    ; TODO: only for TeX 
+      [(list 'hat u)      (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
+      [(list 'bar u)      (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
+      [(list 'where u v)  (~a (v~ u) " | " (v~ v))]        ; TODO: only for TeX
 
       [(list 'int u v)   (~a "\\int " (v~ u) "\\ \\textrm{d}" (v~ v))] ; TODO: only for TeX
       
