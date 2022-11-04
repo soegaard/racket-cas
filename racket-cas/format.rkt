@@ -652,6 +652,9 @@
         [(list 'diff (list 'sqrt u) x)
          #:when (member x (output-differentiation-mark))
          (~a "(" ((output-format-sqrt) u) ")'")]
+        [(list 'diff (list 'vecfun u) x)
+         #:when (member x (output-differentiation-mark))
+         (~a "\\vec{" (v~ u) "}^{\\prime}" "(" (v~ x) ")" )]
         [(list 'diff f)
          #:when (symbol? f)                              (~a (~sym f) "'")]
         [(list 'diff (list f x) x)
@@ -902,6 +905,9 @@
        (~a "(" ((output-format-sqrt) u) ")'")]      
       [(list 'diff f)
        #:when (symbol? f)                     (~a (~sym f) "'")]
+      [(list 'diff (list 'vecfun u x))
+       #:when (member x (output-differentiation-mark))
+       (~a "\\vec{" (v~ u) "}^{\\prime}" "(" (v~ x) ")" )]
       [(list 'diff (list f x) x)
        #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (~var x) ")")]
       [(list 'diff u x)
