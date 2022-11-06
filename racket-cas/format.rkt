@@ -886,10 +886,11 @@
                                                      ((output-sub-exponent-wrapper)
                                                       (par w1 #:use exponent-sub
                                                               #:wrap-fractions? #t))))]
-      [(Expt u v)  (~a (par u #:exponent-base? #t) (~sym '^) (fluid-let ([original? #t])
-                                           ((output-sub-exponent-wrapper)
-                                            (par v #:use exponent-sub
-                                                 #:wrap-fractions? #t))))]
+      [(Expt u v)  (~a (par u #:exponent-base? #t #:wrap-fractions? #t) (~sym '^)
+                       (fluid-let ([original? #t])
+                                  ((output-sub-exponent-wrapper)
+                                   (par v #:use exponent-sub
+                                        #:wrap-fractions? #t))))]
       [(App u  v)   (match u
                       [(? symbol? f)             (~a          f     "(" (v~ v) ")")]
                       [(list 'vec (? symbol? f)) (~a "\\vec{" f "}" "(" (v~ v) ")")]
@@ -1108,4 +1109,5 @@
                   (~ '(expt (/ a b) -2))) "(a/b)^(-2)")
   (check-equal? (~ '(expt (* (expt a 2) (expt b 3)) 4))
                 "(a^2*b^3)^4")
+  (check-equal? (~ '(expt 1/2 2)) "(1/2)^2")
   )
