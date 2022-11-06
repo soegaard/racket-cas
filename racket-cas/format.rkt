@@ -490,7 +490,7 @@
   (define (~explicit-paren strs)
     (case (output-mode)
       [(tex) (~a "{\\left(" (string-append* (add-between strs ",")) "\\right)}")]
-      [else  (~a        "(" (string-append* (add-between strs ",")) ")")]))
+      [else  (~a        "(" (string-append* (add-between strs ",")) ")")]))  
   (define (v~ u [original? #f])
     ; (displayln (list 'v~ u 'orig original?))
     (define ~frac (output-fraction))
@@ -512,7 +512,9 @@
     (define (exponent-sub u) ; wraps the exponent of an expt-expression
       (exponent-wrap (v~ u #t)))
     (define (base-sub u) ; wraps the base of an expt-expression
-      (if (and (number? u) (negative? u))
+      (define (non-integer-fraction? u)
+        (and (number? u) (exact? u) (> (denominator u) 1)))
+      (if (and (number? u) (or (negative? u) (non-integer-fraction? u)))
           ; we only need to add real parens, if expt-left aren't (
           (if (equal? expt-left "(")
               (~a expt-left (v~ u) expt-right)
@@ -584,7 +586,8 @@
         [(list 'purple u) (~purple (par u))]           ; purpe color
         [(list 'paren u ...) (~explicit-paren (map v~ u))] ; explicit parens (tex)
         [α    #:when (and wrap-fractions? (not (integer? α))) (wrap (~frac α))] ; XXX
-        [α    #:when (not (integer? α)) (~frac α)] ; XXX
+        [α    #:when (and (not (integer? α)) exponent-base?)  (wrap (~frac α))] ; XXX
+        [α    #:when (not (integer? α))                             (~frac α)] ; XXX
         [r    #:when (>= r 0)           (~num r)]
         [r.bf #:when (bf>= r.bf (bf 0)) (~a r.bf)]
         [x                              (~a (~var x))]
@@ -621,14 +624,14 @@
         [(Expt u p)   (if (and (negative? p) (output-format-negative-exponent))
                           ; note: LaTeX needs to wrap the base in {} if u is an exponent
                           (~a ((output-sub-exponent-wrapper) (par u)) "^" (exponent-wrap p)) 
-                          (~a (par u #:use base-sub)
+                          (~a (par u #:use base-sub #:exponent-base? #t)
                               (~sym '^) ((output-sub-exponent-wrapper)
                                          (fluid-let ([original? #t])
                                                     (par p #:use exponent-sub)))))]
         [(Expt u α)   #:when (= (numerator α) -1) ; -1/p
                         (define format/  (or (output-format-quotient) (λ (u v) (~a u "/" v))))
                         (format/ 1 (par (Root u (/ 1 (- α))) #:use quotient-sub))]
-        [(Expt u v)   (~a (par u #:use base-sub)
+        [(Expt u v)   (~a (par u #:use base-sub #:exponent-base? #t)
                           (~sym '^) ((output-sub-exponent-wrapper)
                                      (fluid-let ([original? #t])
                                         (par v #:use exponent-sub #:wrap-fractions? #t))))]
@@ -801,7 +804,7 @@
                       ;(displayln (list 'X2 r u v (argcons '* u v) (fluid-let ([original? #t]) (v~ (argcons '* u v) #t))))
                       (~a    (~num (abs r))  (implicit* r u) (fluid-let ([original? #t]) (v~ (argcons '* u v) #t)))] ; XXX
       [(⊗ r v)        #:when (negative? r)
-                      ;(displayln 'X3)
+                      ; (displayln 'X3)
                       (define w (if original? values paren))
                       (~a  (w (~a "-" (~num (abs r)))) (implicit* r v) (par v #:use paren))] ; XXX
       [(⊗ r v)        #:when (positive? r)
@@ -809,7 +812,7 @@
                       (~a     (~num r) (implicit* r v) (par v #:use paren))] ; XXX
       
       [(⊗ u v)  #:when (not (equal? '(*) v))
-                ;(displayln (list 'X5 u v (par u) (fluid-let ([original? #t]) (par v))))
+                ; (displayln (list 'X5 u v (par u) (fluid-let ([original? #t]) (par v))))
                 (~a (par u) (implicit* u v) (fluid-let ([original? #t]) (par v)))]
       ; plus
       [(⊕ u r)              (if (negative? r)
@@ -885,7 +888,7 @@
                                          (~sym '^) (fluid-let ([original? #t])
                                                      ((output-sub-exponent-wrapper)
                                                       (par w1 #:use exponent-sub
-                                                              #:wrap-fractions? #t))))]
+                                                           #:wrap-fractions? #t))))]
       [(Expt u v)  (~a (par u #:exponent-base? #t #:wrap-fractions? #t) (~sym '^)
                        (fluid-let ([original? #t])
                                   ((output-sub-exponent-wrapper)
@@ -1110,4 +1113,6 @@
   (check-equal? (~ '(expt (* (expt a 2) (expt b 3)) 4))
                 "(a^2*b^3)^4")
   (check-equal? (~ '(expt 1/2 2)) "(1/2)^2")
+  (check-equal? (~ '(* 3 (expt 1/2 2))) "3*(1/2)^2")
+
   )
