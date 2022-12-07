@@ -6,6 +6,7 @@
          (for-syntax racket/base racket/syntax syntax/parse)
          "core.rkt" "math-match.rkt" "normalize.rkt" "up-ref.rkt" "compose-app.rkt"
          "logical-operators.rkt" "relational-operators.rkt" "expand.rkt" "trig.rkt"
+         "parameters.rkt"
          (prefix-in % "bfracket.rkt"))
 
 (module+ test
@@ -333,7 +334,7 @@
                  (output-sub-exponent-parens  (list "{" "}"))
                  (output-sub-exponent-wrapper (λ (s) (~a "{" s "}")))
                  ; (output-format-negative-exponent #f) ; omitted on purpose
-                 (output-implicit-product?    #t)
+                 (output-implicit-product?    (default-output-implicit-product?)) ; #t
                  (output-relational-operator  ~relop)
                  (output-variable-name        tex-output-variable-name)
                  (output-format-log           tex-output-log)
@@ -665,6 +666,8 @@
         [(list 'diff (list f x) x u) ; f'(x)|x=x0 i.e.  f'(x0)
          #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (v~ u) ")")]
         [(list 'diff u x)
+         #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "' ")]
+        [(list 'diff u x)
          #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
         [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
 
@@ -692,7 +695,7 @@
                   [(list 'red    u) (~red    (t1~ u))]
                   [(list 'blue   u) (~blue   (t1~ u))]           ; blue color
                   [(list 'green  u) (~green  (t1~ u))]
-                  [(list 'pruple u) (~purple (t1~ u))]  
+                  [(list 'purple u) (~purple (t1~ u))]  
                   [(list 'paren u ...) (~explicit-paren (map t1~ u))] ; explicit parens (tex)
 
                   ; unnormalized and normalized quotients
@@ -797,7 +800,10 @@
       [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a                    (~num (abs r))   implicit-mult (v~ v #t))]
       ; Implicit multiplication between numbers and variables
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
+      ; Implicit multiplication between numbers and vectors
+      [(⊗ r (Up u v))  (~a (~num r) ((output-format-up)  u v))]
 
+      
       ; Use explicit multiplication for fractions
       [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v)))
                       ;(displayln 'X1)
@@ -918,6 +924,8 @@
        #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (~var x) ")")]
       [(list 'diff (list f x) x u) ; f'(x)|x=u i.e.  f'(u)
        #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (v~ u) ")")]
+      [(list 'diff u x)
+       #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "' ")]
       [(list 'diff u x)
        #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
       [(list 'diff u  x)                      (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
@@ -1118,5 +1126,5 @@
                 "(a^2*b^3)^4")
   (check-equal? (~ '(expt 1/2 2)) "(1/2)^2")
   (check-equal? (~ '(* 3 (expt 1/2 2))) "3*(1/2)^2")
-
+  (check-equal? (tex '(* 2 (up 3 4))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}$")
   )
