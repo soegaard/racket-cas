@@ -545,6 +545,7 @@
                 [(list 'vec u1 u2 ...) implicit-mult]  
                 [(list 'sqrt u1)       implicit-mult]
                 [(list 'sqr u1)        implicit-mult]
+                [(list 'up _ ...)      implicit-mult]
                 [_                   (~sym '*)])]
            ; first factor is a symbol
            [x (define s (~a x))
@@ -562,6 +563,7 @@
                     [(list 'vec u1 u2 ...) implicit-mult]  
                     [(list 'sqrt u1)       implicit-mult]
                     [(list 'sqr  u1)       implicit-mult]
+                    [(list 'up _ ...)      implicit-mult]
                     [_                   (~sym '*)])
                   ; other variables uses explicit
                   (~sym '*))]
@@ -800,9 +802,6 @@
       [(⊗ r (and (Expt (var: x) u) v)) #:when (positive? r) (~a                    (~num (abs r))   implicit-mult (v~ v #t))]
       ; Implicit multiplication between numbers and variables
       [(⊗ r x)  (~a (~num r) (~var x))] ; XXXX
-      ; Implicit multiplication between numbers and vectors
-      [(⊗ r (Up u v))  (~a (~num r) ((output-format-up)  u v))]
-
       
       ; Use explicit multiplication for fractions
       [(⊗ r (⊗ u v))  #:when (and (negative? r) (not (equal? '(*) v)))
@@ -1126,5 +1125,7 @@
                 "(a^2*b^3)^4")
   (check-equal? (~ '(expt 1/2 2)) "(1/2)^2")
   (check-equal? (~ '(* 3 (expt 1/2 2))) "3*(1/2)^2")
+  ; implict multiplaction between numbers and vectors
   (check-equal? (tex '(* 2 (up 3 4))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}$")
+  (check-equal? (tex '(+ (* 2 (up 3 4)) (vec b))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\overrightarrow{b}$")
   )
