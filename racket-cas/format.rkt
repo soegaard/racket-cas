@@ -947,8 +947,8 @@
       [(list 'percent u) (~a (v~ u) (~sym '|%|))]
 
       [(list 'abs u)      ((output-format-abs) u)] 
-      [(list 'vec u)      (~a "\\overrightarrow{" (v~ u) "}")] ; TODO: only for TeX 
-      [(list 'vecfun u v) (~a "\\overrightarrow{" (v~ u) "}" "(" (v~ v) ")" )]
+      [(list 'vec u)      (~a "\\overrightarrow{" (~a u) "}")] ; TODO: only for TeX, Note vector AB needs italic 
+      [(list 'vecfun u v) (~a "\\overrightarrow{" (~a u) "}" "(" (v~ v) ")" )]
       [(list 'deg u)      (~a (v~ u) "° ")]                    ; TODO: only for TeX 
       [(list 'hat u)      (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'bar u)      (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
