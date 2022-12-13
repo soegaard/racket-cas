@@ -678,7 +678,7 @@
         [(list 'vec u)      (~a "\\overrightarrow{" (v~ u) "}")]               ; TODO: only for TeX 
         [(list 'vecfun u v) (~a "\\overrightarrow{" (v~ u) "}" "(" (v~ v) ")" )] ; TODO: only for TeX 
         [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
-        [(list 'hat u) (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX 
+        [(list 'hat u) (~a "\\widehat{" (v~ u) "}")]            ; TODO: only for TeX 
         [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
         [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
         [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
@@ -950,7 +950,7 @@
       [(list 'vec u)      (~a "\\overrightarrow{" (~a u) "}")] ; TODO: only for TeX, Note vector AB needs italic 
       [(list 'vecfun u v) (~a "\\overrightarrow{" (~a u) "}" "(" (v~ v) ")" )]
       [(list 'deg u)      (~a (v~ u) "° ")]                    ; TODO: only for TeX 
-      [(list 'hat u)      (~a "\\hat{" (v~ u) "}")]            ; TODO: only for TeX
+      [(list 'hat u)      (~a "\\widehat{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'bar u)      (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'where u v)  (~a (v~ u) " | " (v~ v))]        ; TODO: only for TeX
 
