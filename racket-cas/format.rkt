@@ -107,7 +107,9 @@
   (parameterize ([output-wrapper values])
     (define x (verbose~ u))
     (define y (verbose~ v))
-    (~a "\\begin{pmatrix} " x "\\\\" y "\\end{pmatrix}")))
+    (if (output-brackets-for-up?)
+        (~a "\\begin{bmatrix} " x "\\\\" y "\\end{bmatrix}")
+        (~a "\\begin{pmatrix} " x "\\\\" y "\\end{pmatrix}"))))
 
 
 ;;; Intervals
@@ -181,6 +183,7 @@
 (define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
 (define output-fraction                  (make-parameter default-output-fraction))
 (define output-interval                  (make-parameter default-output-interval))
+(define output-brackets-for-up?          (make-parameter #f)) ; NSpire uses brackets
 
 (define (use-mma-output-style)
   (output-mode 'mma)
@@ -578,9 +581,11 @@
           (~a "-" s)))
              
     (define (par u
-                 #:use             [wrap paren]
-                 #:wrap-fractions? [wrap-fractions? #f]
-                 #:exponent-base?  [exponent-base? #f]) ; wrap if (locally) necessary
+                 #:use                [wrap paren]
+                 #:wrap-fractions?    [wrap-fractions? #f]
+                 #:exponent-base?     [exponent-base? #f]
+                 #:exponent-exponent? [exponent-exponent? #f]
+                 ) ; wrap if (locally) necessary
       (when debugging? (displayln (list 'par u 'orig original? 'exponent-base exponent-base?)))
       (math-match u
         [(list 'red    u) (~red    (par u))]           ; red   color
@@ -602,11 +607,13 @@
                                           (if (eqv? (string-ref s 0) #\-) (wrap s) (exponent-wrap s)))] ; XX
         [(⊗ -1 v)                       (exponent-wrap        (~a "(-"        (v~ v #t) ")"))]
 
-        [(⊗ u v) #:when exponent-base?   (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
-        [(⊗ r u) #:when (positive? r)   (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX YY
-        [(⊗ u v) #:when original?         (let ([s (~a (par u)  (implicit* u v) (par v))])
-                                           s)] ; XXX
-        [(⊗ u v)                       (~a (par u) (implicit* u v) (par v))] ; YYY
+        [(⊗ u v) #:when exponent-base?  (exponent-wrap (paren (~a (par u) (~sym '*) (par v))))] ; TODO XXX ~ two layers
+        [(⊗ r u) #:when (positive? r)   (let ([s (~a    (~num (abs r)) (implicit* r u) (par u))])
+                                          (if exponent-exponent? (exponent-wrap s) s))] ; XXX YY
+        [(⊗ u v) #:when original?       (let ([s (~a (par u)  (implicit* u v) (par v))])
+                                          (if exponent-exponent? (wrap s) s))] ; XXX
+        [(⊗ u v)                        (let ([s (~a (par u) (implicit* u v) (par v))])
+                                          (if exponent-exponent? (wrap s) s))] ; YYY
         [(⊕ _ __)    (wrap u)]
         [(list* '- _ __) (wrap u)]
         [(And u v)   (~a (par u) " " (~sym 'and) " " (par v))]
@@ -899,7 +906,7 @@
       [(Expt u v)  (~a (par u #:exponent-base? #t #:wrap-fractions? #t) (~sym '^)
                        (fluid-let ([original? #t])
                                   ((output-sub-exponent-wrapper)
-                                   (par v #:use exponent-sub
+                                   (par v #:use exponent-sub #:exponent-exponent? #t
                                         #:wrap-fractions? #t))))]
       [(App u  v)   (match u
                       [(? symbol? f)             (~a          f     "(" (v~ v) ")")]
@@ -1096,6 +1103,7 @@
   (check-equal? (~ '(+ (* -3 (- x -2)) -4)) "-3*(x-(-2))-4")
   (check-equal? (~ '(+ (*  3 (- x -2)) -4)) "3*(x-(-2))-4")
   (check-equal? (~ '(+ (*  3 (- x 2)) -4)) "3*(x-2)-4")
+  (check-equal? (~ '(expt @e (* 2 x))) "e^(2*x)")
   (check-equal? (~ `(+ (expt 2 3) (* 5 2) -3)) "2^3+5*2-3")
   (check-equal? (~ '(+ (expt -1 2) (* 3 -1) -2)) "(-1)^2+3*(-1)-2")
   (check-equal? (~ '(+ 1 -2 3)) "1-2+3")
@@ -1128,4 +1136,5 @@
   ; implict multiplaction between numbers and vectors
   (check-equal? (tex '(* 2 (up 3 4))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}$")
   (check-equal? (tex '(+ (* 2 (up 3 4)) (vec b))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\overrightarrow{b}$")
+  
   )
