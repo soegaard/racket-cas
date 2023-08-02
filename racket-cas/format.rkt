@@ -887,6 +887,8 @@
       [(list  '= v) (~a (~sym '=) (v~ v))]
       [(list* '= us) ; handle illegal = with multiple terms
        (string-append* (add-between (map (λ (u) (v~ u #t)) us) (~a " " (~relop '=) " ")))]
+      [(list '⇔ u) ; handle ⇔ with single term (i.e. line that begins with ⇔
+       (~a "\\ \\  \\Leftrightarrow \\ \\ " (v~ u #t))]
       [(list* '⇔ us) ; handle ⇔ with multiple terms
        (string-append* (add-between (map (λ (u) (v~ u #t)) us) "\\ \\  \\Leftrightarrow \\ \\ "))]
       [(list  '~ v)      (~a (~sym '~) (v~ v))]
@@ -1093,7 +1095,11 @@
   (check-equal? (tex '(expt (/ a b) 5))
                 "${(\\frac{a}{b})}^{5}$")
   (check-equal? (tex '(expt 2 1))
-                "$2^{1}$")
+                "$2^{1}$")  
+  (check-equal? (tex '(⇔ u)) ; single argument => start line with ⇔
+                "$\\ \\  \\Leftrightarrow \\ \\ u$")
+  (check-equal? (tex '(⇔ u v))
+                "$u\\ \\  \\Leftrightarrow \\ \\ v$")
   
 
   ; --- Default
