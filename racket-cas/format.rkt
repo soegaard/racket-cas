@@ -673,7 +673,7 @@
         [(list 'diff (list f x) x)
          #:when (and (symbol? f) (symbol? x))            (~a (~sym f) "'(" (~var x) ")")]
         [(list 'diff (list f x) x u) ; f'(x)|x=x0 i.e.  f'(x0)
-         #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (v~ u) ")")]
+         #:when (and (symbol? f) (member x (output-differentiation-mark)))   (~a (~sym f) "'(" (v~ u) ")")]
         [(list 'diff u x)
          #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "' ")]
         [(list 'diff u x)
@@ -939,8 +939,9 @@
        (~a "\\vec{" (v~ u) "}^{\\prime}" "(" (v~ x) ")" )]
       [(list 'diff (list f x) x)
        #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (~var x) ")")]
+
       [(list 'diff (list f x) x u) ; f'(x)|x=u i.e.  f'(u)
-       #:when (and (symbol? f) (symbol? x))   (~a (~sym f) "'(" (v~ u) ")")]
+       #:when (and (symbol? f) (member x (output-differentiation-mark)))   (~a (~sym f) "'(" (v~ u) ")")]
       [(list 'diff u x)
        #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "' ")]
       [(list 'diff u x)
@@ -972,15 +973,15 @@
       [(list 'bar u)      (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX
       [(list 'where u v)  (~a (v~ u) " | " (v~ v))]        ; TODO: only for TeX
 
-        [(list 'int u v)   (cond
-                             [(or (and (number? u) (negative? u))
-                                  (match u
-                                    [(list '* u0 ...) (and (number? u0) (negative? u0))]
-                                    [(list (or '+ '-) _ ...)  #t]
-                                    [_ #f]))
-                              (~a "\\int " (v~ `(paren ,u)) "\\ \\textrm{d}" (v~ v))]
-                             [else
-                              (~a "\\int " (v~ u) "\\ \\textrm{d}" (v~ v))])] ; TODO: only for TeX
+      [(list 'int u v)   (cond
+                           [(or (and (number? u) (negative? u))
+                                (match u
+                                  [(list '* u0 ...) (and (number? u0) (negative? u0))]
+                                  [(list (or '+ '-) _ ...)  #t]
+                                  [_ #f]))
+                            (~a "\\int " (v~ `(paren ,u)) "\\ \\textrm{d}" (v~ v))]
+                           [else
+                            (~a "\\int " (v~ u) "\\ \\textrm{d}" (v~ v))])] ; TODO: only for TeX
       
       [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
       [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
