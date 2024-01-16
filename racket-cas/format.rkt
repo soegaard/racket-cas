@@ -178,6 +178,7 @@
 (define output-terms-descending?         (make-parameter #f)) ; reverse terms before outputting?
 (define output-implicit-product?         (make-parameter #f)) ; useful for TeX
 (define output-relational-operator       (make-parameter ~a)) ; useful for TeX
+(define output-set-operator              (make-parameter ~a)) ; useful for TeX
 (define output-floating-point-precision  (make-parameter 4))  ; 
 (define output-variable-name             (make-parameter default-output-variable-name)) ; also handles @e, @pi and @i
 (define output-differentiation-mark      (make-parameter '(x))) ; use (u)' rather than d/dx(u) for variables in this list
@@ -204,6 +205,7 @@
   (output-format-negative-exponent #f)
   (output-implicit-product? #f)
   (output-relational-operator ~a)
+  (output-set-operator ~a)
   (output-variable-name mma-output-variable-name)
   (output-fraction mma-output-fraction))
 
@@ -227,6 +229,7 @@
   (output-format-up  default-output-up)
   (output-implicit-product? #f)
   (output-relational-operator ~a)
+  (output-set-operator ~a)
   (output-variable-name default-output-variable-name)
   (output-fraction default-output-fraction))
 
@@ -244,6 +247,12 @@
       ['LessEqual    "≤ "]
       ['Greater      "> "]
       ['GreaterEqual "≥ "]
+      [_    (~a u)]))
+  (define (~setop u)
+    (match u
+      ['Union        "\\cup "]
+      ['Intersection "\\cap "]
+      ['Difference   "\\setminus "]      
       [_    (~a u)]))
   (define (~symbol s) 
     (match s
@@ -285,6 +294,7 @@
   (output-format-negative-exponent #f)
   (output-implicit-product? #t)
   (output-relational-operator ~relop)
+  (output-set-operator ~setop)
   (output-variable-name tex-output-variable-name)
   (output-fraction tex-output-fraction)
   (output-interval tex-output-interval))
@@ -303,6 +313,12 @@
       ['LessEqual    "≤ "]
       ['Greater      "> "]
       ['GreaterEqual "≥ "]
+      [_    (~a u)]))
+  (define (~setop u)
+    (match u
+      ['Union        "\\cup "]
+      ['Intersection "\\cap "]
+      ['Difference   "\\setminus "]      
       [_    (~a u)]))
   (define (~symbol s)
     (match s
@@ -339,6 +355,7 @@
                  ; (output-format-negative-exponent #f) ; omitted on purpose
                  (output-implicit-product?    (default-output-implicit-product?)) ; #t
                  (output-relational-operator  ~relop)
+                 (output-set-operator         ~setop)
                  (output-variable-name        tex-output-variable-name)
                  (output-format-log           tex-output-log)
                  (output-format-up            tex-output-up)
@@ -487,6 +504,7 @@
   (define ~sym (let ([sym (output-format-function-symbol)]) (λ (x) (sym x)))) ; function names
   (define ~var (let ([out (output-variable-name)]) (λ(x) (out x)))) ; variable names
   (define (~relop x) ((output-relational-operator) x))
+  (define (~setop x) ((output-set-operator) x))
   (define (~red str)    (~a "{\\color{red}"    str "\\color{black}}"))
   (define (~blue str)   (~a "{\\color{blue}"   str "\\color{black}}"))
   (define (~green str)  (~a "{\\color{green}"  str "\\color{black}}"))
@@ -919,6 +937,11 @@
                                   ((output-sub-exponent-wrapper)
                                    (par v #:use exponent-sub #:exponent-exponent? #t
                                         #:wrap-fractions? #t))))]
+      ;; Set operations
+      [(list 'Union        u v) (~a "{{" (v~ u) "}" (~setop 'Union)        "{" (v~ v) "}}")]
+      [(list 'Intersection u v) (~a "{{" (v~ u) "}" (~setop 'Intersection) "{" (v~ v) "}}")]
+      [(list 'Difference   u v) (~a "{{" (v~ u) "}" (~setop 'Difference)   "{" (v~ v) "}}")]
+
       [(App u  v)   (match u
                       [(? symbol? f)             (~a          f     "(" (v~ v) ")")]
                       [(list 'vec (? symbol? f)) (~a "\\vec{" f "}" "(" (v~ v) ")")]
