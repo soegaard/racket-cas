@@ -707,6 +707,10 @@
         [(list 'bar u) (~a "\\bar{" (v~ u) "}")]            ; TODO: only for TeX 
         [(list* 'braces  us) (apply ~a (append (list "\\{") (add-between (map v~ us) ",") (list "\\}")))] ; TODO: only for TeX 
         [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
+        ;; Set operations
+        [(list 'Union        u v) (~a "{{" (v~ u) "}" (~setop 'Union)        "{" (v~ v) "}}")]
+        [(list 'Intersection u v) (~a "{{" (v~ u) "}" (~setop 'Intersection) "{" (v~ v) "}}")]
+        [(list 'Difference   u v) (~a "{{" (v~ u) "}" (~setop 'Difference)   "{" (v~ v) "}}")]
 
         [(list 'int u v)   (cond
                              [(or (and (number? u) (negative? u))
@@ -761,6 +765,10 @@
                   
                   [(⊗  r u) #:when (negative? r)  (~a (~sym '-) (~num (abs r)) (implicit* r u) (par u))] ; XXX
                   [(⊗  r u) #:when (positive? r)  (~a           (~num (abs r)) (implicit* r u) (par u))] ; XXX
+                  ;; Set operations
+                  [(list 'Union        u v) (~a "{{" (v~ u) "}" (~setop 'Union)        "{" (v~ v) "}}")]
+                  [(list 'Intersection u v) (~a "{{" (v~ u) "}" (~setop 'Intersection) "{" (v~ v) "}}")]
+                  [(list 'Difference   u v) (~a "{{" (v~ u) "}" (~setop 'Difference)   "{" (v~ v) "}}")]
                   [u                                                           (v~ u) ]))
     (when debugging? (write (list 'v~ u 'orig original?)) (newline))
     (math-match u
