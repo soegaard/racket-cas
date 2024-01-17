@@ -711,6 +711,7 @@
         [(list 'Union        u v) (~a "{{" (v~ u) "}" (~setop 'Union)        "{" (v~ v) "}}")]
         [(list 'Intersection u v) (~a "{{" (v~ u) "}" (~setop 'Intersection) "{" (v~ v) "}}")]
         [(list 'Difference   u v) (~a "{{" (v~ u) "}" (~setop 'Difference)   "{" (v~ v) "}}")]
+        [(list 'Conditional  u v) (~a "{{" (v~ u) "}|{" (v~ v) "}}")] ; conditional prob. as in P(A|B)
 
         [(list 'int u v)   (cond
                              [(or (and (number? u) (negative? u))
@@ -769,6 +770,7 @@
                   [(list 'Union        u v) (~a "{{" (v~ u) "}" (~setop 'Union)        "{" (v~ v) "}}")]
                   [(list 'Intersection u v) (~a "{{" (v~ u) "}" (~setop 'Intersection) "{" (v~ v) "}}")]
                   [(list 'Difference   u v) (~a "{{" (v~ u) "}" (~setop 'Difference)   "{" (v~ v) "}}")]
+                  [(list 'Conditional  u v) (~a "{{" (v~ u) "}|{" (v~ v) "}}")] ; conditional prob. as in P(A|B)
                   [u                                                           (v~ u) ]))
     (when debugging? (write (list 'v~ u 'orig original?)) (newline))
     (math-match u
@@ -949,6 +951,7 @@
       [(list 'Union        u v) (~a "{{" (v~ u) "}" (~setop 'Union)        "{" (v~ v) "}}")]
       [(list 'Intersection u v) (~a "{{" (v~ u) "}" (~setop 'Intersection) "{" (v~ v) "}}")]
       [(list 'Difference   u v) (~a "{{" (v~ u) "}" (~setop 'Difference)   "{" (v~ v) "}}")]
+      [(list 'Conditional  u v) (~a "{{" (v~ u) "}|{" (v~ v) "}}")] ; conditional prob. as in P(A|B)
 
       [(App u  v)   (match u
                       [(? symbol? f)             (~a          f     "(" (v~ v) ")")]
