@@ -700,7 +700,10 @@
 
         [(list 'percent u) (~a (v~ u) (~sym '|%|))]
         [(list 'abs u) ((output-format-abs) u)] 
-        [(list 'vec u)      (~a "\\overrightarrow{" (v~ u) "}")]               ; TODO: only for TeX 
+        [(list 'vec u) (let ([s (v~ u)])
+                         (if (= (string-length s) 1)
+                             (~a "\\vec{" s "}")
+                             (~a "\\overrightarrow{" s "}")))]                   ; TODO: only for TeX 
         [(list 'vecfun u v) (~a "\\overrightarrow{" (v~ u) "}" "(" (v~ v) ")" )] ; TODO: only for TeX 
         [(list 'deg u) (~a (v~ u) "° ")]                    ; TODO: only for TeX 
         [(list 'hat u) (~a "\\widehat{" (v~ u) "}")]            ; TODO: only for TeX 
@@ -1000,7 +1003,10 @@
       [(list 'percent u) (~a (v~ u) (~sym '|%|))]
 
       [(list 'abs u)      ((output-format-abs) u)] 
-      [(list 'vec u)      (~a "\\overrightarrow{" (~a u) "}")] ; TODO: only for TeX, Note vector AB needs italic 
+      [(list 'vec u)      (let ([s (~a u)])
+                            (if (= (string-length s) 1)
+                                (~a "\\vec{" s "}")
+                                (~a "\\overrightarrow{" s "}")))] ; TODO: only for TeX, Note vector AB needs italic 
       [(list 'vecfun u v) (~a "\\overrightarrow{" (~a u) "}" "(" (v~ v) ")" )]
       [(list 'deg u)      (~a (v~ u) "° ")]                    ; TODO: only for TeX 
       [(list 'hat u)      (~a "\\widehat{" (v~ u) "}")]            ; TODO: only for TeX
@@ -1021,7 +1027,7 @@
       [(list* 'bracket us) (apply ~a (append (list   "[") (add-between (map v~ us) ",") (list "]")))] ; TODO: only for TeX 
 
       [(list (or 'ccinterval 'ocinterval 'cointerval 'oointerval ) v1 v2)
-             ((output-interval) u)]
+       ((output-interval) u)]
 
       [(app: f us) #:when (memq f '(< > ≤ ≥ <= >= Less LessEqual Greater GreaterEqual))
                    (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
@@ -1193,6 +1199,6 @@
   (check-equal? (~ '(* 3 (expt 1/2 2))) "3*(1/2)^2")
   ; implict multiplaction between numbers and vectors
   (check-equal? (tex '(* 2 (up 3 4))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}$")
-  (check-equal? (tex '(+ (* 2 (up 3 4)) (vec b))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\overrightarrow{b}$")
-  
+  (check-equal? (tex '(+ (* 2 (up 3 4)) (vec b))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\vec{b}$")
+  (check-equal? (tex '(+ (* 2 (up 3 4)) (vec AB))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\overrightarrow{AB}$")
   )
