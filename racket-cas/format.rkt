@@ -727,11 +727,15 @@
                               (~a "\\int " (v~ u) "\\ \\textrm{d}" (v~ v))])] ; TODO: only for TeX
 
         ; applications
-        [(app: f us) (let ()
-                       (define arguments
-                         (string-append* (add-between (map v~ us) ",")))
-                       (define head ((output-format-function-symbol) f))
-                       (~a head app-left arguments app-right))]
+        [(app: f us) (match us
+                       [(list (list 'paren us ...)) 
+                        (define arguments (apply string-append (add-between (map v~ us) ",")))
+                        (define head      ((output-format-function-symbol) f))
+                        (~a head "\\left"app-left arguments "\\right" app-right)]
+                       [_
+                        (define arguments (apply string-append (add-between (map v~ us) ",")))
+                        (define head ((output-format-function-symbol) f))
+                        (~a head app-left arguments app-right)])]
         [_  (wrap u)]))
     (define (t1~ u) ; term 1 aka first term in a sum
       (when debugging? (displayln (list 't1 u)))
@@ -1031,11 +1035,15 @@
 
       [(app: f us) #:when (memq f '(< > ≤ ≥ <= >= Less LessEqual Greater GreaterEqual))
                    (match us [(list u v) (~a (v~ u) (~relop f) (v~ v))])]
-      [(app: f us) (let ()
-                     (define arguments
-                       (apply string-append (add-between (map v~ us) ",")))
-                     (define head ((output-format-function-symbol) f))
-                     (~a head app-left arguments app-right))]
+      [(app: f us) (match us
+                     [(list (list 'paren us ...)) 
+                      (define arguments (apply string-append (add-between (map v~ us) ",")))
+                      (define head      ((output-format-function-symbol) f))
+                      (~a head "\\left"app-left arguments "\\right" app-right)]
+                     [_
+                      (define arguments (apply string-append (add-between (map v~ us) ",")))
+                      (define head ((output-format-function-symbol) f))
+                      (~a head app-left arguments app-right)])]
       [_ (display u)
          (error 'verbose~ (~a "internal error, got: " u))]))
 
@@ -1201,4 +1209,6 @@
   (check-equal? (tex '(* 2 (up 3 4))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}$")
   (check-equal? (tex '(+ (* 2 (up 3 4)) (vec b))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\vec{b}$")
   (check-equal? (tex '(+ (* 2 (up 3 4)) (vec AB))) "$2\\begin{pmatrix} 3\\\\4\\end{pmatrix}+\\overrightarrow{AB}$")
+  ; explicit paren in a function application means parens using \left and \right
+  (check-equal? (tex '(f (paren x y))) "$f\\left(x,y\\right)$")
   )
