@@ -107,10 +107,15 @@
   (parameterize ([output-wrapper values])
     (define x (verbose~ u))
     (define y (verbose~ v))
+    (when (and (= (string-length x) (+ (string-length y) 1))
+               (eqv? (string-ref x 0) #\-))
+      (set! y (~a "\\phantom{-}" y)))
+    (when (and (= (string-length y) (+ (string-length x) 1))
+               (eqv? (string-ref y 0) #\-))
+      (set! x (~a "\\phantom{-}" x)))    
     (if (output-brackets-for-up?)
         (~a "\\begin{bmatrix} " x "\\\\" y "\\end{bmatrix}")
         (~a "\\begin{pmatrix} " x "\\\\" y "\\end{pmatrix}"))))
-
 
 ;;; Intervals
 (define (default-output-interval u)
