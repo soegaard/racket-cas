@@ -694,11 +694,13 @@
         [(list 'diff f)
          #:when (symbol? f)                              (~a (~sym f) "'")]
         [(list 'diff (list f x) x)
-         #:when (and (symbol? f) (symbol? x))            (~a (~sym f) "'(" (~var x) ")")]
+         #:when (and (symbol? f) (symbol? x)) (if (member x (output-differentiation-mark))
+                                                  (~a (~sym f) "'(" (~var x) ")")
+                                                  (~a "\\dv{" (~var x) "}(" (v~ (list f x) #t) ") "))]
         [(list 'diff (list f x) x u) ; f'(x)|x=x0 i.e.  f'(x0)
          #:when (and (symbol? f) (member x (output-differentiation-mark)))   (~a (~sym f) "'(" (v~ u) ")")]
         [(list 'diff u x)
-         #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "' ")]
+         #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "'")] ; XXX was "' "
         [(list 'diff u x)
          #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
         [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
@@ -989,7 +991,7 @@
       [(list 'diff (list f x) x u) ; f'(x)|x=u i.e.  f'(u)
        #:when (and (symbol? f) (member x (output-differentiation-mark)))   (~a (~sym f) "'(" (v~ u) ")")]
       [(list 'diff u x)
-       #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "' ")]
+       #:when (and (symbol? u) (member x (output-differentiation-mark))) (~a (v~ u #t) "'")]
       [(list 'diff u x)
        #:when (member x (output-differentiation-mark)) (~a "(" (v~ u #t) ")' ")]
       [(list 'diff u  x)                      (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
