@@ -706,8 +706,8 @@
         [(list 'diff u  x)                               (~a "\\dv{" (~var x) "}(" (v~ u #t) ") ")]
 
         [(list 'percent u) (~a (v~ u) (~sym '|%|))]
-        [(list 'abs u) ((output-format-abs) u)] 
-        [(list 'vec u) (let ([s (v~ u)])
+        [(list 'abs u) ((output-format-abs) u)]
+        [(list 'vec u) (let ([s (~a u)])
                          (if (= (string-length s) 1)
                              (~a "\\vec{" s "}")
                              (~a "\\overrightarrow{" s "}")))]                   ; TODO: only for TeX 
