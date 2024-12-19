@@ -21,7 +21,7 @@
 
 ; For completeness, code that uses math-match will often use
 ;   u v   to indicate  normalized                   expressions
-;   a b   to indeicate general (maybe unnormalized) expressions
+;   a b   to indicate general (maybe unnormalized) expressions
 
 
 (require (for-syntax racket/string racket/match racket/syntax)         

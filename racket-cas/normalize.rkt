@@ -78,7 +78,7 @@
     [(app: f us) (match u
                    [(list  '/ u v)    (⊘ (n u) (n v))]
                    [(list  '- u)      (⊖ (n u))]
-                   [(list  '- u v)    (⊖ (n u) (n v))]
+                   [(list  '- u v)    (⊕ (n u) (⊗ -1 (n v)))]
                    [(list  'tan v)    (Tan  (n v))]
                    [(list  'sqr u)    (Sqr  (n u))]
                    [(list  'sqrt u)   (Sqrt (n u))]

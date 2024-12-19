@@ -480,21 +480,21 @@
                                          [(v 1) `(+ @i ,v)]
                                          [(v u) `(+ ,(⊗ @i u) ,v)])]
     ; other
-    [(u s) (plus2 s u)]  ; ok since u can not be a number nor @i, we have that s <<= u
-    [(u u) (times2 2 u)]    
+    [(u s)               (plus2 s u)]  ; ok since u can not be a number nor @i, we have that s <<= u
+    [(u u)               (times2 2 u)]    
     [((k⊗ r u) (k⊗ s u)) (times2 (+ r s) u)]
-    [((k⊗ r u) (k⊗ s v)) #:when (<<= v u) (plus2 s2 s1)]
-    [((⊕ u v) (⊕ _ _)) (plus2 u (plus2 v s2))]
-    [((⊕ u v) _) (plus2 u (plus2 v s2))]
-    [(u (⊕ v w)) 
-     (if (<<= u v)
-         (match (plus2 u v)
-           [(cons '+ _) (match w 
-                          [(cons '+ ws) (list* '+ u v ws)]
-                          [_            (list  '+ u v w)])]
-           [u+v     (plus2 u+v w)])
-         (plus2 v (plus2 u w)))]
-    [(_ _) (list '+ s1 s2)]))
+    [((k⊗ r u) (k⊗ s v))
+     #:when (<<= v u)    (plus2 s2 s1)]
+    [((⊕ u v)  (⊕ _ _))  (plus2 u (plus2 v s2))]
+    [((⊕ u v) _)         (plus2 u (plus2 v s2))]
+    [(u (⊕ v w))         (if (<<= u v)
+                             (match (plus2 u v)
+                               [(cons '+ _) (match w 
+                                              [(cons '+ ws) (list* '+ u v ws)]
+                                              [_            (list  '+ u v w)])]
+                               [u+v     (plus2 u+v w)])
+                             (plus2 v (plus2 u w)))]
+    [(_ _)               (list '+ s1 s2)]))
 
 (module+ test
   (displayln "TEST - Plus")
@@ -565,8 +565,11 @@
 (define (times2 s1 s2)
   (when verbose-debugging? (displayln (list 'times2 s1 s2)))
   (math-match* (s1 s2)
-    [(0 u) 0] [(u 0) 0]
-    [(1 u) u] [(u 1) u]
+    [(0 u) 0] 
+    [(u 0) 0]
+    [(1 u) u] 
+    [(u 1) u]
+
     [(r s)    (* r s)]
     
     [(@i @i)  -1]
@@ -587,9 +590,10 @@
     [((Expt u v) u) #:when (not (integer? u)) (Expt u (⊕ 1 v))]
     [((Expt u v) (Expt u w)) (Expt u (⊕ v w))]
     [(x y) (if (symbol<<? x y) (list '* x y) (list '* y x))]
+    [(-1 (⊕ u v))       (⊕ (times2 -1 u) (times2 -1 v))] ; Issue #32
     ; all recursive calls must reduce size of s1 wrt <<=
     [((⊗ u v) (⊗ _ __)) (times2 u (times2 v s2))]
-    [((⊗ u v) w) (times2 s2 s1)]
+    [((⊗ u v) w)        (times2 s2 s1)]
     [(u (⊗ v w))
      (if (<<= u v)
          (match (times2 u v)
@@ -626,7 +630,9 @@
   (check-equal? (⊗ x '(cos x)) '(* x (cos x)))
   (check-equal? (⊗ (⊗ x y) (Sqr (⊗ x y))) (⊗ (Expt x 3) (Expt y 3)))
   (check-equal? (⊗ 2 (Expt 2 1/2)) '(* 2 (expt 2 1/2)))
-  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2))))
+  (check-equal? (⊗ (Expt 2 1/2) 2) '(* 2 (expt 2 1/2)))
+  (check-equal? (⊗ -1 (⊕ 1 x)) '(+ -1 (* -1 x)))
+  (check-equal? (⊕ 1 (⊕ x -1)) 'x))
 
 
 

@@ -4,6 +4,7 @@
 (provide use-minus-in-sums?
          implicit-product?
          implicit-minus-one-as-first-factor?
+         explicit-one-as-first-factor?
          output-root?
          output-root-as-power?
          use-sqrt-for-two-as-root-exponent?
@@ -54,6 +55,10 @@
 (define implicit-minus-one-as-first-factor? (make-parameter #t))
 ; If #t:   (* -1 x) -> -x
 ; If #f:   (* -1 x) -> -1*x (or -1x if implicit-prodcut? is #t
+
+(define explicit-one-as-first-factor? (make-parameter #f))
+; If #t:   (* 1 x) -> 1*x
+; If #f:   (* 1 x) ->   x (or 1x if implicit-prodcut? is #t)
 
 (define output-root? (make-parameter #f))
 ; If #t:   (expt u 1/n) -> root(u,n)
@@ -595,7 +600,7 @@
 (define (format-product ctx x)
   ; Note: implicit-minus-one-as-first-factor affects the output
   ;   If #t:   (* -1 x) -> -x
-  ;   If #f:   (* -1 x) -> -1*x (or -1x if implicit-prodcut? is #t  
+  ;   If #f:   (* -1 x) -> -1*x (or -1x if implicit-product? is #t  
   (define explicit (case (mode) [(latex) "\\cdot "] [else "*"]))
   (define implicit (if (implicit-product?) "" explicit))
   (define (implicit* u v) ; returns either explicit or implicit
@@ -648,7 +653,9 @@
       [(list '* first-factor)
        (format-factor (list* 'first-factor ctx) first-factor)]
       [(list '* 1 last-factor)
-       (~a (format-factor (list* 'last-factor  ctx) last-factor))]
+       (if (explicit-one-as-first-factor?)
+           (~a 1 implicit (format-factor (list* 'last-factor  ctx) last-factor))
+           (~a            (format-factor (list* 'last-factor  ctx) last-factor)))]
       [(list '* -1 last-factor)
        (cond
          [(implicit-minus-one-as-first-factor?)
@@ -1958,6 +1965,19 @@
       (check-equal? (~ `(expt 2 -2)) "$2^{-2}$")
       (check-equal? (~ '(expt y -4)) "$y^{-4}$"))
     (check-equal? (~ '(expt 2 1)) "$2^1$")
+
+    
+    (parameterize ([explicit-one-as-first-factor? #t]
+                   [implicit-product?             #t])
+      (check-equal? (~ `(* 1 x))             "$1x$")
+      (check-equal? (~ `(sin (* 1 x)))       "$\\sin(1x)$")
+      (check-equal? (~ `(* 1 (sin (* 1 x)))) "$1\\sin(1x)$"))
+    (parameterize ([explicit-one-as-first-factor? #t]
+                   [implicit-product?             #f])
+      (check-equal? (~ `(* 1 x))             "$1\\cdot x$")
+      (check-equal? (~ `(sin (* 1 x)))       "$\\sin(1\\cdot x)$")
+      (check-equal? (~ `(* 1 (sin (* 1 x)))) "$1\\cdot \\sin(1\\cdot x)$"))
+
     ;;; END LATEX
     )
 
