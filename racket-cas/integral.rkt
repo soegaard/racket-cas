@@ -81,7 +81,10 @@
 (define (cancel w)
   (when debugging? (displayln (list 'cancel w)))
   (match w
-    [(⊘ u v) (⊘ u v)]
+    [(⊘ u v)
+     (match u
+       [(TimesTerms (== v) us ...) (apply ⊗ us)]
+       [_ w])]
     [_ w]))
 
 (module+ test
@@ -148,12 +151,21 @@
   (check-equal? (reduce '(* -1/2 (expt x -1) (expt (+ 2 (expt x -1) x) -1))) '(* -1/2 (expt (+ 1 (* x (+ 2 x))) -1)))
   (check-equal? (reduce '(* x (+ 2 (expt x -1) x))) '(+ 1 (* x (+ 2 x))))
   (check-equal? (reduce '(+ -1 (expt (cos x) 2) )) '(* -1 (expt (sin x) 2)))
-  (check-equal? (reduce '(expt (+ 1 (* (expt (cos g) -2) (expt (sin g) 2))) 1/2)) '(expt (cos g) -1))
+  (check-equal? (reduce '(expt (+ 1 (* (expt (cos g) -2) (expt (sin g) 2))) 1/2)) '(expt (expt (cos g) -2) 1/2))
   (check-equal? (reduce '(* (expt (cos x) -2) (expt (sin x) 2) (expt (+ 1 (* (expt (cos x) -2) (expt (sin x) 2))) -1)))
                 '(expt (sin x) 2))
   )
 
+(define (simplify-expt expr)
+  (match expr
+    [(Expt (Expt u -1) v) (Expt u (⊗ -1 v))]
+    [(app: f us)      (normalize (cons f (map simplify-expt us)))]
+    [_ expr]))
 
+(module+ test
+  (displayln "TEST - simplify-expt")
+  (check-equal? (simplify-expt (reduce (diff (Atan 'x) 'x))) '(expt (+ 1 (expt x 2)) 1/2)))
+  
 ; Also match u as (Expt u 1).
 ; Will not match (Expt u 0).
 (define-match-expander GreedyExpt
@@ -241,6 +253,7 @@
                       common))]
     [(Expt u (⊖ v)) #:when (or (not (free-of u x)) (not (free-of v x)))
                     (list (Expt u v))]
+    [(Piecewise us vs) (list)]
     [(app: _ us) (filter non-free-of-x? us)]
     [_ (error "no case matched.")]))
 
@@ -359,7 +372,7 @@
   (define sym (gensym "t"))
   (define trival-integrand (⊘ u (diff v x)))
   (define (get-integrand-in-sym integrand-in-x subst-rand)
-    (expand (reduce (cancel (subst-with-symbol integrand-in-x x v subst-rand)))))
+    (expand (simplify-expt (reduce (cancel (subst-with-symbol integrand-in-x x v subst-rand))))))
   (define (get-integral-in-x integrand-in-sym sym-in-x)
     (subst (integrate-table integrand-in-sym sym) sym sym-in-x))
   (define (integ integrand-in-x subst-rand)
@@ -763,7 +776,7 @@
   (check-equal? (integrate (Expt (Tan x) 2) x) '(+ (* -1 x) (* (expt (cos x) -1) (sin x))))
   (check-equal? (integrate (diff (Acos x) x) x) '(* -1 (asin x)))
   (check-equal? (integrate (diff (Asin x) x) x) (Asin x))
-  (check-equal? (integrate (reduce (diff (Atan x) x)) x) (Atan x))
+  (check-equal? (integrate (simplify-expt (reduce (diff (Atan x) x))) x) (Atan x))
   (check-equal? (integrate (diff (Si x) x) x) (Si x))
   (check-equal? (integrate (diff (Ci x) x) x) (Ci x))
   (check-equal? (integrate (Sqrt (Sqr x)) x) 

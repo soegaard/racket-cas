@@ -1053,7 +1053,10 @@
      (cond
        [(real-mode?)  ; real mode
         (math-match* (u v)
-          [((Expt u v) w)  (Expt u (⊗ v w))]           ; ditto    
+          ;[((Expt u v) w)  (Expt u (⊗ v w))] ; This is not true, for example, (Sqrt (Sqr x))
+          [((Expt u  α) β) #:when (and (integer? (* α β))
+                           (even? (* α β)))
+                           (Expt u (* α β))]
           [((⊗ u v) w)    #:when (not (lazy-expt?))
                           (⊗ (Expt u w) (Expt v w))] ; xxx - only true for real u and v
           [(_ _)          `(expt ,u ,v)])]
@@ -1116,7 +1119,11 @@
   ; (check-equal? (Expt 4 -1/2) 1/2) ; nspire / maxima
   ; (check-equal? (Expt 8 1/3) 2.0)  ; mspire / maxima 
   (check-equal? (Exp (Ln 3)) 3)
-  (check-equal? (Exp '(* 2 (ln x))) '(expt x 2)))
+  (check-equal? (Exp '(* 2 (ln x))) '(expt x 2))
+  
+  (check-equal? (Expt (Expt x 1/2) 2) x)
+  (check-equal? (Expt (Expt x 2) 1/2) '(expt (expt x 2) 1/2))
+  (check-equal? (Expt (Expt x 4) 1/2) '(expt x 2)))
 
 
 ;;;
@@ -1332,7 +1339,7 @@
            [r #t]
            [r.bf #t]
            [x #t]
-           [(list 'piecewise us vs) (and (andmap f us) (andmap f vs))]
+           [(list* 'piecewise us) (andmap (lambda (ys) (f (first ys))) us)] ; consider hte piecewise function as free of v if pieces are, no matter whether conditionals are.
            [(app: _ us)             (andmap f us)]
            [_  (error 'free-of (~a "missing-case:" u v))])))
   (f u))
@@ -1341,7 +1348,9 @@
   (let () (define u (Expt (⊕ x 1) 2))
     (check-equal? (free-of u x) #f)
     (check-false (or  (free-of u x) (free-of u 1) (free-of u 2) (free-of u (⊕ x 1))))
-    (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2))))))
+    (check-true  (and (free-of u y) (free-of u 3) (free-of u (⊕ x 2)))))
+  (check-true (free-of '(piecewise (-1 (< x 0)) (1 (>= x 0))) 'x))
+  (check-false (free-of '(piecewise (x (< x 0)) (1 (>= x 0))) 'x)))
 
 (define (part u . ns)
   ; as in Maxima http://maxima.sourceforge.net/docs/manual/en/maxima_6.html#IDX225 
